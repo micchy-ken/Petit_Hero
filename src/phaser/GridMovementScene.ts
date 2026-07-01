@@ -490,6 +490,7 @@ export class GridMovementScene extends Phaser.Scene {
   }
 
   private drawGrid() {
+    if (!this.gridGraphics) return;
     const { GRID_SIZE } = GridMovementScene;
     this.gridGraphics.clear();
 
@@ -626,6 +627,7 @@ export class GridMovementScene extends Phaser.Scene {
   }
 
   private drawHd2dLighting() {
+    if (!this.hd2dLighting) return;
     const { GRID_SIZE, VIEWPORT_COLS, VIEWPORT_ROWS } = GridMovementScene;
     const totalW = VIEWPORT_COLS * GRID_SIZE; // 448
     const totalH = VIEWPORT_ROWS * GRID_SIZE; // 448
@@ -642,6 +644,7 @@ export class GridMovementScene extends Phaser.Scene {
   }
 
   private drawVignette() {
+    if (!this.vignetteOverlay) return;
     const { GRID_SIZE, VIEWPORT_COLS, VIEWPORT_ROWS } = GridMovementScene;
     const totalW = VIEWPORT_COLS * GRID_SIZE;
     const totalH = VIEWPORT_ROWS * GRID_SIZE;
@@ -712,45 +715,59 @@ export class GridMovementScene extends Phaser.Scene {
     this.isTextMode = (mode === 'text');
     
     // 背景色の変更
-    if (this.displayMode === 'text') {
-      this.cameras.main.setBackgroundColor('#000000');
-    } else if (this.displayMode === 'grayscale') {
-      this.cameras.main.setBackgroundColor('#ffffff');
-    } else {
-      this.cameras.main.setBackgroundColor('#ecfdf5'); // default background color
+    if (this.cameras && this.cameras.main) {
+      if (this.displayMode === 'text') {
+        this.cameras.main.setBackgroundColor('#000000');
+      } else if (this.displayMode === 'grayscale') {
+        this.cameras.main.setBackgroundColor('#ffffff');
+      } else {
+        this.cameras.main.setBackgroundColor('#ecfdf5'); // default background color
+      }
     }
 
     // テクスチャの変更
     let heroTexture = 'hero_spritesheet';
     if (this.displayMode === 'text') heroTexture = 'hero_spritesheet_text';
     else if (this.displayMode === 'grayscale') heroTexture = 'hero_spritesheet_gray';
-    this.hero.setTexture(heroTexture);
+    if (this.hero) {
+      this.hero.setTexture(heroTexture);
+    }
     
     let slimeTexture = 'slime_spritesheet';
     if (this.displayMode === 'text') slimeTexture = 'slime_spritesheet_text';
     else if (this.displayMode === 'grayscale') slimeTexture = 'slime_spritesheet_gray';
-    this.slimes.forEach(slime => {
-      slime.sprite.setTexture(slimeTexture);
-    });
-
-    // アニメーションを即時更新
-    const currentAnimKey = this.hero.anims.currentAnim?.key;
-    if (currentAnimKey) {
-      let baseKey = currentAnimKey;
-      if (baseKey.endsWith('-text')) baseKey = baseKey.replace('-text', '');
-      else if (baseKey.endsWith('-gray')) baseKey = baseKey.replace('-gray', '');
-      this.hero.play(this.getAnimKey(baseKey), true);
+    if (this.slimes) {
+      this.slimes.forEach(slime => {
+        if (slime && slime.sprite) {
+          slime.sprite.setTexture(slimeTexture);
+        }
+      });
     }
 
-    this.slimes.forEach(slime => {
-      const sAnimKey = slime.sprite.anims.currentAnim?.key;
-      if (sAnimKey) {
-        let baseKey = sAnimKey;
+    // アニメーションを即時更新
+    if (this.hero && this.hero.anims) {
+      const currentAnimKey = this.hero.anims.currentAnim?.key;
+      if (currentAnimKey) {
+        let baseKey = currentAnimKey;
         if (baseKey.endsWith('-text')) baseKey = baseKey.replace('-text', '');
         else if (baseKey.endsWith('-gray')) baseKey = baseKey.replace('-gray', '');
-        slime.sprite.play(this.getAnimKey(baseKey), true);
+        this.hero.play(this.getAnimKey(baseKey), true);
       }
-    });
+    }
+
+    if (this.slimes) {
+      this.slimes.forEach(slime => {
+        if (slime && slime.sprite && slime.sprite.anims) {
+          const sAnimKey = slime.sprite.anims.currentAnim?.key;
+          if (sAnimKey) {
+            let baseKey = sAnimKey;
+            if (baseKey.endsWith('-text')) baseKey = baseKey.replace('-text', '');
+            else if (baseKey.endsWith('-gray')) baseKey = baseKey.replace('-gray', '');
+            slime.sprite.play(this.getAnimKey(baseKey), true);
+          }
+        }
+      });
+    }
 
     // 描画の更新
     this.drawGrid();

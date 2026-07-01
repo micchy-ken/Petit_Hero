@@ -5,7 +5,7 @@ import { MapData } from '../types/MapData';
 import { getAvailableEnemies, getAvailableBosses } from '../data/EnemyAssets';
 import { PhaserGameContainer } from '../components/PhaserGameContainer';
 
-const mapModules = import.meta.glob('../data/maps/*.ts', { eager: true });
+const mapModules = (import.meta as any).glob('../data/maps/*.ts', { eager: true });
 const initialMaps: MapData[] = [];
 for (const path in mapModules) {
   const mod: any = mapModules[path];
