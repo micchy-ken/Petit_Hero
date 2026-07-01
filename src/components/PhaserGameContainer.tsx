@@ -1,13 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Phaser from 'phaser';
 import { GridMovementScene, HeroState, Direction, ActionLog } from '../phaser/GridMovementScene';
-import { Play, Pause, RotateCcw, Eye, EyeOff, Sparkles, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Gauge, Grid, Image as ImageIcon, Heart, Sword, Star, Settings, X, Move, Flame, Zap } from 'lucide-react';
+import { Play, Pause, RotateCcw, Eye, EyeOff, Sparkles, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Gauge, Grid, Image as ImageIcon, Heart, Sword, Star, Settings, X, Move, Flame, Zap, Map } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 export const PhaserGameContainer: React.FC = () => {
   const gameContainerRef = useRef<HTMLDivElement>(null);
   const gameInstanceRef = useRef<Phaser.Game | null>(null);
   const sceneRef = useRef<GridMovementScene | null>(null);
   const lastLevelRef = useRef<number>(1);
+  const navigate = useNavigate();
 
   // UIステータス
   const [showSettings, setShowSettings] = useState(false);
@@ -449,10 +451,20 @@ export const PhaserGameContainer: React.FC = () => {
       <div className={!showSettings ? "hidden" : "flex flex-col gap-6 w-full max-w-md animate-in fade-in zoom-in-95 duration-200"}>
           
           <div className="bg-white rounded-2xl shadow-xl p-6 border border-slate-200 flex flex-col gap-6">
-            <h3 className="text-base font-semibold text-slate-800 pb-3 border-b border-slate-100 flex items-center gap-2">
-              <Gauge className="w-5 h-5 text-emerald-600" /> Control & Testing Panel
+            <h3 className="text-base font-semibold text-slate-800 pb-3 border-b border-slate-100 flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <Gauge className="w-5 h-5 text-emerald-600" /> Control & Testing Panel
+              </span>
             </h3>
 
+            {/* エディターへの遷移 */}
+            <button
+              onClick={() => navigate('/editor/map')}
+              className="flex items-center justify-center gap-2 w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-colors border border-slate-700"
+            >
+              <Map className="w-5 h-5 text-slate-300" />
+              マップ＆イベントエディターを開く
+            </button>
 
           {/* 自動移動モード切替 */}
           <div className="flex items-center justify-between bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
