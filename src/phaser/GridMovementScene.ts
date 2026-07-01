@@ -783,7 +783,9 @@ export class GridMovementScene extends Phaser.Scene {
     this.drawGrid();
     this.drawHd2dLighting();
     this.drawVignette();
-    this.particleMotes.forEach(m => m.setVisible(this.isHd2dEffectsEnabled));
+    if (this.particleMotes) {
+      this.particleMotes.forEach(m => m.setVisible(this.isHd2dEffectsEnabled));
+    }
   }
 
   public toggleGrassBg(enabled?: boolean) {
@@ -1511,13 +1513,23 @@ export class GridMovementScene extends Phaser.Scene {
     if (this.isMoving) return;
 
     if (this.mapData) {
-       const startEvent = this.mapData.events?.find((e: any) => e.type === 'start_point');
+       // まず設定なし(fromMapがnullまたは空文字列)の初期値を探す
+       const startEvent = this.mapData.events?.find(
+         (e: any) => e.type === 'start_point' && (!e.data || e.data.fromMap === null || e.data.fromMap === '')
+       );
        if (startEvent) {
           this.currentGridX = startEvent.x;
           this.currentGridY = startEvent.y;
        } else {
-          this.currentGridX = 0;
-          this.currentGridY = 0;
+          // なければ、その他の初期値（どの初期値でも）を検索
+          const anyStartEvent = this.mapData.events?.find((e: any) => e.type === 'start_point');
+          if (anyStartEvent) {
+             this.currentGridX = anyStartEvent.x;
+             this.currentGridY = anyStartEvent.y;
+          } else {
+             this.currentGridX = 0;
+             this.currentGridY = 0;
+          }
        }
     } else {
        this.currentGridX = 7;
@@ -1527,10 +1539,16 @@ export class GridMovementScene extends Phaser.Scene {
     this.currentCamGridY = Math.max(0, Math.min(this.currentGridY - Math.floor(GridMovementScene.VIEWPORT_ROWS / 2), this.gridRows - GridMovementScene.VIEWPORT_ROWS));
     
     const { GRID_SIZE } = GridMovementScene;
-    this.hero.setPosition(this.currentGridX * GRID_SIZE + GRID_SIZE / 2, this.currentGridY * GRID_SIZE + GRID_SIZE / 2);
-    this.cameras.main.scrollX = this.currentCamGridX * GRID_SIZE;
-    this.cameras.main.scrollY = this.currentCamGridY * GRID_SIZE;
-    this.hero.play(this.getAnimKey('idle-down'));
+    if (this.hero) {
+      this.hero.setPosition(this.currentGridX * GRID_SIZE + GRID_SIZE / 2, this.currentGridY * GRID_SIZE + GRID_SIZE / 2);
+    }
+    if (this.cameras && this.cameras.main) {
+      this.cameras.main.scrollX = this.currentCamGridX * GRID_SIZE;
+      this.cameras.main.scrollY = this.currentCamGridY * GRID_SIZE;
+    }
+    if (this.hero) {
+      this.hero.play(this.getAnimKey('idle-down'));
+    }
     this.currentDirection = 'idle';
     this.notifyStateChange(false);
   }

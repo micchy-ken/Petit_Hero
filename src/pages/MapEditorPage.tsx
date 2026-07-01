@@ -7,11 +7,15 @@ import { PhaserGameContainer } from '../components/PhaserGameContainer';
 
 const mapModules = (import.meta as any).glob('../data/maps/*.ts', { eager: true });
 const initialMaps: MapData[] = [];
+const seenIds = new Set<string>();
 for (const path in mapModules) {
   const mod: any = mapModules[path];
   for (const key in mod) {
     if (mod[key] && mod[key].id) {
-      initialMaps.push(mod[key]);
+      if (!seenIds.has(mod[key].id)) {
+        seenIds.add(mod[key].id);
+        initialMaps.push(mod[key]);
+      }
     }
   }
 }
@@ -74,7 +78,15 @@ export default function MapEditorPage() {
       } else {
         let data: any = {};
         if (eventType === 'start_point') {
-          data = { fromMap: startPointFromMap || null };
+          const targetFromMap = startPointFromMap || null;
+          // 元マップ(fromMap)ごとに初期値は1つしか置けないようにする
+          const sameFromMapIndex = newEvents.findIndex(
+            e => e.type === 'start_point' && (e.data?.fromMap || null) === targetFromMap
+          );
+          if (sameFromMapIndex >= 0) {
+            newEvents.splice(sameFromMapIndex, 1);
+          }
+          data = { fromMap: targetFromMap };
         } else if (eventType === 'teleport') {
           if (!teleportTargetMap) return;
           data = { targetMap: teleportTargetMap };

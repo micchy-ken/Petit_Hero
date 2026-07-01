@@ -94,15 +94,23 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
             scene.gridRows = startMap.height;
             scene.onTestPlayClear = onTestPlayClear;
             
-            // Apply map styles
+            // Apply map styles using scene's central method
+            scene.applyMapSettings(startMap.bgMode, startMap.bgImage);
+            
+            // Sync React local states
             const isText = startMap.bgMode === 'text-black';
             const isGray = startMap.bgMode === 'stone-gray';
-            const mode = isText ? 'text' : isGray ? 'grayscale' : 'normal';
+            const isImg = startMap.bgMode === 'image';
             
+            const mode = isText ? 'text' : isGray ? 'grayscale' : 'normal';
             setDisplayMode(mode);
-            scene.setDisplayMode(mode);
-            setUseGrassBg(startMap.bgMode === 'grass-green');
-            scene.toggleGrassBg(startMap.bgMode === 'grass-green');
+            setUseGrassBg(isImg);
+            setIsHd2d(isImg);
+            setAllow8Way(false);
+            setSpeed(isText ? 1000 : 800);
+
+            // Start from the correct initial position
+            scene.resetPosition();
           }
         }
 
