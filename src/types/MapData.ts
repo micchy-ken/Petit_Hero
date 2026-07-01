@@ -11,6 +11,13 @@ export interface MapItem {
   itemId: string;
 }
 
+export interface MapClearConditions {
+  explorationRate?: number | null; // 踏破率
+  searchRate?: number | null;      // 捜索率
+  defeatRate?: number | null;      // 撃破率
+  requiredEvents?: string[];       // 必須イベント
+}
+
 export interface MapData {
   id: string;
   name: string;
@@ -20,5 +27,7 @@ export interface MapData {
   bgImage?: string;
   events: MapEvent[];
   items: MapItem[];
-  enemies: string[];
+  enemies: string[]; // 最大3種類
+  boss?: string;     // 最大1種類
+  clearConditions?: MapClearConditions;
 }

@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Box, Gem, Zap, Plus, Map as MapIcon, Save, Settings } from 'lucide-react';
+import { ArrowLeft, Box, Gem, Zap, Plus, Map as MapIcon, Save, Settings, Play } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MapData } from '../types/MapData';
+import { getAvailableEnemies, getAvailableBosses } from '../data/EnemyAssets';
+import { PhaserGameContainer } from '../components/PhaserGameContainer';
 
 const mapModules = import.meta.glob('../data/maps/*.ts', { eager: true });
 const initialMaps: MapData[] = [];
@@ -32,6 +34,8 @@ export default function MapEditorPage() {
   
   const [maps, setMaps] = useState<MapData[]>(initialMaps);
   const [currentMapId, setCurrentMapId] = useState<string>(initialMaps[0].id);
+  const [isTestPlay, setIsTestPlay] = useState(false);
+  const [showClearModal, setShowClearModal] = useState(false);
   
   const currentMap = maps.find(m => m.id === currentMapId) || maps[0];
 
@@ -104,10 +108,22 @@ export default function MapEditorPage() {
   };
 
   const handleUpdateCurrentMap = (updates: Partial<MapData>) => {
-    setMaps(maps.map(m => m.id === currentMapId ? { ...m, ...updates } : m));
+    let finalUpdates = { ...updates };
     if (updates.bgMode) {
       setBgMode(updates.bgMode);
+      if (updates.bgMode === 'text-black') {
+        finalUpdates.enemies = ['text_teki'];
+        finalUpdates.boss = undefined;
+      } else if (updates.bgMode === 'stone-gray') {
+        finalUpdates.enemies = ['gray_slime'];
+        finalUpdates.boss = undefined;
+      } else if (currentMap.bgMode === 'text-black' || currentMap.bgMode === 'stone-gray') {
+        // If changing from text/gray to color, clear enemies since they are incompatible
+        finalUpdates.enemies = [];
+        finalUpdates.boss = undefined;
+      }
     }
+    setMaps(maps.map(m => m.id === currentMapId ? { ...m, ...finalUpdates } : m));
   };
 
   const handleSave = async () => {
@@ -128,6 +144,49 @@ export default function MapEditorPage() {
     }
   };
 
+  if (isTestPlay) {
+    return (
+      <div className="min-h-screen bg-black flex flex-col relative items-center justify-center">
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-red-600 text-white font-bold px-4 py-2 rounded-full border-2 border-red-400 shadow-[0_0_10px_rgba(255,0,0,0.5)] flex items-center gap-2 animate-pulse">
+          <Zap className="w-5 h-5" />
+          TEST PLAY
+        </div>
+        <button
+          onClick={() => setIsTestPlay(false)}
+          className="absolute top-4 right-4 z-50 bg-slate-800 text-white font-bold px-4 py-2 rounded hover:bg-slate-700 transition-colors border border-slate-600 flex items-center gap-2"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          エディターに戻る
+        </button>
+        
+        <PhaserGameContainer 
+          isTestPlay={true}
+          maps={maps}
+          initialMapId={currentMapId}
+          onTestPlayClear={() => setShowClearModal(true)}
+        />
+
+        {showClearModal && (
+          <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-50">
+            <div className="bg-slate-800 border border-emerald-500 rounded-lg p-6 max-w-sm w-full text-center shadow-2xl">
+              <h2 className="text-xl font-bold text-emerald-400 mb-4">テストプレイ 完了！</h2>
+              <p className="text-slate-300 mb-6">イベント条件を満たし、目標地点に到達しました。</p>
+              <button
+                onClick={() => {
+                  setShowClearModal(false);
+                  setIsTestPlay(false);
+                }}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-6 py-2 rounded transition-colors w-full"
+              >
+                確認 (エディターに戻る)
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-800 text-slate-200 font-sans flex flex-col items-center">
       
@@ -145,6 +204,12 @@ export default function MapEditorPage() {
           </h1>
         </div>
         <div className="flex items-center gap-4">
+          <button 
+            onClick={() => setIsTestPlay(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-yellow-600 hover:bg-yellow-500 text-white rounded font-bold shadow transition-colors"
+          >
+            <Play className="w-4 h-4" /> テストプレイ
+          </button>
           <button 
             onClick={handleSave}
             className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-bold shadow transition-colors"
@@ -347,7 +412,7 @@ export default function MapEditorPage() {
           )}
         </aside>
 
-        {/* 右側：マッププレビュー領域 */}
+        {/* 中央：マッププレビュー領域 */}
         <main className="flex-1 bg-slate-900 rounded-lg border-2 border-slate-700 p-2 flex items-center justify-center relative overflow-auto shadow-inner">
           <div className={`w-full max-w-[600px] aspect-square rounded ${
             bgMode === 'text-black' ? 'bg-black' : 
@@ -408,6 +473,103 @@ export default function MapEditorPage() {
             </div>
           </div>
         </main>
+
+        {/* 右側：マップ設定領域 */}
+        <aside className="w-full md:w-80 bg-slate-700 rounded-lg border border-slate-600 shadow-xl p-4 flex flex-col gap-6 overflow-y-auto" style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.1), 0 4px 6px rgba(0,0,0,0.3)' }}>
+          {/* 敵とボスの設定 */}
+          <div className="flex flex-col gap-3">
+            <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider border-b border-slate-600 pb-1">
+              Enemies & Boss
+            </h2>
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-slate-400 font-bold uppercase">通常敵 (最大3種)</label>
+                {[0, 1, 2].map((index) => (
+                  <select
+                    key={index}
+                    value={currentMap.enemies[index] || ''}
+                    onChange={(e) => {
+                      const newEnemies = [...currentMap.enemies];
+                      newEnemies[index] = e.target.value;
+                      handleUpdateCurrentMap({ enemies: newEnemies.filter(v => v !== undefined && v !== '') });
+                    }}
+                    disabled={bgMode === 'text-black' || bgMode === 'stone-gray'} // 自動設定されるため無効化
+                    className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400 disabled:opacity-50"
+                  >
+                    <option value="">なし</option>
+                    {getAvailableEnemies(bgMode).map(enemy => (
+                      <option key={enemy.id} value={enemy.id}>{enemy.name}</option>
+                    ))}
+                  </select>
+                ))}
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-slate-400 font-bold uppercase">ボス (1種)</label>
+                <select
+                  value={currentMap.boss || ''}
+                  onChange={(e) => handleUpdateCurrentMap({ boss: e.target.value || undefined })}
+                  disabled={bgMode === 'text-black' || bgMode === 'stone-gray'} // 自動設定されるかテキスト黒/グレイには現在ボスがいないかもしれないが無効化する
+                  className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-500 disabled:opacity-50"
+                >
+                  <option value="">なし</option>
+                  {getAvailableBosses(bgMode).map(boss => (
+                    <option key={boss.id} value={boss.id}>{boss.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* イベント条件の設定 */}
+          <div className="flex flex-col gap-3">
+            <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider border-b border-slate-600 pb-1">
+              Event Conditions
+            </h2>
+            <div className="flex flex-col gap-3">
+              {[
+                { label: '踏破率 (Exploration)', key: 'explorationRate' as const },
+                { label: '捜索率 (Search)', key: 'searchRate' as const },
+                { label: '撃破率 (Defeat)', key: 'defeatRate' as const },
+              ].map((cond) => (
+                <div key={cond.key} className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-400 font-bold uppercase">{cond.label}</label>
+                  <select
+                    value={currentMap.clearConditions?.[cond.key] === null || currentMap.clearConditions?.[cond.key] === undefined ? 'null' : String(currentMap.clearConditions[cond.key])}
+                    onChange={(e) => {
+                      const val = e.target.value === 'null' ? null : Number(e.target.value);
+                      handleUpdateCurrentMap({
+                        clearConditions: {
+                          ...currentMap.clearConditions,
+                          [cond.key]: val
+                        }
+                      });
+                    }}
+                    className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
+                  >
+                    <option value="null">なし</option>
+                    <option value="50">50%</option>
+                    <option value="60">60%</option>
+                    <option value="70">70%</option>
+                    <option value="80">80%</option>
+                    <option value="90">90%</option>
+                    <option value="100">100%</option>
+                  </select>
+                </div>
+              ))}
+              
+              <div className="flex flex-col gap-1 mt-2">
+                <label className="text-xs text-slate-400 font-bold uppercase">必須イベント</label>
+                <div className="text-xs text-slate-500 italic p-2 bg-slate-800/50 rounded border border-slate-700">
+                  (イベントリスト - 後ほど実装)
+                  {/* ここに必須イベントのリストが入ります */}
+                  {currentMap.clearConditions?.requiredEvents?.map((evt, idx) => (
+                    <div key={idx} className="text-slate-300 mt-1">- {evt}</div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
       </div>
 
       {/* 新規マップ作成モーダル */}

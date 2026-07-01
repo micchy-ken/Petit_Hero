@@ -4,7 +4,16 @@ import { GridMovementScene, HeroState, Direction, ActionLog } from '../phaser/Gr
 import { Play, Pause, RotateCcw, Eye, EyeOff, Sparkles, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Gauge, Grid, Image as ImageIcon, Heart, Sword, Star, Settings, X, Move, Flame, Zap, Map } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-export const PhaserGameContainer: React.FC = () => {
+import { MapData } from '../types/MapData';
+
+export interface PhaserGameContainerProps {
+  isTestPlay?: boolean;
+  maps?: MapData[];
+  initialMapId?: string;
+  onTestPlayClear?: () => void;
+}
+
+export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTestPlay, maps, initialMapId, onTestPlayClear }) => {
   const gameContainerRef = useRef<HTMLDivElement>(null);
   const gameInstanceRef = useRef<Phaser.Game | null>(null);
   const sceneRef = useRef<GridMovementScene | null>(null);
@@ -31,6 +40,9 @@ export const PhaserGameContainer: React.FC = () => {
 
   const [logs, setLogs] = useState<ActionLog[]>([]);
   const [autoMode, setAutoMode] = useState<'none' | 'random' | 'seek'>('seek');
+
+  const [explorationRate, setExplorationRate] = useState(0);
+  const [searchRate, setSearchRate] = useState(0);
   const [showGrid, setShowGrid] = useState<boolean>(true);
   const [isHd2d, setIsHd2d] = useState<boolean>(false);
   const [useGrassBg, setUseGrassBg] = useState<boolean>(true);
@@ -73,6 +85,31 @@ export const PhaserGameContainer: React.FC = () => {
       if (scene) {
         sceneRef.current = scene;
         lastLevelRef.current = 1;
+        
+        if (isTestPlay && maps && initialMapId) {
+          const startMap = maps.find(m => m.id === initialMapId);
+          if (startMap) {
+            scene.mapData = startMap;
+            scene.gridCols = startMap.width;
+            scene.gridRows = startMap.height;
+            scene.onTestPlayClear = onTestPlayClear;
+            
+            // Apply map styles
+            const isText = startMap.bgMode === 'text-black';
+            const isGray = startMap.bgMode === 'stone-gray';
+            const mode = isText ? 'text' : isGray ? 'grayscale' : 'normal';
+            
+            setDisplayMode(mode);
+            scene.setDisplayMode(mode);
+            setUseGrassBg(startMap.bgMode === 'grass-green');
+            scene.toggleGrassBg(startMap.bgMode === 'grass-green');
+          }
+        }
+
+        scene.setOnStatsChange = (expRate: number, sRate: number) => {
+          setExplorationRate(expRate);
+          setSearchRate(sRate);
+        };
         scene.setOnStateChange((newState) => {
           setHeroState(newState);
 
@@ -239,6 +276,18 @@ export const PhaserGameContainer: React.FC = () => {
                 ref={gameContainerRef} 
                 className="w-full h-full"
               />
+              {/* 踏破率・捜索率・撃破率 表示 */}
+              <div className="absolute top-2 left-2 z-20 flex flex-col gap-1 text-[11px] font-bold text-white drop-shadow-md pointer-events-none">
+                <div className="bg-black/60 px-2.5 py-0.5 rounded border border-white/20 shadow">
+                  踏破率: {Math.floor(explorationRate)}%
+                </div>
+                <div className="bg-black/60 px-2.5 py-0.5 rounded border border-white/20 shadow">
+                  捜索率: {Math.floor(searchRate)}%
+                </div>
+                <div className="bg-black/60 px-2.5 py-0.5 rounded border border-white/20 shadow text-amber-300">
+                  撃破率: ∞
+                </div>
+              </div>
               {/* Virtual Pad / Auto Toggle Overlay */}
               {autoMode !== 'none' ? (
                 <button

@@ -18,6 +18,6 @@ export const BeginningMap: MapData = {
   ],
   "items": [],
   "enemies": [
-    "敵"
+    "text_teki"
   ]
 };

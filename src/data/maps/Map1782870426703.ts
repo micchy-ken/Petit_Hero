@@ -2,11 +2,13 @@ import { MapData } from '../../types/MapData';
 
 export const Map1782870426703: MapData = {
   "id": "map_1782870426703",
-  "name": "るるる",
+  "name": "白黒の世界",
   "width": 16,
   "height": 16,
-  "bgMode": "text-black",
+  "bgMode": "stone-gray",
   "events": [],
   "items": [],
-  "enemies": []
+  "enemies": [
+    "gray_slime"
+  ]
 };

@@ -42,8 +42,6 @@ export interface ActionLog {
 
 export class GridMovementScene extends Phaser.Scene {
   public static readonly GRID_SIZE = 64;
-  public static readonly GRID_COLS = 16;
-  public static readonly GRID_ROWS = 16;
   public static readonly VIEWPORT_COLS = 7;
   public static readonly VIEWPORT_ROWS = 7;
 
@@ -103,6 +101,17 @@ export class GridMovementScene extends Phaser.Scene {
   // Reactコールバック用
   private onStateChangeCallback?: (state: HeroState) => void;
   private onLogCallback?: (log: ActionLog) => void;
+  public setOnStatsChange?: (expRate: number, searchRate: number) => void;
+
+  private visitedGrids: Set<string> = new Set();
+  private viewedGrids: Set<string> = new Set();
+  
+  public gridCols: number = 16;
+  public gridRows: number = 16;
+  public mapData: any = null;
+  public onTestPlayClear?: () => void;
+
+  private totalGrids: number = 16 * 16;
 
   constructor() {
     super({ key: 'GridMovementScene' });
@@ -138,10 +147,10 @@ export class GridMovementScene extends Phaser.Scene {
   }
 
   create() {
-    const { GRID_SIZE, GRID_COLS, GRID_ROWS, VIEWPORT_COLS, VIEWPORT_ROWS } = GridMovementScene;
+    const { GRID_SIZE, VIEWPORT_COLS, VIEWPORT_ROWS } = GridMovementScene;
 
     // カメラ境界を設定
-    this.cameras.main.setBounds(0, 0, GRID_COLS * GRID_SIZE, GRID_ROWS * GRID_SIZE);
+    this.cameras.main.setBounds(0, 0, this.gridCols * GRID_SIZE, this.gridRows * GRID_SIZE);
     this.cameras.main.scrollX = this.currentCamGridX * GRID_SIZE;
     this.cameras.main.scrollY = this.currentCamGridY * GRID_SIZE;
 
@@ -288,8 +297,8 @@ export class GridMovementScene extends Phaser.Scene {
     // 5.5. スライムの配置
     this.slimes = [];
     for (let i = 0; i < 5; i++) {
-      const sx = Phaser.Math.Between(2, GRID_COLS - 3);
-      const sy = Phaser.Math.Between(2, GRID_ROWS - 3);
+      const sx = Phaser.Math.Between(2, this.gridCols - 3);
+      const sy = Phaser.Math.Between(2, this.gridRows - 3);
       const slimeSprite = this.add.sprite(sx * GRID_SIZE + GRID_SIZE / 2, sy * GRID_SIZE + GRID_SIZE / 2, 'slime_spritesheet', 0);
       slimeSprite.setDepth(9); // 勇者より少し奥
       slimeSprite.play(this.getAnimKey('slime-idle'));
@@ -350,8 +359,8 @@ export class GridMovementScene extends Phaser.Scene {
       const targetGridY = Math.floor(worldPoint.y / GridMovementScene.GRID_SIZE);
       
       // フィールド範囲内か確認
-      if (targetGridX >= 0 && targetGridX < GridMovementScene.GRID_COLS &&
-          targetGridY >= 0 && targetGridY < GridMovementScene.GRID_ROWS) {
+      if (targetGridX >= 0 && targetGridX < this.gridCols &&
+          targetGridY >= 0 && targetGridY < this.gridRows) {
         this.pointerTargetGridX = targetGridX;
         this.pointerTargetGridY = targetGridY;
         this.sendLog(`(${targetGridX}, ${targetGridY}) へ移動中...`, 'system');
@@ -369,6 +378,9 @@ export class GridMovementScene extends Phaser.Scene {
     // 初期表示設定の適用
     this.setDisplayMode(this.displayMode);
     this.toggleHd2dEffects(this.isHd2dEffectsEnabled);
+
+    // Initial stats trigger
+    this.updateStats(this.currentGridX, this.currentGridY, this.currentCamGridX, this.currentCamGridY);
   }
 
   public update(time: number, delta: number) {
@@ -478,7 +490,7 @@ export class GridMovementScene extends Phaser.Scene {
   }
 
   private drawGrid() {
-    const { GRID_SIZE, GRID_COLS, GRID_ROWS } = GridMovementScene;
+    const { GRID_SIZE } = GridMovementScene;
     this.gridGraphics.clear();
 
     if (this.grassBgImage) {
@@ -488,13 +500,13 @@ export class GridMovementScene extends Phaser.Scene {
     if (this.displayMode === 'text') {
       if (this.showGridLines) {
         this.gridGraphics.lineStyle(1, 0xffffff, 0.3);
-        for (let i = 0; i <= GRID_ROWS; i++) {
+        for (let i = 0; i <= this.gridRows; i++) {
           this.gridGraphics.moveTo(0, i * GRID_SIZE);
-          this.gridGraphics.lineTo(GRID_COLS * GRID_SIZE, i * GRID_SIZE);
+          this.gridGraphics.lineTo(this.gridCols * GRID_SIZE, i * GRID_SIZE);
         }
-        for (let i = 0; i <= GRID_COLS; i++) {
+        for (let i = 0; i <= this.gridCols; i++) {
           this.gridGraphics.moveTo(i * GRID_SIZE, 0);
-          this.gridGraphics.lineTo(i * GRID_SIZE, GRID_ROWS * GRID_SIZE);
+          this.gridGraphics.lineTo(i * GRID_SIZE, this.gridRows * GRID_SIZE);
         }
         this.gridGraphics.strokePath();
       }
@@ -504,11 +516,11 @@ export class GridMovementScene extends Phaser.Scene {
     if (this.displayMode === 'grayscale') {
       // Background is white
       this.gridGraphics.fillStyle(0xffffff, 1);
-      this.gridGraphics.fillRect(0, 0, GRID_COLS * GRID_SIZE, GRID_ROWS * GRID_SIZE);
+      this.gridGraphics.fillRect(0, 0, this.gridCols * GRID_SIZE, this.gridRows * GRID_SIZE);
 
       // Draw occasional stones
-      for (let row = 0; row < GRID_ROWS; row++) {
-        for (let col = 0; col < GRID_COLS; col++) {
+      for (let row = 0; row < this.gridRows; row++) {
+        for (let col = 0; col < this.gridCols; col++) {
           const landmarkHash = (row * 37 + col * 17) % 13;
           if (landmarkHash === 4 || landmarkHash === 8) {
             const ox = col * GRID_SIZE + 24;
@@ -530,13 +542,13 @@ export class GridMovementScene extends Phaser.Scene {
 
       if (this.showGridLines) {
         this.gridGraphics.lineStyle(1, 0xcccccc, 0.7);
-        for (let i = 0; i <= GRID_ROWS; i++) {
+        for (let i = 0; i <= this.gridRows; i++) {
           this.gridGraphics.moveTo(0, i * GRID_SIZE);
-          this.gridGraphics.lineTo(GRID_COLS * GRID_SIZE, i * GRID_SIZE);
+          this.gridGraphics.lineTo(this.gridCols * GRID_SIZE, i * GRID_SIZE);
         }
-        for (let i = 0; i <= GRID_COLS; i++) {
+        for (let i = 0; i <= this.gridCols; i++) {
           this.gridGraphics.moveTo(i * GRID_SIZE, 0);
-          this.gridGraphics.lineTo(i * GRID_SIZE, GRID_ROWS * GRID_SIZE);
+          this.gridGraphics.lineTo(i * GRID_SIZE, this.gridRows * GRID_SIZE);
         }
         this.gridGraphics.strokePath();
       }
@@ -546,13 +558,13 @@ export class GridMovementScene extends Phaser.Scene {
     if (this.useGrassBg) {
       if (this.showGridLines) {
         this.gridGraphics.lineStyle(1, 0xffffff, 0.15);
-        for (let i = 0; i <= GRID_ROWS; i++) {
+        for (let i = 0; i <= this.gridRows; i++) {
           this.gridGraphics.moveTo(0, i * GRID_SIZE);
-          this.gridGraphics.lineTo(GRID_COLS * GRID_SIZE, i * GRID_SIZE);
+          this.gridGraphics.lineTo(this.gridCols * GRID_SIZE, i * GRID_SIZE);
         }
-        for (let i = 0; i <= GRID_COLS; i++) {
+        for (let i = 0; i <= this.gridCols; i++) {
           this.gridGraphics.moveTo(i * GRID_SIZE, 0);
-          this.gridGraphics.lineTo(i * GRID_SIZE, GRID_ROWS * GRID_SIZE);
+          this.gridGraphics.lineTo(i * GRID_SIZE, this.gridRows * GRID_SIZE);
         }
         this.gridGraphics.strokePath();
       }
@@ -560,8 +572,8 @@ export class GridMovementScene extends Phaser.Scene {
     }
 
     // HD-2D風 深みのある森の芝生タイル（微細な濃淡トーン）
-    for (let row = 0; row < GRID_ROWS; row++) {
-      for (let col = 0; col < GRID_COLS; col++) {
+    for (let row = 0; row < this.gridRows; row++) {
+      for (let col = 0; col < this.gridCols; col++) {
         const isEven = (row + col) % 2 === 0;
         const color = isEven ? 0x064e3b : 0x065f46; // ダークエメラルド
         this.gridGraphics.fillStyle(color, 1);
@@ -599,16 +611,16 @@ export class GridMovementScene extends Phaser.Scene {
 
     // 16x16フィールド全体の外枠ボーダー
     this.gridGraphics.lineStyle(4, 0x047857, 0.9);
-    this.gridGraphics.strokeRect(1, 1, GRID_COLS * GRID_SIZE - 2, GRID_ROWS * GRID_SIZE - 2);
+    this.gridGraphics.strokeRect(1, 1, this.gridCols * GRID_SIZE - 2, this.gridRows * GRID_SIZE - 2);
 
     // グリッド線
     if (this.showGridLines) {
       this.gridGraphics.lineStyle(1, 0x10b981, 0.35);
-      for (let i = 0; i <= GRID_COLS; i++) {
-        this.gridGraphics.lineBetween(i * GRID_SIZE, 0, i * GRID_SIZE, GRID_ROWS * GRID_SIZE);
+      for (let i = 0; i <= this.gridCols; i++) {
+        this.gridGraphics.lineBetween(i * GRID_SIZE, 0, i * GRID_SIZE, this.gridRows * GRID_SIZE);
       }
-      for (let j = 0; j <= GRID_ROWS; j++) {
-        this.gridGraphics.lineBetween(0, j * GRID_SIZE, GRID_COLS * GRID_SIZE, j * GRID_SIZE);
+      for (let j = 0; j <= this.gridRows; j++) {
+        this.gridGraphics.lineBetween(0, j * GRID_SIZE, this.gridCols * GRID_SIZE, j * GRID_SIZE);
       }
     }
   }
@@ -821,8 +833,8 @@ export class GridMovementScene extends Phaser.Scene {
 
     // スライムの補充
     if (this.slimes.length < 5 && Math.random() < 0.1) {
-      const sx = Phaser.Math.Between(2, GridMovementScene.GRID_COLS - 3);
-      const sy = Phaser.Math.Between(2, GridMovementScene.GRID_ROWS - 3);
+      const sx = Phaser.Math.Between(2, this.gridCols - 3);
+      const sy = Phaser.Math.Between(2, this.gridRows - 3);
       // 空いているマスに湧く
       if (!this.isTileOccupied(sx, sy)) {
         const { GRID_SIZE } = GridMovementScene;
@@ -907,9 +919,9 @@ export class GridMovementScene extends Phaser.Scene {
 
       const slimeDirs: Direction[] = [];
       if (slime.gridY > 0) slimeDirs.push('up');
-      if (slime.gridY < GridMovementScene.GRID_ROWS - 1) slimeDirs.push('down');
+      if (slime.gridY < this.gridRows - 1) slimeDirs.push('down');
       if (slime.gridX > 0) slimeDirs.push('left');
-      if (slime.gridX < GridMovementScene.GRID_COLS - 1) slimeDirs.push('right');
+      if (slime.gridX < this.gridCols - 1) slimeDirs.push('right');
 
       if (slimeDirs.length > 0) {
         const nextDir = Phaser.Utils.Array.GetRandom(slimeDirs);
@@ -921,15 +933,15 @@ export class GridMovementScene extends Phaser.Scene {
   private performRandomWalk() {
     const possibleDirs: Direction[] = [];
     if (this.currentGridY > 0) possibleDirs.push('up');
-    if (this.currentGridY < GridMovementScene.GRID_ROWS - 1) possibleDirs.push('down');
+    if (this.currentGridY < this.gridRows - 1) possibleDirs.push('down');
     if (this.currentGridX > 0) possibleDirs.push('left');
-    if (this.currentGridX < GridMovementScene.GRID_COLS - 1) possibleDirs.push('right');
+    if (this.currentGridX < this.gridCols - 1) possibleDirs.push('right');
     
     if (this.allow8Way) {
       if (this.currentGridY > 0 && this.currentGridX > 0) possibleDirs.push('up-left');
-      if (this.currentGridY > 0 && this.currentGridX < GridMovementScene.GRID_COLS - 1) possibleDirs.push('up-right');
-      if (this.currentGridY < GridMovementScene.GRID_ROWS - 1 && this.currentGridX > 0) possibleDirs.push('down-left');
-      if (this.currentGridY < GridMovementScene.GRID_ROWS - 1 && this.currentGridX < GridMovementScene.GRID_COLS - 1) possibleDirs.push('down-right');
+      if (this.currentGridY > 0 && this.currentGridX < this.gridCols - 1) possibleDirs.push('up-right');
+      if (this.currentGridY < this.gridRows - 1 && this.currentGridX > 0) possibleDirs.push('down-left');
+      if (this.currentGridY < this.gridRows - 1 && this.currentGridX < this.gridCols - 1) possibleDirs.push('down-right');
     }
 
     if (possibleDirs.length > 0) {
@@ -1264,13 +1276,13 @@ export class GridMovementScene extends Phaser.Scene {
     }
 
     if (
-      targetGridX < 0 || targetGridX >= GridMovementScene.GRID_COLS ||
-      targetGridY < 0 || targetGridY >= GridMovementScene.GRID_ROWS
+      targetGridX < 0 || targetGridX >= this.gridCols ||
+      targetGridY < 0 || targetGridY >= this.gridRows
     ) {
       return false;
     }
 
-    const { VIEWPORT_COLS, VIEWPORT_ROWS, GRID_COLS, GRID_ROWS, GRID_SIZE } = GridMovementScene;
+    const { VIEWPORT_COLS, VIEWPORT_ROWS, GRID_SIZE } = GridMovementScene;
     
     // スライムとの戦闘判定
     const targetSlimeIndex = this.slimes.findIndex(s => 
@@ -1297,8 +1309,8 @@ export class GridMovementScene extends Phaser.Scene {
     if (this.isTileOccupied(targetGridX, targetGridY)) return false;
 
     // カメラのデッドゾーン（中心5x5グリッド内はカメラ固定、それ以外はスクロール）計算
-    const maxCamGridX = GRID_COLS - VIEWPORT_COLS; // 16 - 7 = 9
-    const maxCamGridY = GRID_ROWS - VIEWPORT_ROWS; // 9
+    const maxCamGridX = this.gridCols - VIEWPORT_COLS; // 16 - 7 = 9
+    const maxCamGridY = this.gridRows - VIEWPORT_ROWS; // 9
 
     let targetCamGridX = this.currentCamGridX;
     let targetCamGridY = this.currentCamGridY;
@@ -1375,6 +1387,7 @@ export class GridMovementScene extends Phaser.Scene {
 
         this.hero.play(this.getAnimKey(`idle-${animDir}`), true);
         this.notifyStateChange(false);
+        this.checkMapEvents();
       }
     });
 
@@ -1396,6 +1409,31 @@ export class GridMovementScene extends Phaser.Scene {
     return true;
   }
 
+  private checkMapEvents() {
+    if (!this.mapData || !this.mapData.events) return;
+    const event = this.mapData.events.find((e: any) => e.x === this.currentGridX && e.y === this.currentGridY);
+    if (event && event.type === 'teleport') {
+      const conditions = this.mapData.clearConditions || {};
+      let met = true;
+      const expRate = (this.visitedGrids.size / this.totalGrids) * 100;
+      const sRate = (this.viewedGrids.size / this.totalGrids) * 100;
+      
+      if (conditions.explorationRate && expRate < conditions.explorationRate) met = false;
+      if (conditions.searchRate && sRate < conditions.searchRate) met = false;
+      // skip defeatRate for now as it's ∞
+      
+      if (met) {
+        if (this.onTestPlayClear) {
+          this.onTestPlayClear();
+        } else {
+          this.sendLog(`条件クリア！次のマップへ移動します。`, 'system');
+        }
+      } else {
+        this.sendLog(`マップ移動条件を満たしていません (踏破率: ${Math.floor(expRate)}%, 捜索率: ${Math.floor(sRate)}%)`, 'info');
+      }
+    }
+  }
+
   private spawnStepTrail(px: number, py: number) {
     const puff = this.add.circle(px, py, 6, 0xffffff, 0.5);
     puff.setDepth(5);
@@ -1410,7 +1448,29 @@ export class GridMovementScene extends Phaser.Scene {
     });
   }
 
+  private updateStats(currentX: number, currentY: number, camX: number, camY: number) {
+    this.visitedGrids.add(`${currentX},${currentY}`);
+
+    for (let x = 0; x < GridMovementScene.VIEWPORT_COLS; x++) {
+      for (let y = 0; y < GridMovementScene.VIEWPORT_ROWS; y++) {
+        const gridX = camX + x;
+        const gridY = camY + y;
+        if (gridX >= 0 && gridX < this.gridCols && gridY >= 0 && gridY < this.gridRows) {
+          this.viewedGrids.add(`${gridX},${gridY}`);
+        }
+      }
+    }
+
+    if (this.setOnStatsChange) {
+      const expRate = (this.visitedGrids.size / this.totalGrids) * 100;
+      const searchRate = (this.viewedGrids.size / this.totalGrids) * 100;
+      this.setOnStatsChange(expRate, searchRate);
+    }
+  }
+
   private notifyStateChange(isScrolling: boolean = false) {
+    this.updateStats(this.currentGridX, this.currentGridY, this.currentCamGridX, this.currentCamGridY);
+    
     if (this.onStateChangeCallback) {
       this.onStateChangeCallback({
         gridX: this.currentGridX,
@@ -1433,10 +1493,22 @@ export class GridMovementScene extends Phaser.Scene {
   public resetPosition() {
     if (this.isMoving) return;
 
-    this.currentGridX = 7;
-    this.currentGridY = 7;
-    this.currentCamGridX = 4;
-    this.currentCamGridY = 4;
+    if (this.mapData) {
+       const startEvent = this.mapData.events?.find((e: any) => e.type === 'start_point');
+       if (startEvent) {
+          this.currentGridX = startEvent.x;
+          this.currentGridY = startEvent.y;
+       } else {
+          this.currentGridX = 0;
+          this.currentGridY = 0;
+       }
+    } else {
+       this.currentGridX = 7;
+       this.currentGridY = 7;
+    }
+    this.currentCamGridX = Math.max(0, Math.min(this.currentGridX - Math.floor(GridMovementScene.VIEWPORT_COLS / 2), this.gridCols - GridMovementScene.VIEWPORT_COLS));
+    this.currentCamGridY = Math.max(0, Math.min(this.currentGridY - Math.floor(GridMovementScene.VIEWPORT_ROWS / 2), this.gridRows - GridMovementScene.VIEWPORT_ROWS));
+    
     const { GRID_SIZE } = GridMovementScene;
     this.hero.setPosition(this.currentGridX * GRID_SIZE + GRID_SIZE / 2, this.currentGridY * GRID_SIZE + GRID_SIZE / 2);
     this.cameras.main.scrollX = this.currentCamGridX * GRID_SIZE;
