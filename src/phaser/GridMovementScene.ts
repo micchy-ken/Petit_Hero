@@ -660,6 +660,41 @@ export class GridMovementScene extends Phaser.Scene {
     this.setDisplayMode(nextMode);
   }
 
+  public applyMapSettings(bgMode: string, bgImage?: string) {
+    if (bgMode === 'text-black') {
+      this.setDisplayMode('text');
+      this.setSpeed(1000);
+      this.toggle8WayMode(false);
+      this.toggleHd2dEffects(false);
+      this.toggleGrassBg(false);
+      this.cameras.main.setBackgroundColor('#000000');
+    } else if (bgMode === 'stone-gray') {
+      this.setDisplayMode('grayscale');
+      this.setSpeed(800);
+      this.toggle8WayMode(false);
+      this.toggleHd2dEffects(false);
+      this.toggleGrassBg(false);
+      this.cameras.main.setBackgroundColor('#cbd5e1'); // Match map editor bg
+    } else if (bgMode === 'grass-green') {
+      this.setDisplayMode('normal');
+      this.setSpeed(800);
+      this.toggle8WayMode(false);
+      this.toggleHd2dEffects(false);
+      this.toggleGrassBg(false);
+      this.cameras.main.setBackgroundColor('#4ade80');
+    } else if (bgMode === 'image') {
+      this.setDisplayMode('normal');
+      this.setSpeed(800);
+      this.toggle8WayMode(false);
+      this.toggleHd2dEffects(true);
+      this.toggleGrassBg(true);
+      this.cameras.main.setBackgroundColor('#000000');
+      if (bgImage && this.grassBgImage) {
+         // TODO: support loading arbitrary bg image if not preloaded. For now, it defaults to grass_bg
+      }
+    }
+  }
+
   public setDisplayMode(mode: 'normal' | 'text' | 'grayscale') {
     this.displayMode = mode;
     this.isTextMode = (mode === 'text');
