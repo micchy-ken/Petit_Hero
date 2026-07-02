@@ -61,6 +61,7 @@ export class GridMovementScene extends Phaser.Scene {
   private isTextMode: boolean = true;
   private displayMode: 'normal' | 'text' | 'grayscale' = 'text';
   private slimes: SlimeData[] = [];
+  private dyingSlimes: Phaser.GameObjects.Sprite[] = [];
   private itemSprites: { gridX: number, gridY: number, sprite: Phaser.GameObjects.GameObject, itemId: string }[] = [];
 
   // 状態管理
@@ -501,18 +502,8 @@ export class GridMovementScene extends Phaser.Scene {
     }
 
     if (this.displayMode === 'text') {
-      if (this.showGridLines) {
-        this.gridGraphics.lineStyle(1, 0xffffff, 0.3);
-        for (let i = 0; i <= this.gridRows; i++) {
-          this.gridGraphics.moveTo(0, i * GRID_SIZE);
-          this.gridGraphics.lineTo(this.gridCols * GRID_SIZE, i * GRID_SIZE);
-        }
-        for (let i = 0; i <= this.gridCols; i++) {
-          this.gridGraphics.moveTo(i * GRID_SIZE, 0);
-          this.gridGraphics.lineTo(i * GRID_SIZE, this.gridRows * GRID_SIZE);
-        }
-        this.gridGraphics.strokePath();
-      }
+      this.gridGraphics.fillStyle(0x000000, 1);
+      this.gridGraphics.fillRect(0, 0, this.gridCols * GRID_SIZE, this.gridRows * GRID_SIZE);
       return;
     }
 
@@ -1406,14 +1397,20 @@ export class GridMovementScene extends Phaser.Scene {
             this.sendLog(`レベルアップ！ レベル ${this.heroLevel} になりました！ 🎉`, 'system');
           }
           
+          const spriteToDestroy = slime.sprite;
+          this.dyingSlimes.push(spriteToDestroy);
           this.tweens.add({
-            targets: slime.sprite,
+            targets: spriteToDestroy,
             scaleX: 0,
             scaleY: 0,
             alpha: 0,
             duration: 200,
             onComplete: () => {
-              if (slime.sprite && slime.sprite.active) slime.sprite.destroy();
+              if (spriteToDestroy && spriteToDestroy.active) spriteToDestroy.destroy();
+              const idx = this.dyingSlimes.indexOf(spriteToDestroy);
+              if (idx !== -1) {
+                this.dyingSlimes.splice(idx, 1);
+              }
             }
           });
           const currentIdx = this.slimes.indexOf(slime);
@@ -1866,6 +1863,11 @@ export class GridMovementScene extends Phaser.Scene {
   public resetPosition() {
     if (this.isMoving) return;
 
+    this.dyingSlimes.forEach(s => {
+      if (s && s.active) s.destroy();
+    });
+    this.dyingSlimes = [];
+
     this.totalEnemiesSpawned = 0;
     this.enemiesDefeated = 0;
     
@@ -2086,14 +2088,20 @@ export class GridMovementScene extends Phaser.Scene {
             this.sendLog(`レベルアップ！ レベル ${this.heroLevel} になりました！`, "system");
           }
 
+          const spriteToDestroy = targetSlime.sprite;
+          this.dyingSlimes.push(spriteToDestroy);
           this.tweens.add({
-            targets: targetSlime.sprite,
+            targets: spriteToDestroy,
             scaleX: 0,
             scaleY: 0,
             alpha: 0,
             duration: 200,
             onComplete: () => {
-              if (targetSlime.sprite && targetSlime.sprite.active) targetSlime.sprite.destroy();
+              if (spriteToDestroy && spriteToDestroy.active) spriteToDestroy.destroy();
+              const idx = this.dyingSlimes.indexOf(spriteToDestroy);
+              if (idx !== -1) {
+                this.dyingSlimes.splice(idx, 1);
+              }
             }
           });
 
@@ -2317,14 +2325,20 @@ export class GridMovementScene extends Phaser.Scene {
           this.sendLog(`レベルアップ！ レベル ${this.heroLevel} になりました！`, "system");
         }
 
+        const spriteToDestroy = targetSlime.sprite;
+        this.dyingSlimes.push(spriteToDestroy);
         this.tweens.add({
-          targets: targetSlime.sprite,
+          targets: spriteToDestroy,
           scaleX: 0,
           scaleY: 0,
           alpha: 0,
           duration: 200,
           onComplete: () => {
-            if (targetSlime.sprite && targetSlime.sprite.active) targetSlime.sprite.destroy();
+            if (spriteToDestroy && spriteToDestroy.active) spriteToDestroy.destroy();
+            const idx = this.dyingSlimes.indexOf(spriteToDestroy);
+            if (idx !== -1) {
+              this.dyingSlimes.splice(idx, 1);
+            }
           }
         });
 

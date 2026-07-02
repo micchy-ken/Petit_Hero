@@ -131,16 +131,16 @@ export function generateHeroSpritesheet(scene: Phaser.Scene, mode: 'normal' | 't
       }
     }
   } else if (resolvedMode === 'text') {
-    ctx.fillStyle = '#ffffff';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.font = 'bold 40px "Inter", sans-serif';
-
     for (let dir = 0; dir < rows; dir++) {
       for (let frame = 0; frame < cols; frame++) {
-        const ox = frame * frameWidth + frameWidth / 2;
-        const oy = dir * frameHeight + frameHeight / 2;
-        ctx.fillText('勇', ox, oy);
+        const ox = frame * frameWidth;
+        const oy = dir * frameHeight;
+        ctx.clearRect(ox, oy, frameWidth, frameHeight);
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = 'bold 40px "Inter", sans-serif';
+        ctx.fillText('勇', ox + frameWidth / 2, oy + frameHeight / 2);
       }
     }
   } else {

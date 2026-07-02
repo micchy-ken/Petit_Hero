@@ -104,15 +104,14 @@ export function generateSlimeSpritesheet(scene: Phaser.Scene, mode: 'normal' | '
       ctx.drawImage(tempCanvas, 0, 0, 32, 32, ox, 0, 64, 64);
     }
   } else if (resolvedMode === 'text') {
-    ctx.fillStyle = '#ffffff'; // 白文字で「敵」
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.font = 'bold 40px "Inter", sans-serif';
-
     for (let frame = 0; frame < frames; frame++) {
-      const ox = frame * frameWidth + frameWidth / 2;
-      const oy = frameHeight / 2;
-      ctx.fillText('敵', ox, oy);
+      const ox = frame * frameWidth;
+      ctx.clearRect(ox, 0, frameWidth, frameHeight);
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = 'bold 40px "Inter", sans-serif';
+      ctx.fillText('敵', ox + frameWidth / 2, frameHeight / 2);
     }
   } else {
 
