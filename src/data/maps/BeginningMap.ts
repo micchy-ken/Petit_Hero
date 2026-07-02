@@ -29,5 +29,5 @@ export const BeginningMap: MapData = {
   "enemies": [
     "slime"
   ],
-  "maxEnemies": 0
+  "maxEnemies": 10
 };
