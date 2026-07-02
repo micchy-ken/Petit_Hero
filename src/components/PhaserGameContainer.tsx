@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Phaser from 'phaser';
 import { GridMovementScene, HeroState, Direction, ActionLog } from '../phaser/GridMovementScene';
-import { Play, Pause, RotateCcw, Eye, EyeOff, Sparkles, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Gauge, Grid, Image as ImageIcon, Heart, Sword, Star, Settings, X, Move, Flame, Zap, Map, Menu, User, Brain, Shield } from 'lucide-react';
+import { Play, Pause, RotateCcw, Eye, EyeOff, Sparkles, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Gauge, Grid, Image as ImageIcon, Heart, Sword, Star, Settings, X, Move, Flame, Zap, Map, Menu, User, Brain, Shield, Ghost } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { MapData } from '../types/MapData';
@@ -401,7 +401,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
               )}
 
               {/* アクションログオーバーレイ (最新5件) */}
-              <div className="absolute bottom-2 right-2 w-64 pointer-events-none flex flex-col justify-end gap-1 z-10 p-2">
+              <div className="absolute bottom-2 right-2 w-96 pointer-events-none flex flex-col justify-end gap-1 z-10 p-2">
                 {logs.slice(-5).map((log) => (
                   <div key={log.id} className={`animate-in fade-in slide-in-from-bottom-2 duration-300 text-xs font-bold text-right drop-shadow-md truncate ${
                     log.type === 'damage' ? 'text-rose-400' :
@@ -568,6 +568,13 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                 >
                   <Map className="w-5 h-5 text-slate-300" />
                   マップ＆イベントエディターを開く
+                </button>
+                <button
+                  onClick={() => navigate('/editor/enemy')}
+                  className="flex items-center justify-center gap-2 w-full bg-indigo-700 hover:bg-indigo-800 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-colors border border-indigo-600"
+                >
+                  <Ghost className="w-5 h-5 text-indigo-300" />
+                  エネミーエディターを開く
                 </button>
 
                 {/* 自動移動モード切替 */}

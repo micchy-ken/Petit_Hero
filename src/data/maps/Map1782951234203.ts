@@ -14,9 +14,19 @@ export const Map1782951234203: MapData = {
       "data": {
         "fromMap": null
       }
+    },
+    {
+      "x": 8,
+      "y": 8,
+      "type": "teleport",
+      "data": {
+        "targetMap": "map_1782999318445",
+        "requiredSearchRate": 100
+      }
     }
   ],
   "items": [],
   "enemies": [],
   "bgImage": "grass_bg_1782776475818.jpg"
 };
+// Updated by editor

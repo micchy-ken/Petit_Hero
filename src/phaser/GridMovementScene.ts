@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { generateHeroSpritesheet } from './HeroSpritesheet';
 import { generateSlimeSpritesheet } from './MonsterSpritesheets';
+import { getEnemyAssetById, EnemyAsset } from '../data/EnemyAssets';
 // @ts-ignore
 import grassBgUrl from '../../public/grass_bg_1782776475818.jpg';
 
@@ -24,6 +25,7 @@ export interface HeroState {
 
 interface SlimeData {
   id: string;
+  name?: string;
   sprite: Phaser.GameObjects.Sprite;
   gridX: number;
   gridY: number;
@@ -32,6 +34,10 @@ interface SlimeData {
   isMoving: boolean;
   hp: number;
   maxHp: number;
+  attack: number;
+  speed: number;
+  behavior: string;
+  lastMoveTime?: number;
 }
 
 export interface ActionLog {
@@ -318,14 +324,27 @@ export class GridMovementScene extends Phaser.Scene {
       slimeSprite.setDepth(9); // 勇者より少し奥
       slimeSprite.play(this.getAnimKey('slime-idle'));
       
+      let enemyConfig: EnemyAsset | undefined = undefined;
+      if (this.mapData?.enemies && this.mapData.enemies.length > 0) {
+        const enemyId = Phaser.Utils.Array.GetRandom(this.mapData.enemies as string[]);
+        enemyConfig = getEnemyAssetById(enemyId);
+      }
+      if (!enemyConfig) {
+        enemyConfig = { id: 'default', name: 'スライム', hp: 10, attack: 2, speed: 1000, behavior: 'random' };
+      }
+      
       this.slimes.push({
         id: `slime-${Math.random().toString(36).substring(2, 9)}`,
+        name: enemyConfig.name,
         sprite: slimeSprite,
         gridX: sx,
         gridY: sy,
         isMoving: false,
-        hp: 10,
-        maxHp: 10
+        hp: enemyConfig.hp,
+        maxHp: enemyConfig.hp,
+        attack: enemyConfig.attack,
+        speed: enemyConfig.speed,
+        behavior: enemyConfig.behavior,
       });
       this.totalEnemiesSpawned++;
     }
@@ -954,18 +973,31 @@ export class GridMovementScene extends Phaser.Scene {
           slimeSprite.setDepth(9);
           slimeSprite.play(this.getAnimKey('slime-idle'));
           
+          let enemyConfig: EnemyAsset | undefined = undefined;
+          if (this.mapData?.enemies && this.mapData.enemies.length > 0) {
+            const enemyId = Phaser.Utils.Array.GetRandom(this.mapData.enemies as string[]);
+            enemyConfig = getEnemyAssetById(enemyId);
+          }
+          if (!enemyConfig) {
+            enemyConfig = { id: 'default', name: 'スライム', hp: 10, attack: 2, speed: 1000, behavior: 'random' };
+          }
+
           this.slimes.push({
             id: `slime-${Math.random().toString(36).substring(2, 9)}`,
+            name: enemyConfig.name,
             sprite: slimeSprite,
             gridX: sx,
             gridY: sy,
             isMoving: false,
-            hp: 10,
-            maxHp: 10
+            hp: enemyConfig.hp,
+            maxHp: enemyConfig.hp,
+            attack: enemyConfig.attack,
+            speed: enemyConfig.speed,
+            behavior: enemyConfig.behavior,
           });
           
           this.totalEnemiesSpawned++;
-          this.sendLog('野生のスライムが現れた！ 👾', 'system');
+          this.sendLog(`野生の${enemyConfig.name || 'スライム'}が現れた！ 👾`, 'system');
         }
       }
     }
@@ -1146,19 +1178,44 @@ export class GridMovementScene extends Phaser.Scene {
       }
     }
 
-    // スライムのランダム移動
+    // スライムの行動
+    const currentTime = this.time.now;
     this.slimes.forEach(slime => {
       if (slime.isMoving) return;
-      if (Math.random() > 0.3) return; // 30%の確率で動く
+      if (slime.behavior === 'idle') return;
 
-      const slimeDirs: Direction[] = [];
-      if (slime.gridY > 0) slimeDirs.push('up');
-      if (slime.gridY < this.gridRows - 1) slimeDirs.push('down');
-      if (slime.gridX > 0) slimeDirs.push('left');
-      if (slime.gridX < this.gridCols - 1) slimeDirs.push('right');
+      const lastMove = slime.lastMoveTime || 0;
+      if (currentTime - lastMove < slime.speed) return;
 
-      if (slimeDirs.length > 0) {
-        const nextDir = Phaser.Utils.Array.GetRandom(slimeDirs);
+      slime.lastMoveTime = currentTime;
+
+      let nextDir: Direction | null = null;
+
+      if (slime.behavior === 'seek') {
+        const dx = this.currentGridX - slime.gridX;
+        const dy = this.currentGridY - slime.gridY;
+        
+        // Simple seek logic
+        if (Math.abs(dx) > Math.abs(dy)) {
+          nextDir = dx > 0 ? 'right' : 'left';
+        } else if (dy !== 0) {
+          nextDir = dy > 0 ? 'down' : 'up';
+        }
+      }
+
+      if (!nextDir || slime.behavior === 'random') {
+        const slimeDirs: Direction[] = [];
+        if (slime.gridY > 0) slimeDirs.push('up');
+        if (slime.gridY < this.gridRows - 1) slimeDirs.push('down');
+        if (slime.gridX > 0) slimeDirs.push('left');
+        if (slime.gridX < this.gridCols - 1) slimeDirs.push('right');
+
+        if (slimeDirs.length > 0) {
+          nextDir = Phaser.Utils.Array.GetRandom(slimeDirs);
+        }
+      }
+
+      if (nextDir) {
         this.moveSlime(slime, nextDir);
       }
     });
@@ -1308,7 +1365,7 @@ export class GridMovementScene extends Phaser.Scene {
 
     const damage = Math.max(1, this.heroAttack - 1); // Simple damage calc
     slime.hp -= damage;
-    this.sendLog(`勇者の通常攻撃！ スライムに ${damage} ダメージを与えた！ ⚔️`, 'combat');
+    this.sendLog(`勇者の通常攻撃！ ${slime.name || 'スライム'}に ${damage} ダメージを与えた！ ⚔️`, 'combat');
 
     // 攻撃エフェクト (本格的な円弧のダブルクロス・スラッシュ & スパーク)
     
@@ -1463,7 +1520,7 @@ export class GridMovementScene extends Phaser.Scene {
         if (slime.hp <= 0) {
           this.enemiesDefeated++;
           this.updateStats(this.currentGridX, this.currentGridY, this.currentCamGridX, this.currentCamGridY);
-          this.sendLog(`スライムを倒した！ 経験値を 2 獲得。 🌟`, 'info');
+          this.sendLog(`${slime.name || 'スライム'}を倒した！ 経験値を 2 獲得。 🌟`, 'info');
           this.heroExp += 2;
           if (this.heroExp >= 10) {
             this.heroLevel++;
@@ -1515,9 +1572,9 @@ export class GridMovementScene extends Phaser.Scene {
         }
         slime.isMoving = false;
         
-        const damage = 2; // Fixed damage for now
+        const damage = slime.attack || 2;
         this.heroHp = Math.max(0, this.heroHp - damage);
-        this.sendLog(`スライムの体当たり！ 勇者は ${damage} ダメージを受けた！ 💥`, 'damage');
+        this.sendLog(`${slime.name || 'スライム'}の攻撃！ 勇者は ${damage} ダメージを受けた！ 💥`, 'damage');
         
         // 画面フラッシュ
         this.cameras.main.flash(200, 255, 0, 0);
@@ -2116,13 +2173,13 @@ export class GridMovementScene extends Phaser.Scene {
     if (hitSlimes.length > 0) {
       hitSlimes.forEach(targetSlime => {
         targetSlime.hp -= fireDamage;
-        this.sendLog(`ファイアボールが直撃！ スライムに ${fireDamage} ダメージを与えた！ 🔥`, "combat");
+        this.sendLog(`ファイアボールが直撃！ ${targetSlime.name || 'スライム'}に ${fireDamage} ダメージを与えた！ 🔥`, "combat");
 
         // スライムの撃破処理
         if (targetSlime.hp <= 0) {
           this.enemiesDefeated++;
           this.updateStats(this.currentGridX, this.currentGridY, this.currentCamGridX, this.currentCamGridY);
-          this.sendLog(`スライムを焼き尽くした！ 経験値を 2 獲得。`, "info");
+          this.sendLog(`${targetSlime.name || 'スライム'}を焼き尽くした！ 経験値を 2 獲得。`, "info");
           this.heroExp += 2;
           if (this.heroExp >= 10) {
             this.heroLevel++;
@@ -2347,13 +2404,13 @@ export class GridMovementScene extends Phaser.Scene {
     const iceDamage = 12; // 氷の魔法は周囲のみのため強力
     hitSlimes.forEach(targetSlime => {
       targetSlime.hp -= iceDamage;
-      this.sendLog(`サークル氷結がスライムに直撃！ ${iceDamage} ダメージ！ `, "combat");
+      this.sendLog(`サークル氷結が${targetSlime.name || 'スライム'}に直撃！ ${iceDamage} ダメージ！ `, "combat");
 
       // 敵が力尽きたかチェック
       if (targetSlime.hp <= 0) {
         this.enemiesDefeated++;
         this.updateStats(this.currentGridX, this.currentGridY, this.currentCamGridX, this.currentCamGridY);
-        this.sendLog(`スライムを完全に凍りつかせて砕いた！ 経験値を 2 獲得。`, "info");
+        this.sendLog(`${targetSlime.name || 'スライム'}を完全に凍りつかせて砕いた！ 経験値を 2 獲得。`, "info");
         this.heroExp += 2;
         if (this.heroExp >= 10) {
           this.heroLevel++;

@@ -70,6 +70,60 @@ export const allMaps: MapData[] = [
     }
   });
 
+  app.post("/api/save-enemies", (req, res) => {
+    try {
+      const { enemyAssets, bossAssets } = req.body;
+      if (!enemyAssets || !bossAssets) {
+        return res.status(400).json({ error: "Invalid enemy data" });
+      }
+
+      const content = `export interface EnemyAsset {
+  id: string;
+  name: string;
+  image?: string;
+  hp: number;
+  attack: number;
+  speed: number;
+  behavior: string;
+}
+
+export const EnemyAssets: Record<string, EnemyAsset[]> = ${JSON.stringify(enemyAssets, null, 2)};
+
+export const BossAssets: Record<string, EnemyAsset[]> = ${JSON.stringify(bossAssets, null, 2)};
+
+export const getAvailableEnemies = (bgMode: string) => {
+  if (bgMode === 'text-black') return EnemyAssets['text-black'];
+  if (bgMode === 'stone-gray') return EnemyAssets['stone-gray'];
+  return EnemyAssets['color'];
+};
+
+export const getAvailableBosses = (bgMode: string) => {
+  if (bgMode === 'text-black') return BossAssets['text-black'];
+  if (bgMode === 'stone-gray') return BossAssets['stone-gray'];
+  return BossAssets['color'];
+};
+
+export const getEnemyAssetById = (id: string): EnemyAsset | undefined => {
+  for (const bgMode in EnemyAssets) {
+    const found = EnemyAssets[bgMode].find(e => e.id === id);
+    if (found) return found;
+  }
+  for (const bgMode in BossAssets) {
+    const found = BossAssets[bgMode].find(e => e.id === id);
+    if (found) return found;
+  }
+  return undefined;
+};
+`;
+      const filePath = path.join(process.cwd(), "src", "data", "EnemyAssets.ts");
+      fs.writeFileSync(filePath, content);
+      res.json({ success: true, filePath });
+    } catch (e: any) {
+      console.error("Error in /api/save-enemies:", e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.get("/api/maps", (req, res) => {
     try {
       const mapsDir = path.join(process.cwd(), "src", "data", "maps");
