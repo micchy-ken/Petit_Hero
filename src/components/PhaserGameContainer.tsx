@@ -486,34 +486,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
               </div>
             </div>
 
-            {/* デモ自動切替用のレベル調整ショートカット */}
-            <div className="w-full mt-3 p-3 bg-slate-900 border border-slate-700/40 rounded-xl flex items-center justify-between text-xs font-mono">
-              <div className="flex items-center gap-1.5 text-slate-300 font-sans font-bold">
-                <Star className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-                <span>勇者レベル調整 (自動設定デモ)</span>
-              </div>
-              <div className="flex gap-1.5">
-                <button
-                  onClick={() => sceneRef.current?.addLevel()}
-                  className="bg-amber-600 hover:bg-amber-500 active:bg-amber-700 text-white font-bold py-1 px-2.5 rounded transition-colors"
-                >
-                  Lv +1
-                </button>
-                <button
-                  onClick={() => {
-                    sceneRef.current?.resetHero();
-                    setDisplayMode('text');
-                    setSpeed(1000);
-                    setAllow8Way(false);
-                    setIsHd2d(false);
-                    setUseGrassBg(true);
-                  }}
-                  className="bg-slate-700 hover:bg-slate-600 active:bg-slate-800 text-slate-200 py-1 px-2 rounded transition-colors"
-                >
-                  リセット
-                </button>
-              </div>
-            </div>
+            {/* レベル別デモ等、不必要な要素は削除されました */}
           </div>
         </div>
       
@@ -616,29 +589,9 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
 
                 {/* ユーティリティボタン群 */}
                 <div className="grid grid-cols-2 gap-3 pt-2">
-                  <button
-                    onClick={toggleGrassBg}
-                    className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl border text-xs font-medium transition-colors ${
-                      useGrassBg 
-                        ? 'bg-emerald-50 border-emerald-300 text-emerald-700' 
-                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <ImageIcon className="w-3.5 h-3.5" />
-                    {useGrassBg ? 'Grass Bg ON' : 'Grass Bg OFF'}
-                  </button>
 
-                  <button
-                    onClick={toggleGrid}
-                    className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl border text-xs font-medium transition-colors ${
-                      showGrid 
-                        ? 'bg-emerald-50 border-emerald-300 text-emerald-700' 
-                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <Grid className="w-3.5 h-3.5" />
-                    {showGrid ? 'Grid ON' : 'Grid OFF'}
-                  </button>
+
+
 
                   <button
                     onClick={toggleHd2d}
@@ -664,17 +617,11 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                     {allow8Way ? '8-Way Move' : '4-Way Move'}
                   </button>
 
-                  <button
-                    onClick={openSpritesheetModal}
-                    className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 text-xs font-medium transition-colors"
-                  >
-                    <ImageIcon className="w-3.5 h-3.5" />
-                    Sprites
-                  </button>
+
 
                   <button
                     onClick={handleReset}
-                    className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 text-xs font-medium transition-colors"
+                    className="col-span-2 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 text-xs font-medium transition-colors"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
                     Center
@@ -717,60 +664,6 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                         <Eye className="w-3 h-3" />
                         Text
                       </button>
-                    </div>
-                  </div>
-
-                  {/* レベル別デモコントローラー */}
-                  <div className="col-span-2 flex flex-col gap-2.5 bg-amber-50/50 p-3.5 rounded-xl border border-amber-200/60 mt-1">
-                    <span className="text-[10px] font-bold text-amber-700 tracking-wider uppercase font-sans flex items-center gap-1">
-                      <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
-                      Demo Auto-Switch (レベル自動切替デモ)
-                    </span>
-                    <p className="text-[11px] text-slate-500 leading-normal">
-                      レベルアップに伴い、画質・速度・移動方向・エフェクトが段階的に自動解放されるデモ機能です。（手動での切り替えも自由に行えます）
-                    </p>
-                    
-                    <div className="flex gap-2 mt-1">
-                      <button
-                        onClick={() => sceneRef.current?.addLevel()}
-                        className="flex-1 bg-amber-600 hover:bg-amber-505 active:bg-amber-700 hover:bg-amber-500 text-white font-bold py-2 px-3 rounded-lg text-xs transition-all shadow-sm flex items-center justify-center gap-1"
-                      >
-                        <Star className="w-3.5 h-3.5 text-amber-200" />
-                        Lv UP (+1) [現在のLv: {heroState.level}]
-                      </button>
-                      <button
-                        onClick={() => {
-                          sceneRef.current?.resetHero();
-                          setDisplayMode('text');
-                          setSpeed(1000);
-                          setAllow8Way(false);
-                          setIsHd2d(false);
-                          setUseGrassBg(true);
-                        }}
-                        className="bg-slate-200 hover:bg-slate-300 active:bg-slate-400 text-slate-700 font-semibold py-2 px-3 rounded-lg text-xs transition-colors flex items-center justify-center gap-1"
-                      >
-                        <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
-                        Reset to Lv.1
-                      </button>
-                    </div>
-
-                    <div className="text-[10px] text-slate-500 flex flex-col gap-1 mt-1 bg-white/75 p-2.5 rounded-lg border border-slate-200/60 font-sans">
-                      <div className={`flex justify-between items-center px-1.5 py-0.5 rounded ${heroState.level >= 1 && heroState.level < 3 ? "bg-amber-100 text-amber-900 font-bold" : "text-slate-400"}`}>
-                        <span>・Lv.1〜2: Text / 1000ms / 4方向 / FXオフ</span>
-                        {heroState.level >= 1 && heroState.level < 3 && <span className="text-[9px] bg-amber-600 text-white px-1 rounded">現在</span>}
-                      </div>
-                      <div className={`flex justify-between items-center px-1.5 py-0.5 rounded ${heroState.level >= 3 && heroState.level < 6 ? "bg-amber-100 text-amber-900 font-bold" : "text-slate-400"}`}>
-                        <span>・Lv.3〜5: Gray 32x32 / 800ms / 4方向</span>
-                        {heroState.level >= 3 && heroState.level < 6 && <span className="text-[9px] bg-amber-600 text-white px-1 rounded">現在</span>}
-                      </div>
-                      <div className={`flex justify-between items-center px-1.5 py-0.5 rounded ${heroState.level >= 6 && heroState.level < 8 ? "bg-amber-100 text-amber-900 font-bold" : "text-slate-400"}`}>
-                        <span>・Lv.6〜7: HD-2D / GrassBGオフ</span>
-                        {heroState.level >= 6 && heroState.level < 8 && <span className="text-[9px] bg-amber-600 text-white px-1 rounded">現在</span>}
-                      </div>
-                      <div className={`flex justify-between items-center px-1.5 py-0.5 rounded ${heroState.level >= 8 ? "bg-amber-100 text-amber-900 font-bold" : "text-slate-400"}`}>
-                        <span>・Lv.8〜 (通常モード): 8方向 / FX & GrassBGオン / 火の魔法</span>
-                        {heroState.level >= 8 && <span className="text-[9px] bg-amber-600 text-white px-1 rounded">現在</span>}
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -833,6 +726,15 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                     </div>
                   </div>
                 </div>
+
+                {/* スプライト生成ボタンをこちらへ移動 */}
+                <button
+                  onClick={openSpritesheetModal}
+                  className="flex items-center justify-center gap-1.5 py-3 px-4 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-sm font-bold transition-all shadow-sm w-full mt-2"
+                >
+                  <ImageIcon className="w-4 h-4" />
+                  スプライトシートを表示 (Sprites)
+                </button>
               </div>
             )}
 

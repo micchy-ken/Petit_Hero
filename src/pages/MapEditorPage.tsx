@@ -5,6 +5,8 @@ import { MapData } from '../types/MapData';
 import { getAvailableEnemies, getAvailableBosses } from '../data/EnemyAssets';
 import { PhaserGameContainer } from '../components/PhaserGameContainer';
 import { allMaps } from '../data/maps';
+// @ts-ignore
+import grassBgUrl from '../../public/grass_bg_1782776475818.jpg';
 
 export default function MapEditorPage() {
   const navigate = useNavigate();
@@ -543,7 +545,7 @@ export default function MapEditorPage() {
           style={{ 
             width: `${currentMap.width * 32}px`, 
             height: `${currentMap.height * 32}px`,
-            backgroundImage: bgMode === 'image' && currentMap.bgImage ? `url(/${currentMap.bgImage})` : 'none',
+            backgroundImage: bgMode === 'image' && currentMap.bgImage ? (currentMap.bgImage.includes('grass_bg') ? `url(${grassBgUrl})` : `url(/${currentMap.bgImage})`) : 'none',
             backgroundSize: 'cover',
             backgroundPosition: 'center',
             ...(bgMode === 'stone-gray' ? { backgroundImage: 'radial-gradient(circle, #cbd5e1 2px, transparent 2px), radial-gradient(circle, #cbd5e1 2px, transparent 2px)', backgroundSize: '16px 16px', backgroundPosition: '0 0, 8px 8px' } : {})

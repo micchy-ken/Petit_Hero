@@ -51,6 +51,7 @@ export class GridMovementScene extends Phaser.Scene {
   private hd2dLighting!: Phaser.GameObjects.Graphics;
   private vignetteOverlay!: Phaser.GameObjects.Graphics;
   private particleMotes!: Phaser.GameObjects.Arc[];
+  private visitedTraceGraphics?: Phaser.GameObjects.Graphics;
   private grassBgImage?: Phaser.GameObjects.Image;
   private useGrassBg: boolean = true;
   private allow8Way: boolean = false;
@@ -494,6 +495,10 @@ export class GridMovementScene extends Phaser.Scene {
     this.gridGraphics = this.add.graphics();
     this.gridGraphics.setDepth(0);
     this.drawGrid();
+
+    this.visitedTraceGraphics = this.add.graphics();
+    this.visitedTraceGraphics.setDepth(1);
+    this.drawVisitedTrace();
   }
 
   private drawGrid() {
@@ -631,6 +636,63 @@ export class GridMovementScene extends Phaser.Scene {
         this.gridGraphics.lineBetween(0, j * GRID_SIZE, this.gridCols * GRID_SIZE, j * GRID_SIZE);
       }
     }
+  }
+
+  private drawVisitedTrace() {
+    if (!this.visitedTraceGraphics) return;
+    this.visitedTraceGraphics.clear();
+
+    const { GRID_SIZE } = GridMovementScene;
+
+    // displayMode に応じて最適な色・スタイルを設定
+    let traceColor = 0x10b981; // デフォルトは爽やかなエメラルドグリーン
+    let traceAlpha = 0.22;      // 半透明
+
+    if (this.displayMode === 'text') {
+      traceColor = 0x34d399; // Textモードはよりネオン感のある薄緑
+      traceAlpha = 0.28;
+    } else if (this.displayMode === 'grayscale') {
+      traceColor = 0x64748b; // モノクローム（石ころ世界）は馴染むブルーグレー
+      traceAlpha = 0.22;
+    }
+
+    this.visitedGrids.forEach(key => {
+      const [xs, ys] = key.split(',');
+      const x = parseInt(xs, 10);
+      const y = parseInt(ys, 10);
+
+      const px = x * GRID_SIZE;
+      const py = y * GRID_SIZE;
+
+      // 1. 各タイルの四隅に上品な L 字型のコーナータグを描画
+      this.visitedTraceGraphics!.lineStyle(1.5, traceColor, traceAlpha * 1.5);
+      const tagSize = 8;
+      
+      // 左上角
+      this.visitedTraceGraphics!.moveTo(px + tagSize, py);
+      this.visitedTraceGraphics!.lineTo(px, py);
+      this.visitedTraceGraphics!.lineTo(px, py + tagSize);
+
+      // 右上角
+      this.visitedTraceGraphics!.moveTo(px + GRID_SIZE - tagSize, py);
+      this.visitedTraceGraphics!.lineTo(px + GRID_SIZE, py);
+      this.visitedTraceGraphics!.lineTo(px + GRID_SIZE, py + tagSize);
+
+      // 左下角
+      this.visitedTraceGraphics!.moveTo(px, py + GRID_SIZE - tagSize);
+      this.visitedTraceGraphics!.lineTo(px, py + GRID_SIZE);
+      this.visitedTraceGraphics!.lineTo(px + tagSize, py + GRID_SIZE);
+
+      // 右下角
+      this.visitedTraceGraphics!.moveTo(px + GRID_SIZE, py + GRID_SIZE - tagSize);
+      this.visitedTraceGraphics!.lineTo(px + GRID_SIZE, py + GRID_SIZE);
+      this.visitedTraceGraphics!.lineTo(px + GRID_SIZE - tagSize, py + GRID_SIZE);
+      this.visitedTraceGraphics!.strokePath();
+
+      // 2. セル中央にドットを控えめに描く
+      this.visitedTraceGraphics!.fillStyle(traceColor, traceAlpha);
+      this.visitedTraceGraphics!.fillCircle(px + GRID_SIZE / 2, py + GRID_SIZE / 2, 4);
+    });
   }
 
   private drawHd2dLighting() {
@@ -778,6 +840,7 @@ export class GridMovementScene extends Phaser.Scene {
 
     // 描画の更新
     this.drawGrid();
+    this.drawVisitedTrace();
   }
 
   public toggleGridLines(show?: boolean) {
@@ -1596,6 +1659,7 @@ export class GridMovementScene extends Phaser.Scene {
       }
       this.setOnStatsChange(expRate, searchRate, dRate);
     }
+    this.drawVisitedTrace();
   }
 
   private notifyStateChange(isScrolling: boolean = false) {
@@ -1625,6 +1689,13 @@ export class GridMovementScene extends Phaser.Scene {
 
     this.totalEnemiesSpawned = 0;
     this.enemiesDefeated = 0;
+    
+    // 踏破・視野情報をクリアし、表示もクリアする
+    this.visitedGrids.clear();
+    this.viewedGrids.clear();
+    if (this.visitedTraceGraphics) {
+      this.visitedTraceGraphics.clear();
+    }
     
     // reset slimes array when loading map
     this.slimes.forEach(s => {
