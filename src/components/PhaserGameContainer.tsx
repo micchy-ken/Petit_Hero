@@ -172,6 +172,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
       const scene = sceneRef.current;
       const targetMap = maps.find(m => m.id === initialMapId);
       if (targetMap && (targetMap.id !== scene.mapData?.id || targetMap !== scene.mapData)) {
+        const fromMapId = scene.mapData?.id || null;
         scene.mapData = targetMap;
         scene.gridCols = targetMap.width;
         scene.gridRows = targetMap.height;
@@ -189,7 +190,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
         setAllow8Way(false);
         setSpeed(isText ? 1000 : 800);
 
-        scene.resetPosition();
+        scene.resetPosition(fromMapId);
       }
     }
   }, [initialMapId, maps]);

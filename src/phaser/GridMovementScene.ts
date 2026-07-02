@@ -513,6 +513,7 @@ export class GridMovementScene extends Phaser.Scene {
 
     if (this.grassBgImage) {
       this.grassBgImage.setVisible(this.displayMode === 'normal' && this.useGrassBg);
+      this.grassBgImage.setDisplaySize(this.gridCols * GRID_SIZE, this.gridRows * GRID_SIZE);
     }
 
     if (this.displayMode === 'text') {
@@ -1689,7 +1690,7 @@ export class GridMovementScene extends Phaser.Scene {
     }
   }
 
-  public resetPosition() {
+  public resetPosition(fromMapId?: string | null) {
     if (this.isMoving) return;
 
     this.totalEnemiesSpawned = 0;
@@ -1714,23 +1715,38 @@ export class GridMovementScene extends Phaser.Scene {
     this.itemSprites = [];
 
     if (this.mapData) {
-       // まず設定なし(fromMapがnullまたは空文字列)の初期値を探す
-       const startEvent = this.mapData.events?.find(
-         (e: any) => e.type === 'start_point' && (!e.data || e.data.fromMap === null || e.data.fromMap === '')
-       );
+       const { GRID_SIZE } = GridMovementScene;
+       // カメラのスクロール境界を新しいマップサイズに動的更新
+       if (this.cameras && this.cameras.main) {
+         this.cameras.main.setBounds(0, 0, this.gridCols * GRID_SIZE, this.gridRows * GRID_SIZE);
+       }
+
+       // 1. 指定された移行元のマップID(fromMapId)に合致するスタート地点を優先検索
+       let startEvent = null;
+       if (fromMapId) {
+         startEvent = this.mapData.events?.find(
+           (e: any) => e.type === 'start_point' && e.data?.fromMap === fromMapId
+         );
+       }
+
+       // 2. なければ、設定なし(fromMapがnullまたは空文字列)の初期値を探す
+       if (!startEvent) {
+         startEvent = this.mapData.events?.find(
+           (e: any) => e.type === 'start_point' && (!e.data || e.data.fromMap === null || e.data.fromMap === '')
+         );
+       }
+
+       // 3. それでもなければ、何かしらの最初の start_point を使用
+       if (!startEvent) {
+         startEvent = this.mapData.events?.find((e: any) => e.type === 'start_point');
+       }
+
        if (startEvent) {
           this.currentGridX = startEvent.x;
           this.currentGridY = startEvent.y;
        } else {
-          // なければ、その他の初期値（どの初期値でも）を検索
-          const anyStartEvent = this.mapData.events?.find((e: any) => e.type === 'start_point');
-          if (anyStartEvent) {
-             this.currentGridX = anyStartEvent.x;
-             this.currentGridY = anyStartEvent.y;
-          } else {
-             this.currentGridX = 0;
-             this.currentGridY = 0;
-          }
+          this.currentGridX = 0;
+          this.currentGridY = 0;
        }
     } else {
        this.currentGridX = 7;
