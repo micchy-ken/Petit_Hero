@@ -35,6 +35,29 @@ export const ${exportName}: MapData = ${JSON.stringify(mapData, null, 2)};
       
       fs.writeFileSync(filePath, content);
       console.log(`Saved map to ${filePath}`);
+
+      // Automatically update src/data/maps/index.ts
+      const mapsDir = path.join(process.cwd(), "src", "data", "maps");
+      const files = fs.readdirSync(mapsDir);
+      const mapFiles = files.filter(f => f.endsWith(".ts") && f !== "index.ts");
+      
+      const imports = mapFiles.map(f => {
+        const name = f.replace(".ts", "");
+        return `import { ${name} } from './${name}';`;
+      }).join("\n");
+      
+      const exports = mapFiles.map(f => f.replace(".ts", "")).join(",\n  ");
+      
+      const indexContent = `import { MapData } from '../../types/MapData';
+${imports}
+
+export const allMaps: MapData[] = [
+  ${exports}
+];
+`;
+      fs.writeFileSync(path.join(mapsDir, "index.ts"), indexContent);
+      console.log(`Updated maps index.ts`);
+
       res.json({ success: true, filePath });
     } catch (e: any) {
       console.error(e);

@@ -4,19 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { MapData } from '../types/MapData';
 import { getAvailableEnemies, getAvailableBosses } from '../data/EnemyAssets';
 import { PhaserGameContainer } from '../components/PhaserGameContainer';
-
-const fallbackInitialMaps: MapData[] = [
-  {
-    id: 'map_beginning',
-    name: '始まり',
-    width: 16,
-    height: 16,
-    bgMode: 'text-black',
-    events: [],
-    items: [],
-    enemies: ['敵']
-  }
-];
+import { allMaps } from '../data/maps';
 
 export default function MapEditorPage() {
   const navigate = useNavigate();
@@ -29,13 +17,17 @@ export default function MapEditorPage() {
 
   useEffect(() => {
     fetch('/api/maps?t=' + Date.now(), { cache: 'no-store' })
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error('API not available');
+        return res.json();
+      })
       .then(data => {
         let loadedMaps = Array.isArray(data) ? data : [];
         // Ensure map_beginning is always present in the selection list to preserve consistency
         const hasBeginning = loadedMaps.some((m: MapData) => m.id === 'map_beginning');
         if (!hasBeginning) {
-          loadedMaps = [fallbackInitialMaps[0], ...loadedMaps];
+          const beginningMap = allMaps.find((m: MapData) => m.id === 'map_beginning') || allMaps[0];
+          loadedMaps = [beginningMap, ...loadedMaps];
         }
         setMaps(loadedMaps);
         
@@ -47,9 +39,12 @@ export default function MapEditorPage() {
         setIsLoading(false);
       })
       .catch(e => {
-        console.error(e);
-        setMaps(fallbackInitialMaps);
-        setCurrentMapId(fallbackInitialMaps[0].id);
+        console.warn("Using bundled static maps:", e.message);
+        setMaps(allMaps);
+        const defaultId = allMaps.some((m: MapData) => m.id === 'map_beginning')
+          ? 'map_beginning'
+          : (allMaps[0]?.id || '');
+        setCurrentMapId(defaultId);
         setIsLoading(false);
       });
   }, []);

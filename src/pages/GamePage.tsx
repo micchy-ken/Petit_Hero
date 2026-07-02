@@ -2,17 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { PhaserGameContainer } from '../components/PhaserGameContainer';
 import { Gamepad2, Layers, Cpu, ShieldCheck, Loader2 } from 'lucide-react';
 import { MapData } from '../types/MapData';
-
-const fallbackBeginningMap: MapData = {
-  id: 'map_beginning',
-  name: '始まり',
-  width: 16,
-  height: 16,
-  bgMode: 'text-black',
-  events: [],
-  items: [],
-  enemies: ['slime']
-};
+import { allMaps as importedMaps } from '../data/maps';
 
 export default function GamePage() {
   const [currentMapId, setCurrentMapId] = useState('map_beginning');
@@ -21,12 +11,16 @@ export default function GamePage() {
 
   useEffect(() => {
     fetch('/api/maps?t=' + Date.now(), { cache: 'no-store' })
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error('API not available');
+        return res.json();
+      })
       .then(data => {
         let loadedMaps = Array.isArray(data) ? data : [];
         const hasBeginning = loadedMaps.some((m: MapData) => m.id === 'map_beginning');
         if (!hasBeginning) {
-          loadedMaps = [fallbackBeginningMap, ...loadedMaps];
+          const beginningMap = importedMaps.find((m: MapData) => m.id === 'map_beginning') || importedMaps[0];
+          loadedMaps = [beginningMap, ...loadedMaps];
         }
         setAllMaps(loadedMaps);
         
@@ -39,9 +33,10 @@ export default function GamePage() {
         setIsLoading(false);
       })
       .catch(e => {
-        console.error(e);
-        setAllMaps([fallbackBeginningMap]);
-        setCurrentMapId('map_beginning');
+        console.warn("Using bundled static maps for game:", e.message);
+        setAllMaps(importedMaps);
+        const defaultId = importedMaps.some((m: MapData) => m.id === 'map_beginning') ? 'map_beginning' : (importedMaps[0]?.id || '');
+        setCurrentMapId(defaultId);
         setIsLoading(false);
       });
   }, []);
