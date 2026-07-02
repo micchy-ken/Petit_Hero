@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Phaser from 'phaser';
 import { GridMovementScene, HeroState, Direction, ActionLog } from '../phaser/GridMovementScene';
-import { Play, Pause, RotateCcw, Eye, EyeOff, Sparkles, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Gauge, Grid, Image as ImageIcon, Heart, Sword, Star, Settings, X, Move, Flame, Zap, Map, Menu, User, Brain, Shield } from 'lucide-react';
+import { Play, Pause, RotateCcw, Eye, EyeOff, Sparkles, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Gauge, Grid, Image as ImageIcon, Heart, Sword, Star, Settings, X, Move, Flame, Zap, Map, Menu, User, Brain, Shield, Footprints } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { MapData } from '../types/MapData';
@@ -51,6 +51,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
   const [allow8Way, setAllow8Way] = useState<boolean>(false);
   const [displayMode, setDisplayMode] = useState<'normal' | 'text' | 'grayscale'>('text');
   const [speed, setSpeed] = useState<number>(1000);
+  const [showVisitedTrace, setShowVisitedTrace] = useState<boolean>(true);
   const [showSpritesheetModal, setShowSpritesheetModal] = useState<boolean>(false);
   const [spritesheetUrl, setSpritesheetUrl] = useState<string>('');
   
@@ -123,6 +124,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
             setIsHd2d(isImg);
             setAllow8Way(false);
             setSpeed(isText ? 1000 : 800);
+            scene.toggleVisitedTrace(showVisitedTrace);
 
             // Start from the correct initial position
             scene.resetPosition();
@@ -188,6 +190,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
         setIsHd2d(isImg);
         setAllow8Way(false);
         setSpeed(isText ? 1000 : 800);
+        scene.toggleVisitedTrace(showVisitedTrace);
 
         scene.resetPosition();
       }
@@ -239,6 +242,12 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
     const nextVal = !isHd2d;
     setIsHd2d(nextVal);
     sceneRef.current?.toggleHd2dEffects(nextVal);
+  };
+
+  const handleToggleVisitedTrace = () => {
+    const nextVal = !showVisitedTrace;
+    setShowVisitedTrace(nextVal);
+    sceneRef.current?.toggleVisitedTrace(nextVal);
   };
 
   const isTextMode = displayMode === 'text';
@@ -617,7 +626,17 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                     {allow8Way ? '8-Way Move' : '4-Way Move'}
                   </button>
 
-
+                  <button
+                    onClick={handleToggleVisitedTrace}
+                    className={`col-span-2 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl border text-xs font-medium transition-colors ${
+                      showVisitedTrace 
+                        ? 'bg-emerald-50 border-emerald-300 text-emerald-700 font-semibold' 
+                        : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Footprints className="w-3.5 h-3.5" />
+                    踏破済トレーサー: {showVisitedTrace ? 'ON' : 'OFF'}
+                  </button>
 
                   <button
                     onClick={handleReset}
