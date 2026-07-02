@@ -57,6 +57,7 @@ export class GridMovementScene extends Phaser.Scene {
   private allow8Way: boolean = false;
   private isTextMode: boolean = true;
   private displayMode: 'normal' | 'text' | 'grayscale' = 'text';
+  public tracerColor: 'green' | 'blue' | 'red' | 'gray' | 'none' = 'green';
   private slimes: SlimeData[] = [];
   private itemSprites: { gridX: number, gridY: number, sprite: Phaser.GameObjects.GameObject, itemId: string }[] = [];
   private teleportPortals: { x: number, y: number, container: Phaser.GameObjects.Container, met: boolean }[] = [];
@@ -76,6 +77,7 @@ export class GridMovementScene extends Phaser.Scene {
   private autoMode: 'none' | 'random' | 'seek' = 'seek';
   public movementBehavior: string = 'unvisited';
   public combatBehavior: string = 'closest_enemy';
+  public goalBehavior: string = 'seek_visible';
   private showGridLines: boolean = true;
   private isHd2dEffectsEnabled: boolean = false;
 
@@ -645,22 +647,31 @@ export class GridMovementScene extends Phaser.Scene {
     }
   }
 
+  public forceDrawVisitedTrace() {
+    this.drawVisitedTrace();
+  }
+
   private drawVisitedTrace() {
     if (!this.visitedTraceGraphics) return;
     this.visitedTraceGraphics.clear();
 
     const { GRID_SIZE } = GridMovementScene;
 
-    // displayMode に応じて最適な色・スタイルを設定
-    let traceColor = 0x10b981; // デフォルトは爽やかなエメラルドグリーン
-    let traceAlpha = 0.22;      // 半透明
+    if (this.tracerColor === 'none') {
+      return;
+    }
 
-    if (this.displayMode === 'text') {
-      traceColor = 0x34d399; // Textモードはよりネオン感のある薄緑
-      traceAlpha = 0.28;
-    } else if (this.displayMode === 'grayscale') {
-      traceColor = 0x64748b; // モノクローム（石ころ世界）は馴染むブルーグレー
-      traceAlpha = 0.22;
+    let traceColor = 0x10b981; // green
+    let traceAlpha = 0.28;
+
+    if (this.tracerColor === 'blue') {
+      traceColor = 0x3b82f6;
+    } else if (this.tracerColor === 'red') {
+      traceColor = 0xef4444;
+    } else if (this.tracerColor === 'gray') {
+      traceColor = 0x64748b;
+    } else if (this.tracerColor === 'green') {
+      traceColor = 0x10b981;
     }
 
     this.visitedGrids.forEach(key => {
@@ -964,7 +975,7 @@ export class GridMovementScene extends Phaser.Scene {
       if (this.autoMode === 'seek') {
         // 1. まずゴールが画面に映っていて条件を満たしている（出現している）かチェック
         let targetGoal: any = null;
-        if (this.mapData && this.mapData.events) {
+        if (this.goalBehavior === 'seek_visible' && this.mapData && this.mapData.events) {
           const expRate = (this.visitedGrids.size / this.totalGrids) * 100;
           const sRate = (this.viewedGrids.size / this.totalGrids) * 100;
           const maxEnemies = this.mapData?.maxEnemies;
@@ -1212,9 +1223,79 @@ export class GridMovementScene extends Phaser.Scene {
       const nextDir = Phaser.Utils.Array.GetRandom(unvisitedDirs);
       this.moveInDirection(nextDir);
     } else if (validDirs.length > 0) {
-      // 未訪問がない場合はランダムに移動
-      const nextDir = Phaser.Utils.Array.GetRandom(validDirs);
-      this.moveInDirection(nextDir);
+      // 周囲のマスがすべて踏破済みの場合、画面内の未踏破エリアを探す
+      let targetUnvisitedGrid: {x: number, y: number} | null = null;
+      let minUnvisitedDist = Infinity;
+
+      for (let y = this.currentCamGridY; y < this.currentCamGridY + GridMovementScene.VIEWPORT_ROWS; y++) {
+        for (let x = this.currentCamGridX; x < this.currentCamGridX + GridMovementScene.VIEWPORT_COLS; x++) {
+          if (x >= 0 && x < this.gridCols && y >= 0 && y < this.gridRows) {
+            if (!this.visitedGrids.has(`${x},${y}`) && !this.isTileOccupied(x, y)) {
+              const dist = Math.abs(x - this.currentGridX) + Math.abs(y - this.currentGridY);
+              if (dist < minUnvisitedDist) {
+                minUnvisitedDist = dist;
+                targetUnvisitedGrid = { x, y };
+              }
+            }
+          }
+        }
+      }
+
+      if (targetUnvisitedGrid) {
+        // 未踏破エリアに近づく
+        const dx = targetUnvisitedGrid.x - this.currentGridX;
+        const dy = targetUnvisitedGrid.y - this.currentGridY;
+        const possibleDirs: Direction[] = [];
+
+        if (this.allow8Way) {
+          if (dx > 0 && dy > 0) possibleDirs.push('down-right');
+          else if (dx > 0 && dy < 0) possibleDirs.push('up-right');
+          else if (dx < 0 && dy > 0) possibleDirs.push('down-left');
+          else if (dx < 0 && dy < 0) possibleDirs.push('up-left');
+          
+          if (possibleDirs.length === 0) {
+            if (dx > 0) possibleDirs.push('right');
+            else if (dx < 0) possibleDirs.push('left');
+            if (dy > 0) possibleDirs.push('down');
+            else if (dy < 0) possibleDirs.push('up');
+          }
+        } else {
+          if (Math.abs(dx) >= Math.abs(dy)) {
+            if (dx > 0) possibleDirs.push('right');
+            else if (dx < 0) possibleDirs.push('left');
+          } else {
+            if (dy > 0) possibleDirs.push('down');
+            else if (dy < 0) possibleDirs.push('up');
+          }
+          if (possibleDirs.length === 0) {
+            if (dx > 0) possibleDirs.push('right');
+            else if (dx < 0) possibleDirs.push('left');
+            if (dy > 0) possibleDirs.push('down');
+            else if (dy < 0) possibleDirs.push('up');
+          }
+        }
+
+        let moved = false;
+        if (possibleDirs.length > 0) {
+          const uniqueDirs = Array.from(new Set(possibleDirs));
+          for (const dir of uniqueDirs) {
+            if (this.moveInDirection(dir)) {
+              moved = true;
+              break;
+            }
+          }
+        }
+
+        if (!moved) {
+          // 何らかの理由で直進できない場合は迂回 (ランダム)
+          const nextDir = Phaser.Utils.Array.GetRandom(validDirs);
+          this.moveInDirection(nextDir);
+        }
+      } else {
+        // 画面内に未訪問がない場合はランダムに移動
+        const nextDir = Phaser.Utils.Array.GetRandom(validDirs);
+        this.moveInDirection(nextDir);
+      }
     }
   }
 

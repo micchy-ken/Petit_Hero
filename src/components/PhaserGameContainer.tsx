@@ -57,13 +57,20 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
   const [activeMenuTab, setActiveMenuTab] = useState<'settings' | 'status' | 'behavior'>('settings');
   const [movementBehavior, setMovementBehavior] = useState<string>('unvisited');
   const [combatBehavior, setCombatBehavior] = useState<string>('closest_enemy');
-  
+  const [goalBehavior, setGoalBehavior] = useState<string>('seek_visible');
+  const [tracerColor, setTracerColor] = useState<'green' | 'blue' | 'red' | 'gray' | 'none'>('green');
+
   const availableMovementBehaviors = [
     { id: 'unvisited', label: '未踏破エリアを目指す', description: '非戦闘時にまだ歩いていない場所を目指し、踏破率100%を目指します。' },
   ];
 
   const availableCombatBehaviors = [
     { id: 'closest_enemy', label: '画面に写った敵に近づいて倒す', description: '画面内の敵を最優先で目指し、倒そうとします。' },
+  ];
+
+  const availableGoalBehaviors = [
+    { id: 'seek_visible', label: 'ゴールが視認できたら即座に目指す', description: '画面内にゴールが現れた場合、それを最優先で目指します。' },
+    { id: 'ignore', label: 'ゴールを無視する', description: 'ゴールが出現しても特別な行動をしません。' },
   ];
 
   useEffect(() => {
@@ -116,13 +123,16 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
             const isText = startMap.bgMode === 'text-black';
             const isGray = startMap.bgMode === 'stone-gray';
             const isImg = startMap.bgMode === 'image';
+            const isGrass = startMap.bgMode === 'grass-green';
             
             const mode = isText ? 'text' : isGray ? 'grayscale' : 'normal';
             setDisplayMode(mode);
             setUseGrassBg(isImg);
             setIsHd2d(isImg);
             setAllow8Way(false);
-            setSpeed(isText ? 1000 : 800);
+            const targetSpeed = isImg ? 500 : isGrass ? 600 : isText ? 1000 : 800;
+            setSpeed(targetSpeed);
+            scene.setSpeed(targetSpeed);
 
             // Start from the correct initial position
             scene.resetPosition();
@@ -182,13 +192,16 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
         const isText = targetMap.bgMode === 'text-black';
         const isGray = targetMap.bgMode === 'stone-gray';
         const isImg = targetMap.bgMode === 'image';
+        const isGrass = targetMap.bgMode === 'grass-green';
         
         const mode = isText ? 'text' : isGray ? 'grayscale' : 'normal';
         setDisplayMode(mode);
         setUseGrassBg(isImg);
         setIsHd2d(isImg);
         setAllow8Way(false);
-        setSpeed(isText ? 1000 : 800);
+        const targetSpeed = isImg ? 500 : isGrass ? 600 : isText ? 1000 : 800;
+        setSpeed(targetSpeed);
+        scene.setSpeed(targetSpeed);
 
         scene.resetPosition(fromMapId);
       }
@@ -217,6 +230,19 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
       sceneRef.current.combatBehavior = combatBehavior;
     }
   }, [combatBehavior]);
+
+  useEffect(() => {
+    if (sceneRef.current) {
+      sceneRef.current.goalBehavior = goalBehavior;
+    }
+  }, [goalBehavior]);
+
+  useEffect(() => {
+    if (sceneRef.current) {
+      sceneRef.current.tracerColor = tracerColor;
+      sceneRef.current.forceDrawVisitedTrace(); // We'll add this method or it will just draw next turn
+    }
+  }, [tracerColor]);
 
   const toggleGrid = () => {
     const nextVal = !showGrid;
@@ -377,7 +403,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
               {/* アクションログオーバーレイ (最新5件) */}
               <div className="absolute bottom-2 right-2 w-64 pointer-events-none flex flex-col justify-end gap-1 z-10 p-2">
                 {logs.slice(-5).map((log) => (
-                  <div key={log.id} className={`animate-in fade-in slide-in-from-bottom-2 duration-300 text-xs font-bold text-right drop-shadow-md ${
+                  <div key={log.id} className={`animate-in fade-in slide-in-from-bottom-2 duration-300 text-xs font-bold text-right drop-shadow-md truncate ${
                     log.type === 'damage' ? 'text-rose-400' :
                     log.type === 'combat' ? 'text-amber-400' :
                     log.type === 'system' ? 'text-sky-300 font-extrabold' :
@@ -590,36 +616,6 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
 
                 {/* ユーティリティボタン群 */}
                 <div className="grid grid-cols-2 gap-3 pt-2">
-
-
-
-
-                  <button
-                    onClick={toggleHd2d}
-                    className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl border text-xs font-medium transition-colors ${
-                      isHd2d 
-                        ? 'bg-amber-50 border-amber-300 text-amber-700 font-semibold' 
-                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                    {isHd2d ? 'HD-2D FX ON' : 'HD-2D FX OFF'}
-                  </button>
-                  
-                  <button
-                    onClick={toggle8Way}
-                    className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl border text-xs font-medium transition-colors ${
-                      allow8Way 
-                        ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-semibold' 
-                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <Move className="w-3.5 h-3.5" />
-                    {allow8Way ? '8-Way Move' : '4-Way Move'}
-                  </button>
-
-
-
                   <button
                     onClick={handleReset}
                     className="col-span-2 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 text-xs font-medium transition-colors"
@@ -628,42 +624,45 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                     Center
                   </button>
 
-                  {/* Display Mode Selector */}
+                  {/* Tracer Color Selector */}
                   <div className="col-span-2 flex flex-col gap-1.5 bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
-                    <span className="text-[10px] font-semibold text-slate-400 tracking-wider uppercase font-sans">Display Mode</span>
-                    <div className="flex bg-white rounded-lg border border-slate-200/60 overflow-hidden text-xs font-medium p-0.5">
+                    <span className="text-[10px] font-semibold text-slate-400 tracking-wider uppercase font-sans">Tracer Color</span>
+                    <div className="grid grid-cols-5 gap-1">
                       <button
-                        onClick={() => handleDisplayModeChange('normal')}
-                        className={`flex-1 py-1.5 px-2 flex items-center justify-center gap-1 rounded-md transition-all ${
-                          displayMode === 'normal'
-                            ? 'bg-emerald-600 text-white shadow-sm font-semibold'
-                            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                        onClick={() => setTracerColor('green')}
+                        className={`w-full aspect-square rounded-md transition-all border-2 ${
+                          tracerColor === 'green' ? 'border-emerald-500 scale-110 shadow-sm' : 'border-transparent hover:border-emerald-200'
+                        }`}
+                        style={{ backgroundColor: '#10b981' }}
+                      />
+                      <button
+                        onClick={() => setTracerColor('blue')}
+                        className={`w-full aspect-square rounded-md transition-all border-2 ${
+                          tracerColor === 'blue' ? 'border-blue-500 scale-110 shadow-sm' : 'border-transparent hover:border-blue-200'
+                        }`}
+                        style={{ backgroundColor: '#3b82f6' }}
+                      />
+                      <button
+                        onClick={() => setTracerColor('red')}
+                        className={`w-full aspect-square rounded-md transition-all border-2 ${
+                          tracerColor === 'red' ? 'border-red-500 scale-110 shadow-sm' : 'border-transparent hover:border-red-200'
+                        }`}
+                        style={{ backgroundColor: '#ef4444' }}
+                      />
+                      <button
+                        onClick={() => setTracerColor('gray')}
+                        className={`w-full aspect-square rounded-md transition-all border-2 ${
+                          tracerColor === 'gray' ? 'border-slate-500 scale-110 shadow-sm' : 'border-transparent hover:border-slate-200'
+                        }`}
+                        style={{ backgroundColor: '#64748b' }}
+                      />
+                      <button
+                        onClick={() => setTracerColor('none')}
+                        className={`w-full aspect-square flex items-center justify-center rounded-md transition-all border-2 bg-white ${
+                          tracerColor === 'none' ? 'border-slate-500 scale-110 shadow-sm' : 'border-slate-200 hover:border-slate-300'
                         }`}
                       >
-                        <Sparkles className="w-3 h-3 text-amber-400" />
-                        HD-2D
-                      </button>
-                      <button
-                        onClick={() => handleDisplayModeChange('grayscale')}
-                        className={`flex-1 py-1.5 px-2 flex items-center justify-center gap-1 rounded-md transition-all ${
-                          displayMode === 'grayscale'
-                            ? 'bg-slate-700 text-white shadow-sm font-semibold'
-                            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                        }`}
-                      >
-                        <Eye className="w-3 h-3" />
-                        Gray 32x32
-                      </button>
-                      <button
-                        onClick={() => handleDisplayModeChange('text')}
-                        className={`flex-1 py-1.5 px-2 flex items-center justify-center gap-1 rounded-md transition-all ${
-                          displayMode === 'text'
-                            ? 'bg-slate-900 text-white shadow-sm font-semibold'
-                            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                        }`}
-                      >
-                        <Eye className="w-3 h-3" />
-                        Text
+                        <EyeOff className="w-4 h-4 text-slate-400" />
                       </button>
                     </div>
                   </div>
@@ -785,6 +784,28 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                     </select>
                     <p className="text-xs text-slate-500 mt-1 pl-1">
                       {availableCombatBehaviors.find(b => b.id === combatBehavior)?.description}
+                    </p>
+                  </div>
+                </div>
+
+                {/* ゴール指針 */}
+                <div className="flex flex-col gap-2">
+                  <h4 className="font-bold text-slate-800 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-500" />
+                    ゴール発見時の行動指針
+                  </h4>
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-col gap-2">
+                    <select
+                      value={goalBehavior}
+                      onChange={(e) => setGoalBehavior(e.target.value)}
+                      className="w-full bg-white border border-slate-300 text-slate-800 text-sm rounded-lg focus:ring-amber-500 focus:border-amber-500 block p-2.5 outline-none font-bold shadow-sm"
+                    >
+                      {availableGoalBehaviors.map(b => (
+                        <option key={b.id} value={b.id}>{b.label}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-slate-500 mt-1 pl-1">
+                      {availableGoalBehaviors.find(b => b.id === goalBehavior)?.description}
                     </p>
                   </div>
                 </div>
