@@ -281,7 +281,7 @@ export default function EnemyEditorPage() {
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
-              onClick={() => navigate('/')}
+              onClick={() => navigate('/?settings=true')}
               className="p-2 hover:bg-slate-100 rounded-full transition-colors"
             >
               <ArrowLeft className="w-5 h-5 text-slate-600" />

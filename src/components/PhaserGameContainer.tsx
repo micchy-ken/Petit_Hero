@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import Phaser from 'phaser';
 import { GridMovementScene, HeroState, Direction, ActionLog } from '../phaser/GridMovementScene';
 import { Play, Pause, RotateCcw, Eye, EyeOff, Sparkles, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Gauge, Grid, Image as ImageIcon, Heart, Sword, Star, Settings, X, Move, Flame, Zap, Map, Menu, User, Brain, Shield, Ghost } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 import { MapData } from '../types/MapData';
 
@@ -20,9 +20,13 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
   const sceneRef = useRef<GridMovementScene | null>(null);
   const lastLevelRef = useRef<number>(1);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const showSettingsOnInit = location.search.includes('settings=true') || location.hash.includes('settings=true');
 
   // UIステータス
-  const [showSettings, setShowSettings] = useState(false);
+  const [showSettings, setShowSettings] = useState(showSettingsOnInit);
+  const [isTurbo, setIsTurbo] = useState(false);
   const [heroState, setHeroState] = useState<HeroState>({
     gridX: 7,
     gridY: 7,
@@ -338,16 +342,44 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
               </div>
               {/* Virtual Pad / Auto Toggle Overlay */}
               {autoMode !== 'none' ? (
-                <button
-                  onClick={() => {
-                    setAutoMode('none');
-                    sceneRef.current?.setAutoMode('none');
-                  }}
-                  className="absolute bottom-4 left-4 z-20 bg-emerald-600/80 hover:bg-emerald-600 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-lg backdrop-blur-sm transition-all border border-emerald-400/50 flex items-center gap-1.5"
-                >
-                  <Play className="w-4 h-4" />
-                  AUTO
-                </button>
+                <div className="absolute bottom-4 left-4 z-20 flex flex-col gap-2">
+                  <button
+                    onPointerDown={() => {
+                      setIsTurbo(true);
+                      if (sceneRef.current) sceneRef.current.isTurboActive = true;
+                    }}
+                    onPointerUp={() => {
+                      setIsTurbo(false);
+                      if (sceneRef.current) sceneRef.current.isTurboActive = false;
+                    }}
+                    onPointerLeave={() => {
+                      setIsTurbo(false);
+                      if (sceneRef.current) sceneRef.current.isTurboActive = false;
+                    }}
+                    onPointerCancel={() => {
+                      setIsTurbo(false);
+                      if (sceneRef.current) sceneRef.current.isTurboActive = false;
+                    }}
+                    className={`px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-black rounded-xl shadow-lg border border-orange-400/50 flex items-center justify-center gap-1.5 select-none transition-all duration-150 active:scale-95 ${
+                      isTurbo ? 'brightness-125 scale-105 animate-pulse border-orange-300' : 'hover:brightness-110'
+                    }`}
+                    style={{ touchAction: 'none' }}
+                    title="押している間だけ0msで自動行動します"
+                  >
+                    <Flame className={`w-4 h-4 ${isTurbo ? 'animate-bounce' : ''}`} />
+                    TURBO
+                  </button>
+                  <button
+                    onClick={() => {
+                      setAutoMode('none');
+                      sceneRef.current?.setAutoMode('none');
+                    }}
+                    className="bg-emerald-600/80 hover:bg-emerald-600 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-lg backdrop-blur-sm transition-all border border-emerald-400/50 flex items-center justify-center gap-1.5"
+                  >
+                    <Play className="w-4 h-4" />
+                    AUTO
+                  </button>
+                </div>
               ) : (
                 <div className="absolute bottom-4 left-4 z-20">
                   <div className="grid grid-cols-3 gap-1 bg-slate-800/60 p-2.5 rounded-2xl backdrop-blur-sm border border-white/10 shadow-lg">
@@ -378,7 +410,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                       className="bg-white/20 hover:bg-white/30 active:bg-white/40 w-12 h-12 rounded-xl flex items-center justify-center transition-colors shadow-sm"
                     ><ArrowRight className="w-6 h-6 text-white" /></button>
 
-                    {/* Row 3: Close (✕), Down, Empty */}
+                    {/* Row 3: Return to Auto (✕), Down, Empty */}
                     <button 
                       onClick={() => {
                         setAutoMode('seek');

@@ -99,7 +99,7 @@ export default function MapEditorPage() {
         type: 'go_back'
       });
     } else {
-      navigate('/');
+      navigate('/?settings=true');
     }
   };
 
@@ -365,7 +365,7 @@ export default function MapEditorPage() {
       if (pendingTransition.type === 'switch_map') {
         setCurrentMapId(pendingTransition.targetMapId!);
       } else if (pendingTransition.type === 'go_back') {
-        navigate('/');
+        navigate('/?settings=true');
       }
       setPendingTransition(null);
     }
@@ -382,7 +382,7 @@ export default function MapEditorPage() {
       }
       setCurrentMapId(pendingTransition.targetMapId!);
     } else if (pendingTransition.type === 'go_back') {
-      navigate('/');
+      navigate('/?settings=true');
     }
     setPendingTransition(null);
   };

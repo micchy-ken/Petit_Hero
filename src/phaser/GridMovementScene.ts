@@ -88,6 +88,7 @@ export class GridMovementScene extends Phaser.Scene {
   public goalBehavior: string = 'seek_visible';
   private showGridLines: boolean = true;
   private isHd2dEffectsEnabled: boolean = false;
+  public isTurboActive: boolean = false;
 
   // ヒーローステータス
   private heroHp: number = 20;
@@ -496,6 +497,11 @@ export class GridMovementScene extends Phaser.Scene {
   }
 
   public update(time: number, delta: number) {
+    // Turboモードが有効で自動移動中、かつ移動中でない場合は、次の移動判定を即座に処理する（0ms移動を実現）
+    if (this.isTurboActive && this.autoMode !== 'none' && !this.isMoving) {
+      this.checkAndMoveRandomly();
+    }
+
     // 通常モード (レベル8以上) のみ、火の魔法と氷の魔法をサポート
     if (this.heroLevel >= 8) {
       // 火の魔法 自動詠唱 (3秒に1回、敵がいる場合)
@@ -1909,7 +1915,7 @@ export class GridMovementScene extends Phaser.Scene {
       targets: this.hero,
       x: targetX,
       y: targetY,
-      duration: this.moveSpeedMs,
+      duration: this.isTurboActive ? 0 : this.moveSpeedMs,
       ease: 'Linear',
       onComplete: () => {
         this.currentGridX = targetGridX;
@@ -1932,7 +1938,7 @@ export class GridMovementScene extends Phaser.Scene {
         targets: this.cameras.main,
         scrollX: targetCamGridX * GRID_SIZE,
         scrollY: targetCamGridY * GRID_SIZE,
-        duration: this.moveSpeedMs,
+        duration: this.isTurboActive ? 0 : this.moveSpeedMs,
         ease: 'Linear',
         onComplete: () => {
           this.currentCamGridX = targetCamGridX;
