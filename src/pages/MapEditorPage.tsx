@@ -17,6 +17,12 @@ export default function MapEditorPage() {
   const [showClearModal, setShowClearModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
+  const [initialMaps, setInitialMaps] = useState<MapData[]>([]);
+  const [pendingTransition, setPendingTransition] = useState<{
+    type: 'switch_map' | 'go_back';
+    targetMapId?: string;
+  } | null>(null);
+
   useEffect(() => {
     fetch('/api/maps?t=' + Date.now(), { cache: 'no-store' })
       .then(res => {
@@ -32,6 +38,7 @@ export default function MapEditorPage() {
           loadedMaps = [beginningMap, ...loadedMaps];
         }
         setMaps(loadedMaps);
+        setInitialMaps(JSON.parse(JSON.stringify(loadedMaps)));
         
         // Select 'map_beginning' as the default current map if it is available
         const defaultId = loadedMaps.some((m: MapData) => m.id === 'map_beginning')
@@ -43,6 +50,7 @@ export default function MapEditorPage() {
       .catch(e => {
         console.warn("Using bundled static maps:", e.message);
         setMaps(allMaps);
+        setInitialMaps(JSON.parse(JSON.stringify(allMaps)));
         const defaultId = allMaps.some((m: MapData) => m.id === 'map_beginning')
           ? 'map_beginning'
           : (allMaps[0]?.id || '');
@@ -50,6 +58,50 @@ export default function MapEditorPage() {
         setIsLoading(false);
       });
   }, []);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      const anyDirty = maps.some(m => {
+        const original = initialMaps.find(o => o.id === m.id);
+        return !original ? true : JSON.stringify(m) !== JSON.stringify(original);
+      });
+      if (anyDirty) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [maps, initialMaps]);
+
+  const isMapDirty = (mapId: string) => {
+    const current = maps.find(m => m.id === mapId);
+    const original = initialMaps.find(m => m.id === mapId);
+    if (!current) return false;
+    if (!original) return true;
+    return JSON.stringify(current) !== JSON.stringify(original);
+  };
+
+  const handleMapChange = (targetMapId: string) => {
+    if (isMapDirty(currentMapId)) {
+      setPendingTransition({
+        type: 'switch_map',
+        targetMapId
+      });
+    } else {
+      setCurrentMapId(targetMapId);
+    }
+  };
+
+  const handleBack = () => {
+    if (isMapDirty(currentMapId)) {
+      setPendingTransition({
+        type: 'go_back'
+      });
+    } else {
+      navigate('/');
+    }
+  };
 
   const currentMap = maps.find(m => m.id === currentMapId) || maps[0];
 
@@ -272,7 +324,7 @@ export default function MapEditorPage() {
     setMaps(maps.map(m => m.id === currentMapId ? { ...m, ...finalUpdates } : m));
   };
 
-  const handleSave = async () => {
+  const handleSave = async (silent = false): Promise<boolean> => {
     console.log("Attempting to save map:", currentMap);
     try {
       const response = await fetch('/api/save-map', {
@@ -282,16 +334,61 @@ export default function MapEditorPage() {
       });
       console.log("Save response status:", response.status);
       if (response.ok) {
-        alert('保存しました (Reflected to JS file)');
+        if (!silent) {
+          alert('保存しました (Reflected to JS file)');
+        }
+        setInitialMaps(prev => {
+          const exists = prev.some(m => m.id === currentMapId);
+          if (!exists) {
+            return [...prev, JSON.parse(JSON.stringify(currentMap))];
+          }
+          return prev.map(m => m.id === currentMapId ? JSON.parse(JSON.stringify(currentMap)) : m);
+        });
+        return true;
       } else {
         const errorText = await response.text();
         console.error("Save failed:", errorText);
         alert('保存に失敗しました: ' + errorText);
+        return false;
       }
     } catch (e) {
       console.error("Save error:", e);
       alert('保存エラー: サーバーが起動していない可能性があります');
+      return false;
     }
+  };
+
+  const handleConfirmTransitionYes = async () => {
+    if (!pendingTransition) return;
+    const success = await handleSave(true);
+    if (success) {
+      if (pendingTransition.type === 'switch_map') {
+        setCurrentMapId(pendingTransition.targetMapId!);
+      } else if (pendingTransition.type === 'go_back') {
+        navigate('/');
+      }
+      setPendingTransition(null);
+    }
+  };
+
+  const handleConfirmTransitionNo = () => {
+    if (!pendingTransition) return;
+    if (pendingTransition.type === 'switch_map') {
+      const originalMap = initialMaps.find(m => m.id === currentMapId);
+      if (originalMap) {
+        setMaps(prev => prev.map(m => m.id === currentMapId ? JSON.parse(JSON.stringify(originalMap)) : m));
+      } else {
+        setMaps(prev => prev.filter(m => m.id !== currentMapId));
+      }
+      setCurrentMapId(pendingTransition.targetMapId!);
+    } else if (pendingTransition.type === 'go_back') {
+      navigate('/');
+    }
+    setPendingTransition(null);
+  };
+
+  const handleConfirmTransitionCancel = () => {
+    setPendingTransition(null);
   };
 
   if (isLoading) {
@@ -348,7 +445,7 @@ export default function MapEditorPage() {
       <header className="w-full bg-gradient-to-b from-slate-600 to-slate-700 border-b border-slate-500 shadow-lg px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <button 
-            onClick={() => navigate('/')}
+            onClick={handleBack}
             className="p-2 bg-slate-800 hover:bg-slate-900 rounded border border-slate-600 transition-colors shadow-inner flex items-center justify-center"
           >
             <ArrowLeft className="w-5 h-5 text-slate-300" />
@@ -393,7 +490,7 @@ export default function MapEditorPage() {
             <div className="flex flex-col gap-2">
               <select 
                 value={currentMapId}
-                onChange={(e) => setCurrentMapId(e.target.value)}
+                onChange={(e) => handleMapChange(e.target.value)}
                 className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 outline-none focus:border-slate-400"
               >
                 {maps.map(m => (
@@ -1008,6 +1105,50 @@ export default function MapEditorPage() {
                   更新
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 未保存変更確認モーダル */}
+      {pendingTransition && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 animate-in fade-in">
+          <div 
+            className="bg-slate-800 border-2 border-slate-500 rounded-xl p-6 max-w-md w-full shadow-2xl relative animate-in zoom-in-95"
+            style={{
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.15), 0 10px 25px rgba(0,0,0,0.6)',
+              background: 'linear-gradient(135deg, #1e293b, #0f172a)'
+            }}
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <Settings className="w-6 h-6 text-yellow-500" />
+              <h3 className="text-lg font-bold text-slate-100 tracking-wider">未保存の変更があります</h3>
+            </div>
+            
+            <p className="text-slate-300 text-sm mb-6 leading-relaxed">
+              マップ「<span className="text-emerald-400 font-semibold">{currentMap.name}</span>」の編集内容が保存（反映）されていません。<br />
+              移動する前に変更内容を反映しますか？
+            </p>
+            
+            <div className="flex flex-col sm:flex-row gap-3 justify-end">
+              <button
+                onClick={handleConfirmTransitionYes}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded shadow transition-colors text-sm flex items-center justify-center gap-2"
+              >
+                <Save className="w-4 h-4" /> はい (反映する)
+              </button>
+              <button
+                onClick={handleConfirmTransitionNo}
+                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded shadow transition-colors text-sm flex items-center justify-center gap-2"
+              >
+                いいえ (破棄する)
+              </button>
+              <button
+                onClick={handleConfirmTransitionCancel}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 border border-slate-600 rounded shadow transition-colors text-sm"
+              >
+                キャンセル
+              </button>
             </div>
           </div>
         </div>
