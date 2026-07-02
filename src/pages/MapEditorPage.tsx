@@ -72,6 +72,19 @@ export default function MapEditorPage() {
   const [newMapWidth, setNewMapWidth] = useState(16);
   const [newMapHeight, setNewMapHeight] = useState(16);
 
+  // イベント個別編集状態
+  const [editingEvent, setEditingEvent] = useState<{
+    index: number;
+    x: number;
+    y: number;
+    type: 'start_point' | 'teleport';
+    fromMap: string;
+    targetMap: string;
+    requiredExplorationRate: number | null;
+    requiredSearchRate: number | null;
+    requiredDefeatRate: number | null;
+  } | null>(null);
+
   useEffect(() => {
     if (currentMap) {
       setBgMode(currentMap.bgMode);
@@ -90,7 +103,18 @@ export default function MapEditorPage() {
       const newEvents = [...currentMap.events];
       
       if (existingIndex >= 0) {
-        newEvents.splice(existingIndex, 1);
+        const ev = currentMap.events[existingIndex];
+        setEditingEvent({
+          index: existingIndex,
+          x: ev.x,
+          y: ev.y,
+          type: ev.type as 'start_point' | 'teleport',
+          fromMap: ev.data?.fromMap || '',
+          targetMap: ev.data?.targetMap || '',
+          requiredExplorationRate: ev.data?.requiredExplorationRate ?? null,
+          requiredSearchRate: ev.data?.requiredSearchRate ?? null,
+          requiredDefeatRate: ev.data?.requiredDefeatRate ?? null,
+        });
       } else {
         let data: any = {};
         if (eventType === 'start_point') {
@@ -113,9 +137,8 @@ export default function MapEditorPage() {
         if (eventCondDefeatRate !== null) data.requiredDefeatRate = eventCondDefeatRate;
         
         newEvents.push({ x, y, type: eventType, data });
+        handleUpdateCurrentMap({ events: newEvents });
       }
-      
-      handleUpdateCurrentMap({ events: newEvents });
     } else if (placeMode === 'item') {
       const existingIndex = currentMap.items.findIndex(i => i.x === x && i.y === y);
       const newItems = [...currentMap.items];
@@ -128,6 +151,74 @@ export default function MapEditorPage() {
       
       handleUpdateCurrentMap({ items: newItems });
     }
+  };
+
+  const handleUpdateEvent = () => {
+    if (!editingEvent) return;
+    const newEvents = [...currentMap.events];
+    
+    // 他のイベントとスタート地点(fromMap)の重複チェック（start_point の場合）
+    if (editingEvent.type === 'start_point') {
+      const targetFromMap = editingEvent.fromMap || null;
+      const duplicateIndex = newEvents.findIndex(
+        (e, idx) => idx !== editingEvent.index && e.type === 'start_point' && (e.data?.fromMap || null) === targetFromMap
+      );
+      if (duplicateIndex >= 0) {
+        newEvents.splice(duplicateIndex, 1);
+      }
+    }
+
+    let data: any = {};
+    if (editingEvent.type === 'start_point') {
+      data.fromMap = editingEvent.fromMap || null;
+    } else {
+      if (!editingEvent.targetMap) {
+        alert('移動先マップを選択してください');
+        return;
+      }
+      data.targetMap = editingEvent.targetMap;
+    }
+
+    if (editingEvent.requiredExplorationRate !== null) {
+      data.requiredExplorationRate = editingEvent.requiredExplorationRate;
+    }
+    if (editingEvent.requiredSearchRate !== null) {
+      data.requiredSearchRate = editingEvent.requiredSearchRate;
+    }
+    if (editingEvent.requiredDefeatRate !== null) {
+      data.requiredDefeatRate = editingEvent.requiredDefeatRate;
+    }
+
+    const targetIdx = newEvents.findIndex(e => e.x === editingEvent.x && e.y === editingEvent.y);
+    if (targetIdx >= 0) {
+      newEvents[targetIdx] = {
+        x: editingEvent.x,
+        y: editingEvent.y,
+        type: editingEvent.type,
+        data
+      };
+    } else {
+      newEvents.push({
+        x: editingEvent.x,
+        y: editingEvent.y,
+        type: editingEvent.type,
+        data
+      });
+    }
+
+    handleUpdateCurrentMap({ events: newEvents });
+    setEditingEvent(null);
+  };
+
+  const handleDeleteEvent = () => {
+    if (!editingEvent) return;
+    const newEvents = currentMap.events.filter((_, idx) => idx !== editingEvent.index);
+    handleUpdateCurrentMap({ events: newEvents });
+    setEditingEvent(null);
+  };
+
+  const handleCancelEditEvent = () => {
+    setEditingEvent(null);
   };
 
   const handleCreateNewMap = () => {
@@ -781,6 +872,142 @@ export default function MapEditorPage() {
               >
                 作成
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* イベント編集モーダル */}
+      {editingEvent && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-700 rounded-xl border border-slate-500 shadow-2xl p-6 w-full max-w-md flex flex-col gap-4 animate-in fade-in zoom-in-95">
+            <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2 border-b border-slate-600 pb-2">
+              <Zap className="w-5 h-5 text-yellow-400" />
+              イベント編集 ({editingEvent.x}, {editingEvent.y})
+            </h3>
+
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-slate-300 font-bold uppercase">イベントタイプ</label>
+                <select 
+                  value={editingEvent.type}
+                  onChange={(e) => setEditingEvent({ 
+                    ...editingEvent, 
+                    type: e.target.value as 'start_point' | 'teleport' 
+                  })}
+                  className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                >
+                  <option value="start_point">初期値 (Start Point)</option>
+                  <option value="teleport">マップ移動 (Teleport)</option>
+                </select>
+              </div>
+
+              {editingEvent.type === 'start_point' && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-300 font-bold uppercase">元マップ指定</label>
+                  <select 
+                    value={editingEvent.fromMap}
+                    onChange={(e) => setEditingEvent({ ...editingEvent, fromMap: e.target.value })}
+                    className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                  >
+                    <option value="">設定なし (デフォルト開始位置)</option>
+                    {maps.map(m => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {editingEvent.type === 'teleport' && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-300 font-bold uppercase">移動先マップ</label>
+                  <select 
+                    value={editingEvent.targetMap}
+                    onChange={(e) => setEditingEvent({ ...editingEvent, targetMap: e.target.value })}
+                    className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                  >
+                    <option value="" disabled>選択してください</option>
+                    {maps.map(m => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-1 mt-2 border-t border-slate-600 pt-2">
+                <label className="text-xs text-slate-300 font-bold uppercase">固有条件 (踏破率)</label>
+                <select 
+                  value={editingEvent.requiredExplorationRate === null ? 'null' : String(editingEvent.requiredExplorationRate)}
+                  onChange={(e) => setEditingEvent({ 
+                    ...editingEvent, 
+                    requiredExplorationRate: e.target.value === 'null' ? null : Number(e.target.value) 
+                  })}
+                  className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                >
+                  <option value="null">なし (条件なし)</option>
+                  <option value="50">50%</option>
+                  <option value="80">80%</option>
+                  <option value="100">100%</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-slate-300 font-bold uppercase">固有条件 (捜索率)</label>
+                <select 
+                  value={editingEvent.requiredSearchRate === null ? 'null' : String(editingEvent.requiredSearchRate)}
+                  onChange={(e) => setEditingEvent({ 
+                    ...editingEvent, 
+                    requiredSearchRate: e.target.value === 'null' ? null : Number(e.target.value) 
+                  })}
+                  className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                >
+                  <option value="null">なし (条件なし)</option>
+                  <option value="50">50%</option>
+                  <option value="80">80%</option>
+                  <option value="100">100%</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-slate-300 font-bold uppercase">固有条件 (撃破率)</label>
+                <select 
+                  value={editingEvent.requiredDefeatRate === null ? 'null' : String(editingEvent.requiredDefeatRate)}
+                  onChange={(e) => setEditingEvent({ 
+                    ...editingEvent, 
+                    requiredDefeatRate: e.target.value === 'null' ? null : Number(e.target.value) 
+                  })}
+                  className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                >
+                  <option value="null">なし (条件なし)</option>
+                  <option value="50">50%</option>
+                  <option value="80">80%</option>
+                  <option value="100">100%</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center mt-4 pt-4 border-t border-slate-600 gap-2">
+              <button 
+                onClick={handleDeleteEvent}
+                className="px-4 py-2 rounded text-sm bg-red-600 hover:bg-red-500 text-white font-bold transition-colors shadow"
+              >
+                削除
+              </button>
+              
+              <div className="flex gap-2">
+                <button 
+                  onClick={handleCancelEditEvent}
+                  className="px-4 py-2 rounded text-sm text-slate-300 hover:bg-slate-600 transition-colors"
+                >
+                  キャンセル
+                </button>
+                <button 
+                  onClick={handleUpdateEvent}
+                  className="px-4 py-2 rounded text-sm bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-colors shadow-inner"
+                >
+                  更新
+                </button>
+              </div>
             </div>
           </div>
         </div>

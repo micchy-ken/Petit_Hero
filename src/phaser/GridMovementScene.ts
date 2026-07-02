@@ -59,6 +59,7 @@ export class GridMovementScene extends Phaser.Scene {
   private displayMode: 'normal' | 'text' | 'grayscale' = 'text';
   private slimes: SlimeData[] = [];
   private itemSprites: { gridX: number, gridY: number, sprite: Phaser.GameObjects.GameObject, itemId: string }[] = [];
+  private teleportPortals: { x: number, y: number, container: Phaser.GameObjects.Container, met: boolean }[] = [];
 
   // 状態管理
   private currentGridX: number = 7; // 16x16の中央付近(7,7)
@@ -847,6 +848,7 @@ export class GridMovementScene extends Phaser.Scene {
     // 描画の更新
     this.drawGrid();
     this.drawVisitedTrace();
+    this.updateTeleportPortals(true);
   }
 
   public toggleGridLines(show?: boolean) {
@@ -960,57 +962,171 @@ export class GridMovementScene extends Phaser.Scene {
     // 勇者の自動移動
     if (this.autoMode !== 'none' && !this.isMoving) {
       if (this.autoMode === 'seek') {
-        // 索敵・戦闘モード (AIを使わないロジック)
-        let targetSlime: SlimeData | null = null;
-        
-        if (this.slimes.length > 0 && this.combatBehavior === 'closest_enemy') {
-          // 最も近いスライムを探す
-          let minDistance = Infinity;
+        // 1. まずゴールが画面に映っていて条件を満たしている（出現している）かチェック
+        let targetGoal: any = null;
+        if (this.mapData && this.mapData.events) {
+          const expRate = (this.visitedGrids.size / this.totalGrids) * 100;
+          const sRate = (this.viewedGrids.size / this.totalGrids) * 100;
+          const maxEnemies = this.mapData?.maxEnemies;
+          let dRate = 0;
+          if (maxEnemies !== undefined && maxEnemies !== 'infinite' && (maxEnemies as number) > 0) {
+            dRate = (this.enemiesDefeated / (maxEnemies as number)) * 100;
+          }
 
-          this.slimes.forEach(slime => {
-            const dist = Math.abs(slime.gridX - this.currentGridX) + Math.abs(slime.gridY - this.currentGridY);
-            if (dist < minDistance) {
-              minDistance = dist;
-              targetSlime = slime;
-            }
+          const activeGoals = this.mapData.events.filter((event: any) => {
+            if (event.type !== 'teleport') return false;
+            const eventData = event.data || {};
+            let met = true;
+            if (eventData.requiredExplorationRate && expRate < eventData.requiredExplorationRate) met = false;
+            if (eventData.requiredSearchRate && sRate < eventData.requiredSearchRate) met = false;
+            if (eventData.requiredDefeatRate && dRate < eventData.requiredDefeatRate) met = false;
+            if (!met) return false;
+
+            // 画面に映っている (現在のカメラビューポート内)
+            const onScreen = (
+              event.x >= this.currentCamGridX &&
+              event.x < this.currentCamGridX + GridMovementScene.VIEWPORT_COLS &&
+              event.y >= this.currentCamGridY &&
+              event.y < this.currentCamGridY + GridMovementScene.VIEWPORT_ROWS
+            );
+            return onScreen;
           });
+
+          if (activeGoals.length > 0) {
+            targetGoal = activeGoals[0];
+          }
         }
 
-        if (targetSlime) {
-          // 最も近いスライムに近づく方向を決定
+        if (targetGoal) {
+          // ゴールを目指す
           const possibleDirs: Direction[] = [];
-          const sx = targetSlime.gridX;
-          const sy = targetSlime.gridY;
-          const dx = sx - this.currentGridX;
-          const dy = sy - this.currentGridY;
+          const gx = targetGoal.x;
+          const gy = targetGoal.y;
+          const dx = gx - this.currentGridX;
+          const dy = gy - this.currentGridY;
 
           if (this.allow8Way) {
             if (dx > 0 && dy > 0) possibleDirs.push('down-right');
             else if (dx > 0 && dy < 0) possibleDirs.push('up-right');
             else if (dx < 0 && dy > 0) possibleDirs.push('down-left');
             else if (dx < 0 && dy < 0) possibleDirs.push('up-left');
-            else if (dx > 0) possibleDirs.push('right');
-            else if (dx < 0) possibleDirs.push('left');
-            else if (dy > 0) possibleDirs.push('down');
-            else if (dy < 0) possibleDirs.push('up');
+            
+            if (possibleDirs.length === 0) {
+              if (dx > 0) possibleDirs.push('right');
+              else if (dx < 0) possibleDirs.push('left');
+              if (dy > 0) possibleDirs.push('down');
+              else if (dy < 0) possibleDirs.push('up');
+            }
           } else {
-            if (dx > 0) possibleDirs.push('right');
-            else if (dx < 0) possibleDirs.push('left');
-            if (dy > 0) possibleDirs.push('down');
-            else if (dy < 0) possibleDirs.push('up');
+            if (Math.abs(dx) >= Math.abs(dy)) {
+              if (dx > 0) possibleDirs.push('right');
+              else if (dx < 0) possibleDirs.push('left');
+            } else {
+              if (dy > 0) possibleDirs.push('down');
+              else if (dy < 0) possibleDirs.push('up');
+            }
+            if (possibleDirs.length === 0) {
+              if (dx > 0) possibleDirs.push('right');
+              else if (dx < 0) possibleDirs.push('left');
+              if (dy > 0) possibleDirs.push('down');
+              else if (dy < 0) possibleDirs.push('up');
+            }
           }
 
+          let moved = false;
           if (possibleDirs.length > 0) {
-            // 複数ある場合はランダムに一つ選ぶ
-            const nextDir = Phaser.Utils.Array.GetRandom(possibleDirs);
-            this.moveInDirection(nextDir);
+            const uniqueDirs = Array.from(new Set(possibleDirs));
+            for (const dir of uniqueDirs) {
+              if (this.moveInDirection(dir)) {
+                moved = true;
+                break;
+              }
+            }
+          }
+
+          if (!moved) {
+            const allDirs: Direction[] = ['up', 'down', 'left', 'right'];
+            if (this.allow8Way) {
+              allDirs.push('up-left', 'up-right', 'down-left', 'down-right');
+            }
+            const sortedDirs = allDirs
+              .map(dir => {
+                let tx = this.currentGridX;
+                let ty = this.currentGridY;
+                switch (dir) {
+                  case 'up': ty -= 1; break;
+                  case 'down': ty += 1; break;
+                  case 'left': tx -= 1; break;
+                  case 'right': tx += 1; break;
+                  case 'up-left': ty -= 1; tx -= 1; break;
+                  case 'up-right': ty -= 1; tx += 1; break;
+                  case 'down-left': ty += 1; tx -= 1; break;
+                  case 'down-right': ty += 1; tx += 1; break;
+                }
+                const dist = Math.pow(tx - gx, 2) + Math.pow(ty - gy, 2);
+                return { dir, dist };
+              })
+              .sort((a, b) => a.dist - b.dist);
+
+            for (const item of sortedDirs) {
+              if (this.moveInDirection(item.dir)) {
+                moved = true;
+                break;
+              }
+            }
           }
         } else {
-          // 敵がいない場合、または戦闘行動がない場合
-          if (this.movementBehavior === 'unvisited') {
-            this.performExploreWalk();
+          // 索敵・戦闘モード (AIを使わないロジック)
+          let targetSlime: SlimeData | null = null;
+          
+          if (this.slimes.length > 0 && this.combatBehavior === 'closest_enemy') {
+            // 最も近いスライムを探す
+            let minDistance = Infinity;
+
+            this.slimes.forEach(slime => {
+              const dist = Math.abs(slime.gridX - this.currentGridX) + Math.abs(slime.gridY - this.currentGridY);
+              if (dist < minDistance) {
+                minDistance = dist;
+                targetSlime = slime;
+              }
+            });
+          }
+
+          if (targetSlime) {
+            // 最も近いスライムに近づく方向を決定
+            const possibleDirs: Direction[] = [];
+            const sx = targetSlime.gridX;
+            const sy = targetSlime.gridY;
+            const dx = sx - this.currentGridX;
+            const dy = sy - this.currentGridY;
+
+            if (this.allow8Way) {
+              if (dx > 0 && dy > 0) possibleDirs.push('down-right');
+              else if (dx > 0 && dy < 0) possibleDirs.push('up-right');
+              else if (dx < 0 && dy > 0) possibleDirs.push('down-left');
+              else if (dx < 0 && dy < 0) possibleDirs.push('up-left');
+              else if (dx > 0) possibleDirs.push('right');
+              else if (dx < 0) possibleDirs.push('left');
+              else if (dy > 0) possibleDirs.push('down');
+              else if (dy < 0) possibleDirs.push('up');
+            } else {
+              if (dx > 0) possibleDirs.push('right');
+              else if (dx < 0) possibleDirs.push('left');
+              if (dy > 0) possibleDirs.push('down');
+              else if (dy < 0) possibleDirs.push('up');
+            }
+
+            if (possibleDirs.length > 0) {
+              const nextDir = Phaser.Utils.Array.GetRandom(possibleDirs);
+              this.moveInDirection(nextDir);
+            }
           } else {
-            this.performRandomWalk();
+            // 敵がいない場合、または戦闘行動がない場合
+            if (this.movementBehavior === 'unvisited') {
+              this.performExploreWalk();
+            } else {
+              this.performRandomWalk();
+            }
           }
         }
       } else {
@@ -1665,6 +1781,7 @@ export class GridMovementScene extends Phaser.Scene {
       }
       this.setOnStatsChange(expRate, searchRate, dRate);
     }
+    this.updateTeleportPortals();
     this.drawVisitedTrace();
   }
 
@@ -1713,6 +1830,11 @@ export class GridMovementScene extends Phaser.Scene {
       if (item.sprite && item.sprite.active) item.sprite.destroy();
     });
     this.itemSprites = [];
+
+    this.teleportPortals.forEach(p => {
+      if (p.container && p.container.active) p.container.destroy();
+    });
+    this.teleportPortals = [];
 
     if (this.mapData) {
        const { GRID_SIZE } = GridMovementScene;
@@ -2190,5 +2312,158 @@ export class GridMovementScene extends Phaser.Scene {
     this.heroExp = 0;
     this.sendLog(`[デモ] ステータスがレベル 1 にリセットされました。 🔄`, 'system');
     this.notifyStateChange();
+  }
+
+  private updateTeleportPortals(forceRebuild: boolean = false) {
+    if (!this.mapData || !this.mapData.events) return;
+    const { GRID_SIZE } = GridMovementScene;
+
+    if (forceRebuild) {
+      this.teleportPortals.forEach(p => {
+        if (p.container && p.container.active) p.container.destroy();
+      });
+      this.teleportPortals = [];
+    }
+
+    const teleportEvents = this.mapData.events.filter((e: any) => e.type === 'teleport');
+
+    const expRate = (this.visitedGrids.size / this.totalGrids) * 100;
+    const sRate = (this.viewedGrids.size / this.totalGrids) * 100;
+    const maxEnemies = this.mapData?.maxEnemies;
+    let dRate = 0;
+    if (maxEnemies !== undefined && maxEnemies !== 'infinite' && (maxEnemies as number) > 0) {
+      dRate = (this.enemiesDefeated / (maxEnemies as number)) * 100;
+    }
+
+    teleportEvents.forEach((event: any) => {
+      const eventData = event.data || {};
+      let met = true;
+      if (eventData.requiredExplorationRate && expRate < eventData.requiredExplorationRate) met = false;
+      if (eventData.requiredSearchRate && sRate < eventData.requiredSearchRate) met = false;
+      if (eventData.requiredDefeatRate && dRate < eventData.requiredDefeatRate) met = false;
+
+      const existingIndex = this.teleportPortals.findIndex(p => p.x === event.x && p.y === event.y);
+
+      if (met) {
+        if (existingIndex === -1) {
+          const px = event.x * GRID_SIZE + GRID_SIZE / 2;
+          const py = event.y * GRID_SIZE + GRID_SIZE / 2;
+
+          const container = this.add.container(px, py);
+          container.setDepth(4);
+
+          const portalG = this.add.graphics();
+          container.add(portalG);
+
+          let color = 0xd97706; // 黄金ベース
+          let ringColor = 0xf59e0b;
+          let runeColor = 0xfef08a;
+
+          if (this.displayMode === 'text') {
+            color = 0x059669;
+            ringColor = 0x34d399;
+            runeColor = 0x6ee7b7;
+          } else if (this.displayMode === 'grayscale') {
+            color = 0x4b5563;
+            ringColor = 0x9ca3af;
+            runeColor = 0xe5e7eb;
+          }
+
+          portalG.fillStyle(color, 0.25);
+          portalG.fillCircle(0, 0, GRID_SIZE * 0.45);
+          portalG.lineStyle(2, ringColor, 0.9);
+          portalG.strokeCircle(0, 0, GRID_SIZE * 0.45);
+          portalG.lineStyle(1, 0xffffff, 0.6);
+          portalG.strokeCircle(0, 0, GRID_SIZE * 0.3);
+
+          portalG.lineStyle(0.8, runeColor, 0.5);
+          portalG.beginPath();
+          for (let i = 0; i < 6; i++) {
+            const angle = (i * Math.PI) / 3;
+            const tx = Math.cos(angle) * (GRID_SIZE * 0.45);
+            const ty = Math.sin(angle) * (GRID_SIZE * 0.45);
+            if (i === 0) portalG.moveTo(tx, ty);
+            else portalG.lineTo(tx, ty);
+          }
+          portalG.closePath();
+          portalG.strokePath();
+
+          const textStr = this.displayMode === 'text' ? '門' : '🌀';
+          const portalText = this.add.text(0, 0, textStr, {
+            fontSize: '22px',
+            fontStyle: 'bold',
+            color: '#ffffff'
+          });
+          portalText.setOrigin(0.5, 0.5);
+          container.add(portalText);
+
+          this.tweens.add({
+            targets: portalG,
+            angle: 360,
+            duration: 3500,
+            repeat: -1
+          });
+
+          this.tweens.add({
+            targets: container,
+            y: py - 5,
+            duration: 1000,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut'
+          });
+
+          container.setScale(0);
+          this.tweens.add({
+            targets: container,
+            scale: 1,
+            duration: 500,
+            ease: 'Back.easeOut'
+          });
+
+          if (!forceRebuild) {
+            this.sendLog(`条件達成！テレポートゲートが現れた！ 🌀 (${event.x}, ${event.y})`, 'system');
+            
+            for (let i = 0; i < 12; i++) {
+              const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+              const speed = Phaser.Math.Between(50, 120);
+              const p = this.add.circle(px, py, Phaser.Math.Between(2, 4), ringColor, 0.8);
+              p.setDepth(15);
+              this.tweens.add({
+                targets: p,
+                x: px + Math.cos(angle) * speed * 0.4,
+                y: py + Math.sin(angle) * speed * 0.4,
+                scale: 0,
+                alpha: 0,
+                duration: Phaser.Math.Between(400, 800),
+                onComplete: () => p.destroy()
+              });
+            }
+          }
+
+          this.teleportPortals.push({
+            x: event.x,
+            y: event.y,
+            container: container,
+            met: true
+          });
+        }
+      } else {
+        if (existingIndex !== -1) {
+          const p = this.teleportPortals[existingIndex];
+          this.tweens.add({
+            targets: p.container,
+            scale: 0,
+            alpha: 0,
+            duration: 300,
+            onComplete: () => {
+              if (p.container && p.container.active) p.container.destroy();
+            }
+          });
+          this.teleportPortals.splice(existingIndex, 1);
+          this.sendLog(`条件が未達成になり、テレポートゲートが消滅した。`, 'system');
+        }
+      }
+    });
   }
 }
