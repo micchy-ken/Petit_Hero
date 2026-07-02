@@ -26,7 +26,12 @@ export const Map1782951234203: MapData = {
     }
   ],
   "items": [],
-  "enemies": [],
+  "enemies": [
+    "color_slime_red",
+    "color_slime_blue",
+    "color_goblin"
+  ],
   "bgImage": "grass_bg_1782776475818.jpg"
 };
-// Updated by editor
+
+

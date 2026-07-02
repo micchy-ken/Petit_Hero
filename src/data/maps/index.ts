@@ -14,4 +14,5 @@ export const allMaps: MapData[] = [
   Map1782999318445,
   TestMap
 ];
-// Updated by editor
+
+
