@@ -307,23 +307,6 @@ export class GridMovementScene extends Phaser.Scene {
 
     // 5.5. スライムの配置
     this.slimes = [];
-    for (let i = 0; i < 5; i++) {
-      const sx = Phaser.Math.Between(2, this.gridCols - 3);
-      const sy = Phaser.Math.Between(2, this.gridRows - 3);
-      const slimeSprite = this.add.sprite(sx * GRID_SIZE + GRID_SIZE / 2, sy * GRID_SIZE + GRID_SIZE / 2, 'slime_spritesheet', 0);
-      slimeSprite.setDepth(9); // 勇者より少し奥
-      slimeSprite.play(this.getAnimKey('slime-idle'));
-      
-      this.slimes.push({
-        id: `slime-${Math.random().toString(36).substring(2, 9)}`,
-        sprite: slimeSprite,
-        gridX: sx,
-        gridY: sy,
-        isMoving: false,
-        hp: 10,
-        maxHp: 10
-      });
-    }
 
     // 6. HD-2D マナ粒子（ホタル風パーティクル）の生成（カメラ固定領域内で生成）
     this.particleMotes = [];
@@ -847,6 +830,31 @@ export class GridMovementScene extends Phaser.Scene {
     this.vignetteOverlay.fillRect(totalW - frameSize, frameSize, frameSize, totalH - frameSize * 2);
   }
 
+  private getEnemyTextureKey(): string {
+    if (this.mapData?.id === 'map_beginning') {
+      return 'slime_spritesheet_text';
+    }
+    if (this.displayMode === 'text') {
+      return 'slime_spritesheet_text';
+    }
+    if (this.displayMode === 'grayscale') {
+      return 'slime_spritesheet_gray';
+    }
+    return 'slime_spritesheet';
+  }
+
+  private getEnemyAnimKey(baseKey: string): string {
+    if (this.mapData?.id === 'map_beginning') {
+      return `${baseKey}-text`;
+    }
+    if (this.displayMode === 'text') {
+      return `${baseKey}-text`;
+    } else if (this.displayMode === 'grayscale') {
+      return `${baseKey}-gray`;
+    }
+    return baseKey;
+  }
+
   private getAnimKey(baseKey: string): string {
     if (this.displayMode === 'text') {
       return `${baseKey}-text`;
@@ -919,9 +927,7 @@ export class GridMovementScene extends Phaser.Scene {
       this.hero.setTexture(heroTexture);
     }
     
-    let slimeTexture = 'slime_spritesheet';
-    if (this.displayMode === 'text') slimeTexture = 'slime_spritesheet_text';
-    else if (this.displayMode === 'grayscale') slimeTexture = 'slime_spritesheet_gray';
+    const slimeTexture = this.getEnemyTextureKey();
     if (this.slimes) {
       this.slimes.forEach(slime => {
         if (slime && slime.sprite) {
@@ -949,7 +955,7 @@ export class GridMovementScene extends Phaser.Scene {
             let baseKey = sAnimKey;
             if (baseKey.endsWith('-text')) baseKey = baseKey.replace('-text', '');
             else if (baseKey.endsWith('-gray')) baseKey = baseKey.replace('-gray', '');
-            slime.sprite.play(this.getAnimKey(baseKey), true);
+            slime.sprite.play(this.getEnemyAnimKey(baseKey), true);
           }
         }
       });
@@ -1021,9 +1027,9 @@ export class GridMovementScene extends Phaser.Scene {
         // 空いているマスに湧く
         if (!this.isTileOccupied(sx, sy)) {
           const { GRID_SIZE } = GridMovementScene;
-          const slimeSprite = this.add.sprite(sx * GRID_SIZE + GRID_SIZE / 2, sy * GRID_SIZE + GRID_SIZE / 2, 'slime_spritesheet', 0);
+          const slimeSprite = this.add.sprite(sx * GRID_SIZE + GRID_SIZE / 2, sy * GRID_SIZE + GRID_SIZE / 2, this.getEnemyTextureKey(), 0);
           slimeSprite.setDepth(9);
-          slimeSprite.play(this.getAnimKey('slime-idle'));
+          slimeSprite.play(this.getEnemyAnimKey('slime-idle'));
           
           this.slimes.push({
             id: `slime-${Math.random().toString(36).substring(2, 9)}`,
@@ -1128,66 +1134,10 @@ export class GridMovementScene extends Phaser.Scene {
           }
         } else {
           // 敵がいない場合、または戦闘行動がない場合
-          let targetGoal: { x: number, y: number } | null = null;
-          if (this.mapData && this.mapData.events) {
-            const teleportEvent = this.mapData.events.find((e: any) => e.type === 'teleport');
-            if (teleportEvent) {
-              const isMet = this.checkTeleportConditionsMet(teleportEvent);
-              const gridKey = `${teleportEvent.x},${teleportEvent.y}`;
-              const isDiscovered = this.viewedGrids.has(gridKey);
-              if (isMet && isDiscovered) {
-                targetGoal = { x: teleportEvent.x, y: teleportEvent.y };
-              }
-            }
-          }
-
-          if (targetGoal) {
-            const possibleDirs: Direction[] = [];
-            const gx = targetGoal.x;
-            const gy = targetGoal.y;
-            const dx = gx - this.currentGridX;
-            const dy = gy - this.currentGridY;
-
-            if (dx !== 0 || dy !== 0) {
-              if (this.allow8Way) {
-                if (dx > 0 && dy > 0) possibleDirs.push('down-right');
-                else if (dx > 0 && dy < 0) possibleDirs.push('up-right');
-                else if (dx < 0 && dy > 0) possibleDirs.push('down-left');
-                else if (dx < 0 && dy < 0) possibleDirs.push('up-left');
-                
-                if (dx > 0) possibleDirs.push('right');
-                else if (dx < 0) possibleDirs.push('left');
-                if (dy > 0) possibleDirs.push('down');
-                else if (dy < 0) possibleDirs.push('up');
-              } else {
-                if (dx > 0) possibleDirs.push('right');
-                else if (dx < 0) possibleDirs.push('left');
-                if (dy > 0) possibleDirs.push('down');
-                else if (dy < 0) possibleDirs.push('up');
-              }
-
-              // 障害物で進めない方向を除外
-              const validDirs = possibleDirs.filter(dir => {
-                const next = this.getNextGridPos(this.currentGridX, this.currentGridY, dir);
-                return !this.isTileOccupied(next.x, next.y);
-              });
-
-              if (validDirs.length > 0) {
-                this.moveInDirection(validDirs[0]);
-              } else {
-                if (this.movementBehavior === 'unvisited') {
-                  this.performExploreWalk();
-                } else {
-                  this.performRandomWalk();
-                }
-              }
-            }
+          if (this.movementBehavior === 'unvisited') {
+            this.performExploreWalk();
           } else {
-            if (this.movementBehavior === 'unvisited') {
-              this.performExploreWalk();
-            } else {
-              this.performRandomWalk();
-            }
+            this.performRandomWalk();
           }
         }
       } else {
@@ -1478,7 +1428,7 @@ export class GridMovementScene extends Phaser.Scene {
 
   private performSlimeAttack(slime: SlimeData) {
     slime.isMoving = true;
-    slime.sprite.play(this.getAnimKey('slime-jump'));
+    slime.sprite.play(this.getEnemyAnimKey('slime-jump'));
 
     const origX = slime.sprite.x;
     const origY = slime.sprite.y;
@@ -1493,7 +1443,7 @@ export class GridMovementScene extends Phaser.Scene {
       yoyo: true,
       onComplete: () => {
         if (slime.sprite && slime.sprite.active) {
-          slime.sprite.play(this.getAnimKey('slime-idle'));
+          slime.sprite.play(this.getEnemyAnimKey('slime-idle'));
         }
         slime.isMoving = false;
         
@@ -1558,7 +1508,7 @@ export class GridMovementScene extends Phaser.Scene {
     slime.isMoving = true;
     slime.targetGridX = targetGridX;
     slime.targetGridY = targetGridY;
-    slime.sprite.play(this.getAnimKey('slime-shake')); // プルプル震える
+    slime.sprite.play(this.getEnemyAnimKey('slime-shake')); // プルプル震える
 
     const { GRID_SIZE } = GridMovementScene;
     const targetX = targetGridX * GRID_SIZE + GRID_SIZE / 2;
@@ -1570,7 +1520,7 @@ export class GridMovementScene extends Phaser.Scene {
 
     this.time.delayedCall(shakeDuration, () => {
       if (!slime.sprite || !slime.sprite.active) return;
-      slime.sprite.play(this.getAnimKey('slime-jump')); // 移動中のフレーム
+      slime.sprite.play(this.getEnemyAnimKey('slime-jump')); // 移動中のフレーム
       this.tweens.add({
         targets: slime.sprite,
         x: targetX,
@@ -1584,7 +1534,7 @@ export class GridMovementScene extends Phaser.Scene {
           slime.targetGridY = undefined;
           slime.isMoving = false;
           if (slime.sprite && slime.sprite.active) {
-            slime.sprite.play(this.getAnimKey('slime-idle'));
+            slime.sprite.play(this.getEnemyAnimKey('slime-idle'));
           }
         }
       });
@@ -1896,9 +1846,9 @@ export class GridMovementScene extends Phaser.Scene {
         }
       }
 
-      const slimeSprite = this.add.sprite(sx * GRID_SIZE + GRID_SIZE / 2, sy * GRID_SIZE + GRID_SIZE / 2, 'slime_spritesheet', 0);
+      const slimeSprite = this.add.sprite(sx * GRID_SIZE + GRID_SIZE / 2, sy * GRID_SIZE + GRID_SIZE / 2, this.getEnemyTextureKey(), 0);
       slimeSprite.setDepth(9);
-      slimeSprite.play(this.getAnimKey('slime-idle'));
+      slimeSprite.play(this.getEnemyAnimKey('slime-idle'));
 
       this.slimes.push({
         id: `slime-${Math.random().toString(36).substring(2, 9)}`,
