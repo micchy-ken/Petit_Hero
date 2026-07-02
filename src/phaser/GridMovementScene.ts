@@ -52,16 +52,12 @@ export class GridMovementScene extends Phaser.Scene {
   private vignetteOverlay!: Phaser.GameObjects.Graphics;
   private particleMotes!: Phaser.GameObjects.Arc[];
   private visitedTraceGraphics?: Phaser.GameObjects.Graphics;
-  private showVisitedTrace: boolean = true;
-  private goalGraphics!: Phaser.GameObjects.Graphics;
-  private goalTexts: Phaser.GameObjects.Text[] = [];
   private grassBgImage?: Phaser.GameObjects.Image;
   private useGrassBg: boolean = true;
   private allow8Way: boolean = false;
   private isTextMode: boolean = true;
   private displayMode: 'normal' | 'text' | 'grayscale' = 'text';
   private slimes: SlimeData[] = [];
-  private dyingSlimes: Phaser.GameObjects.Sprite[] = [];
   private itemSprites: { gridX: number, gridY: number, sprite: Phaser.GameObjects.GameObject, itemId: string }[] = [];
 
   // 状態管理
@@ -308,6 +304,23 @@ export class GridMovementScene extends Phaser.Scene {
 
     // 5.5. スライムの配置
     this.slimes = [];
+    for (let i = 0; i < 5; i++) {
+      const sx = Phaser.Math.Between(2, this.gridCols - 3);
+      const sy = Phaser.Math.Between(2, this.gridRows - 3);
+      const slimeSprite = this.add.sprite(sx * GRID_SIZE + GRID_SIZE / 2, sy * GRID_SIZE + GRID_SIZE / 2, 'slime_spritesheet', 0);
+      slimeSprite.setDepth(9); // 勇者より少し奥
+      slimeSprite.play(this.getAnimKey('slime-idle'));
+      
+      this.slimes.push({
+        id: `slime-${Math.random().toString(36).substring(2, 9)}`,
+        sprite: slimeSprite,
+        gridX: sx,
+        gridY: sy,
+        isMoving: false,
+        hp: 10,
+        maxHp: 10
+      });
+    }
 
     // 6. HD-2D マナ粒子（ホタル風パーティクル）の生成（カメラ固定領域内で生成）
     this.particleMotes = [];
@@ -486,10 +499,6 @@ export class GridMovementScene extends Phaser.Scene {
     this.visitedTraceGraphics = this.add.graphics();
     this.visitedTraceGraphics.setDepth(1);
     this.drawVisitedTrace();
-
-    this.goalGraphics = this.add.graphics();
-    this.goalGraphics.setDepth(4);
-    this.updateGoalVisuals();
   }
 
   private drawGrid() {
@@ -502,8 +511,18 @@ export class GridMovementScene extends Phaser.Scene {
     }
 
     if (this.displayMode === 'text') {
-      this.gridGraphics.fillStyle(0x000000, 1);
-      this.gridGraphics.fillRect(0, 0, this.gridCols * GRID_SIZE, this.gridRows * GRID_SIZE);
+      if (this.showGridLines) {
+        this.gridGraphics.lineStyle(1, 0xffffff, 0.3);
+        for (let i = 0; i <= this.gridRows; i++) {
+          this.gridGraphics.moveTo(0, i * GRID_SIZE);
+          this.gridGraphics.lineTo(this.gridCols * GRID_SIZE, i * GRID_SIZE);
+        }
+        for (let i = 0; i <= this.gridCols; i++) {
+          this.gridGraphics.moveTo(i * GRID_SIZE, 0);
+          this.gridGraphics.lineTo(i * GRID_SIZE, this.gridRows * GRID_SIZE);
+        }
+        this.gridGraphics.strokePath();
+      }
       return;
     }
 
@@ -622,7 +641,6 @@ export class GridMovementScene extends Phaser.Scene {
   private drawVisitedTrace() {
     if (!this.visitedTraceGraphics) return;
     this.visitedTraceGraphics.clear();
-    if (!this.showVisitedTrace) return;
 
     const { GRID_SIZE } = GridMovementScene;
 
@@ -677,115 +695,6 @@ export class GridMovementScene extends Phaser.Scene {
     });
   }
 
-  public toggleVisitedTrace(enabled?: boolean) {
-    this.showVisitedTrace = enabled !== undefined ? enabled : !this.showVisitedTrace;
-    if (this.visitedTraceGraphics) {
-      this.visitedTraceGraphics.setVisible(this.showVisitedTrace);
-    }
-    this.drawVisitedTrace();
-  }
-
-  public checkTeleportConditionsMet(event: any): boolean {
-    if (!event || event.type !== 'teleport') return false;
-    const eventData = event.data || {};
-    const expRate = (this.visitedGrids.size / this.totalGrids) * 100;
-    const sRate = (this.viewedGrids.size / this.totalGrids) * 100;
-    const maxEnemies = this.mapData?.maxEnemies;
-    let dRate = 0;
-    if (maxEnemies !== undefined && maxEnemies !== 'infinite' && (maxEnemies as number) > 0) {
-      dRate = (this.enemiesDefeated / (maxEnemies as number)) * 100;
-    }
-    
-    if (eventData.requiredExplorationRate && expRate < eventData.requiredExplorationRate) return false;
-    if (eventData.requiredSearchRate && sRate < eventData.requiredSearchRate) return false;
-    if (eventData.requiredDefeatRate && dRate < eventData.requiredDefeatRate) return false;
-    
-    return true;
-  }
-
-  public updateGoalVisuals() {
-    if (!this.goalGraphics) return;
-    this.goalGraphics.clear();
-    
-    // 既存のゴールテキストをすべてクリア
-    this.goalTexts.forEach(t => t.destroy());
-    this.goalTexts = [];
-
-    if (!this.mapData || !this.mapData.events) return;
-    const { GRID_SIZE } = GridMovementScene;
-
-    this.mapData.events.forEach((event: any) => {
-      if (event.type === 'teleport') {
-        const isMet = this.checkTeleportConditionsMet(event);
-        const px = event.x * GRID_SIZE;
-        const py = event.y * GRID_SIZE;
-
-        if (isMet) {
-          // 条件クリア時：活性化した輝くゴール
-          // 1. セルの背景に柔らかな光のサークル
-          this.goalGraphics.fillStyle(0x10b981, 0.25);
-          this.goalGraphics.fillCircle(px + GRID_SIZE / 2, py + GRID_SIZE / 2, GRID_SIZE * 0.6);
-
-          // 2. 二重の輝く魔法陣 / ポータルの境界線を描く
-          this.goalGraphics.lineStyle(2, 0x34d399, 0.85);
-          this.goalGraphics.strokeCircle(px + GRID_SIZE / 2, py + GRID_SIZE / 2, GRID_SIZE * 0.45);
-          
-          this.goalGraphics.lineStyle(1, 0x10b981, 0.6);
-          this.goalGraphics.strokeCircle(px + GRID_SIZE / 2, py + GRID_SIZE / 2, GRID_SIZE * 0.3);
-
-          // 3. 中心に輝く小さなコア
-          this.goalGraphics.fillStyle(0xffffff, 0.9);
-          this.goalGraphics.fillCircle(px + GRID_SIZE / 2, py + GRID_SIZE / 2, 6);
-
-          // 4. 「NEXT ➔」テキストを上に表示
-          const t = this.add.text(
-            px + GRID_SIZE / 2,
-            py - 8,
-            'NEXT ➔',
-            {
-              fontFamily: 'sans-serif',
-              fontSize: '11px',
-              fontStyle: 'bold',
-              color: '#34d399',
-              stroke: '#064e3b',
-              strokeThickness: 3
-            }
-          ).setOrigin(0.5, 0.5).setDepth(6);
-          this.goalTexts.push(t);
-
-          // 控えめなアニメーション効果として、テキストが上下に揺れるようにする
-          this.tweens.add({
-            targets: t,
-            y: py - 13,
-            duration: 800,
-            yoyo: true,
-            repeat: -1,
-            ease: 'Sine.easeInOut'
-          });
-        } else {
-          // 条件未クリア時：閉ざされた不活性な門（うっすらと赤い鍵やサークル）
-          this.goalGraphics.lineStyle(1.5, 0xef4444, 0.3);
-          this.goalGraphics.strokeRect(px + 4, py + 4, GRID_SIZE - 8, GRID_SIZE - 8);
-          
-          // 中央に不活性なコア
-          this.goalGraphics.fillStyle(0xef4444, 0.2);
-          this.goalGraphics.fillCircle(px + GRID_SIZE / 2, py + GRID_SIZE / 2, 4);
-
-          // 鍵マークの代わり
-          const t = this.add.text(
-            px + GRID_SIZE / 2,
-            py + GRID_SIZE / 2,
-            '🔒',
-            {
-              fontSize: '10px'
-            }
-          ).setOrigin(0.5, 0.5).setDepth(6);
-          this.goalTexts.push(t);
-        }
-      }
-    });
-  }
-
   private drawHd2dLighting() {
     if (!this.hd2dLighting) return;
     const { GRID_SIZE, VIEWPORT_COLS, VIEWPORT_ROWS } = GridMovementScene;
@@ -819,31 +728,6 @@ export class GridMovementScene extends Phaser.Scene {
     this.vignetteOverlay.fillRect(0, totalH - frameSize, totalW, frameSize);
     this.vignetteOverlay.fillRect(0, frameSize, frameSize, totalH - frameSize * 2);
     this.vignetteOverlay.fillRect(totalW - frameSize, frameSize, frameSize, totalH - frameSize * 2);
-  }
-
-  private getEnemyTextureKey(): string {
-    if (this.mapData?.id === 'map_beginning') {
-      return 'slime_spritesheet_text';
-    }
-    if (this.displayMode === 'text') {
-      return 'slime_spritesheet_text';
-    }
-    if (this.displayMode === 'grayscale') {
-      return 'slime_spritesheet_gray';
-    }
-    return 'slime_spritesheet';
-  }
-
-  private getEnemyAnimKey(baseKey: string): string {
-    if (this.mapData?.id === 'map_beginning') {
-      return `${baseKey}-text`;
-    }
-    if (this.displayMode === 'text') {
-      return `${baseKey}-text`;
-    } else if (this.displayMode === 'grayscale') {
-      return `${baseKey}-gray`;
-    }
-    return baseKey;
   }
 
   private getAnimKey(baseKey: string): string {
@@ -918,7 +802,9 @@ export class GridMovementScene extends Phaser.Scene {
       this.hero.setTexture(heroTexture);
     }
     
-    const slimeTexture = this.getEnemyTextureKey();
+    let slimeTexture = 'slime_spritesheet';
+    if (this.displayMode === 'text') slimeTexture = 'slime_spritesheet_text';
+    else if (this.displayMode === 'grayscale') slimeTexture = 'slime_spritesheet_gray';
     if (this.slimes) {
       this.slimes.forEach(slime => {
         if (slime && slime.sprite) {
@@ -946,7 +832,7 @@ export class GridMovementScene extends Phaser.Scene {
             let baseKey = sAnimKey;
             if (baseKey.endsWith('-text')) baseKey = baseKey.replace('-text', '');
             else if (baseKey.endsWith('-gray')) baseKey = baseKey.replace('-gray', '');
-            slime.sprite.play(this.getEnemyAnimKey(baseKey), true);
+            slime.sprite.play(this.getAnimKey(baseKey), true);
           }
         }
       });
@@ -998,47 +884,6 @@ export class GridMovementScene extends Phaser.Scene {
     });
   }
 
-  private getEnemyName(): string {
-    if (this.mapData?.id === 'map_beginning') {
-      return '敵';
-    }
-    return 'スライム';
-  }
-
-  // スライムの補充
-  private handleEnemyReplenishment() {
-    const maxEnemies = this.mapData?.maxEnemies;
-    const isInfinite = maxEnemies === undefined || maxEnemies === 'infinite';
-    const maxActive = isInfinite ? 5 : Math.min(5, maxEnemies as number);
-
-    if (this.slimes.length < maxActive && Math.random() < 0.1) {
-      if (isInfinite || this.totalEnemiesSpawned < (maxEnemies as number)) {
-        const sx = Phaser.Math.Between(2, this.gridCols - 3);
-        const sy = Phaser.Math.Between(2, this.gridRows - 3);
-        // 空いているマスに湧く
-        if (!this.isTileOccupied(sx, sy)) {
-          const { GRID_SIZE } = GridMovementScene;
-          const slimeSprite = this.add.sprite(sx * GRID_SIZE + GRID_SIZE / 2, sy * GRID_SIZE + GRID_SIZE / 2, this.getEnemyTextureKey(), 0);
-          slimeSprite.setDepth(9);
-          slimeSprite.play(this.getEnemyAnimKey('slime-idle'));
-          
-          this.slimes.push({
-            id: `slime-${Math.random().toString(36).substring(2, 9)}`,
-            sprite: slimeSprite,
-            gridX: sx,
-            gridY: sy,
-            isMoving: false,
-            hp: 10,
-            maxHp: 10
-          });
-          
-          this.totalEnemiesSpawned++;
-          this.sendLog(`野生の${this.getEnemyName()}が現れた！ 👾`, 'system');
-        }
-      }
-    }
-  }
-
   private checkAndMoveRandomly() {
     if (this.autoMode === 'none') {
       if (this.pointerTargetGridX !== null && this.pointerTargetGridY !== null) {
@@ -1071,6 +916,37 @@ export class GridMovementScene extends Phaser.Scene {
               this.moveInDirection(nextDir);
             }
           }
+        }
+      }
+    }
+
+    // スライムの補充
+    const maxEnemies = this.mapData?.maxEnemies;
+    const isInfinite = maxEnemies === undefined || maxEnemies === 'infinite';
+
+    if (this.slimes.length < 5 && Math.random() < 0.1) {
+      if (isInfinite || this.totalEnemiesSpawned < (maxEnemies as number)) {
+        const sx = Phaser.Math.Between(2, this.gridCols - 3);
+        const sy = Phaser.Math.Between(2, this.gridRows - 3);
+        // 空いているマスに湧く
+        if (!this.isTileOccupied(sx, sy)) {
+          const { GRID_SIZE } = GridMovementScene;
+          const slimeSprite = this.add.sprite(sx * GRID_SIZE + GRID_SIZE / 2, sy * GRID_SIZE + GRID_SIZE / 2, 'slime_spritesheet', 0);
+          slimeSprite.setDepth(9);
+          slimeSprite.play(this.getAnimKey('slime-idle'));
+          
+          this.slimes.push({
+            id: `slime-${Math.random().toString(36).substring(2, 9)}`,
+            sprite: slimeSprite,
+            gridX: sx,
+            gridY: sy,
+            isMoving: false,
+            hp: 10,
+            maxHp: 10
+          });
+          
+          this.totalEnemiesSpawned++;
+          this.sendLog('野生のスライムが現れた！ 👾', 'system');
         }
       }
     }
@@ -1153,8 +1029,6 @@ export class GridMovementScene extends Phaser.Scene {
         this.moveSlime(slime, nextDir);
       }
     });
-
-    this.handleEnemyReplenishment();
   }
 
   private performRandomWalk() {
@@ -1231,7 +1105,7 @@ export class GridMovementScene extends Phaser.Scene {
 
     const damage = Math.max(1, this.heroAttack - 1); // Simple damage calc
     slime.hp -= damage;
-    this.sendLog(`勇者の通常攻撃！ ${this.getEnemyName()}に ${damage} ダメージを与えた！ ⚔️`, 'combat');
+    this.sendLog(`勇者の通常攻撃！ スライムに ${damage} ダメージを与えた！ ⚔️`, 'combat');
 
     // 攻撃エフェクト (本格的な円弧のダブルクロス・スラッシュ & スパーク)
     
@@ -1386,7 +1260,7 @@ export class GridMovementScene extends Phaser.Scene {
         if (slime.hp <= 0) {
           this.enemiesDefeated++;
           this.updateStats(this.currentGridX, this.currentGridY, this.currentCamGridX, this.currentCamGridY);
-          this.sendLog(`${this.getEnemyName()}を倒した！ 経験値を 2 獲得。 🌟`, 'info');
+          this.sendLog(`スライムを倒した！ 経験値を 2 獲得。 🌟`, 'info');
           this.heroExp += 2;
           if (this.heroExp >= 10) {
             this.heroLevel++;
@@ -1397,20 +1271,14 @@ export class GridMovementScene extends Phaser.Scene {
             this.sendLog(`レベルアップ！ レベル ${this.heroLevel} になりました！ 🎉`, 'system');
           }
           
-          const spriteToDestroy = slime.sprite;
-          this.dyingSlimes.push(spriteToDestroy);
           this.tweens.add({
-            targets: spriteToDestroy,
+            targets: slime.sprite,
             scaleX: 0,
             scaleY: 0,
             alpha: 0,
             duration: 200,
             onComplete: () => {
-              if (spriteToDestroy && spriteToDestroy.active) spriteToDestroy.destroy();
-              const idx = this.dyingSlimes.indexOf(spriteToDestroy);
-              if (idx !== -1) {
-                this.dyingSlimes.splice(idx, 1);
-              }
+              if (slime.sprite && slime.sprite.active) slime.sprite.destroy();
             }
           });
           const currentIdx = this.slimes.indexOf(slime);
@@ -1425,7 +1293,7 @@ export class GridMovementScene extends Phaser.Scene {
 
   private performSlimeAttack(slime: SlimeData) {
     slime.isMoving = true;
-    slime.sprite.play(this.getEnemyAnimKey('slime-jump'));
+    slime.sprite.play(this.getAnimKey('slime-jump'));
 
     const origX = slime.sprite.x;
     const origY = slime.sprite.y;
@@ -1440,13 +1308,13 @@ export class GridMovementScene extends Phaser.Scene {
       yoyo: true,
       onComplete: () => {
         if (slime.sprite && slime.sprite.active) {
-          slime.sprite.play(this.getEnemyAnimKey('slime-idle'));
+          slime.sprite.play(this.getAnimKey('slime-idle'));
         }
         slime.isMoving = false;
         
         const damage = 2; // Fixed damage for now
         this.heroHp = Math.max(0, this.heroHp - damage);
-        this.sendLog(`${this.getEnemyName()}の体当たり！ 勇者は ${damage} ダメージを受けた！ 💥`, 'damage');
+        this.sendLog(`スライムの体当たり！ 勇者は ${damage} ダメージを受けた！ 💥`, 'damage');
         
         // 画面フラッシュ
         this.cameras.main.flash(200, 255, 0, 0);
@@ -1505,7 +1373,7 @@ export class GridMovementScene extends Phaser.Scene {
     slime.isMoving = true;
     slime.targetGridX = targetGridX;
     slime.targetGridY = targetGridY;
-    slime.sprite.play(this.getEnemyAnimKey('slime-shake')); // プルプル震える
+    slime.sprite.play(this.getAnimKey('slime-shake')); // プルプル震える
 
     const { GRID_SIZE } = GridMovementScene;
     const targetX = targetGridX * GRID_SIZE + GRID_SIZE / 2;
@@ -1517,7 +1385,7 @@ export class GridMovementScene extends Phaser.Scene {
 
     this.time.delayedCall(shakeDuration, () => {
       if (!slime.sprite || !slime.sprite.active) return;
-      slime.sprite.play(this.getEnemyAnimKey('slime-jump')); // 移動中のフレーム
+      slime.sprite.play(this.getAnimKey('slime-jump')); // 移動中のフレーム
       this.tweens.add({
         targets: slime.sprite,
         x: targetX,
@@ -1531,7 +1399,7 @@ export class GridMovementScene extends Phaser.Scene {
           slime.targetGridY = undefined;
           slime.isMoving = false;
           if (slime.sprite && slime.sprite.active) {
-            slime.sprite.play(this.getEnemyAnimKey('slime-idle'));
+            slime.sprite.play(this.getAnimKey('slime-idle'));
           }
         }
       });
@@ -1792,7 +1660,6 @@ export class GridMovementScene extends Phaser.Scene {
       this.setOnStatsChange(expRate, searchRate, dRate);
     }
     this.drawVisitedTrace();
-    this.updateGoalVisuals();
   }
 
   private notifyStateChange(isScrolling: boolean = false) {
@@ -1817,56 +1684,8 @@ export class GridMovementScene extends Phaser.Scene {
     }
   }
 
-  private spawnInitialSlimes() {
-    this.slimes.forEach(s => {
-      if (s.sprite && s.sprite.active) s.sprite.destroy();
-    });
-    this.slimes = [];
-
-    const { GRID_SIZE } = GridMovementScene;
-    const maxEnemies = this.mapData?.maxEnemies;
-    const isInfinite = maxEnemies === undefined || maxEnemies === 'infinite';
-    const maxActive = isInfinite ? 5 : Math.min(5, maxEnemies as number);
-
-    for (let i = 0; i < maxActive; i++) {
-      let sx = 0;
-      let sy = 0;
-      let attempts = 0;
-      let placed = false;
-
-      while (!placed && attempts < 50) {
-        sx = Phaser.Math.Between(2, this.gridCols - 3);
-        sy = Phaser.Math.Between(2, this.gridRows - 3);
-        attempts++;
-        if (!this.isTileOccupied(sx, sy) && !(sx === this.currentGridX && sy === this.currentGridY)) {
-          placed = true;
-        }
-      }
-
-      const slimeSprite = this.add.sprite(sx * GRID_SIZE + GRID_SIZE / 2, sy * GRID_SIZE + GRID_SIZE / 2, this.getEnemyTextureKey(), 0);
-      slimeSprite.setDepth(9);
-      slimeSprite.play(this.getEnemyAnimKey('slime-idle'));
-
-      this.slimes.push({
-        id: `slime-${Math.random().toString(36).substring(2, 9)}`,
-        sprite: slimeSprite,
-        gridX: sx,
-        gridY: sy,
-        isMoving: false,
-        hp: 10,
-        maxHp: 10
-      });
-      this.totalEnemiesSpawned++;
-    }
-  }
-
   public resetPosition() {
     if (this.isMoving) return;
-
-    this.dyingSlimes.forEach(s => {
-      if (s && s.active) s.destroy();
-    });
-    this.dyingSlimes = [];
 
     this.totalEnemiesSpawned = 0;
     this.enemiesDefeated = 0;
@@ -1878,8 +1697,11 @@ export class GridMovementScene extends Phaser.Scene {
       this.visitedTraceGraphics.clear();
     }
     
-    // reset slimes array and spawn initial slimes
-    this.spawnInitialSlimes();
+    // reset slimes array when loading map
+    this.slimes.forEach(s => {
+      if (s.sprite && s.sprite.active) s.sprite.destroy();
+    });
+    this.slimes = [];
     
     this.itemSprites.forEach(item => {
       if (item.sprite && item.sprite.active) item.sprite.destroy();
@@ -1925,7 +1747,6 @@ export class GridMovementScene extends Phaser.Scene {
     }
     this.currentDirection = 'idle';
     this.spawnMapItems();
-    this.updateGoalVisuals();
     this.notifyStateChange(false);
   }
 
@@ -2071,13 +1892,13 @@ export class GridMovementScene extends Phaser.Scene {
     if (hitSlimes.length > 0) {
       hitSlimes.forEach(targetSlime => {
         targetSlime.hp -= fireDamage;
-        this.sendLog(`ファイアボールが直撃！ ${this.getEnemyName()}に ${fireDamage} ダメージを与えた！ 🔥`, "combat");
+        this.sendLog(`ファイアボールが直撃！ スライムに ${fireDamage} ダメージを与えた！ 🔥`, "combat");
 
         // スライムの撃破処理
         if (targetSlime.hp <= 0) {
           this.enemiesDefeated++;
           this.updateStats(this.currentGridX, this.currentGridY, this.currentCamGridX, this.currentCamGridY);
-          this.sendLog(`${this.getEnemyName()}を焼き尽くした！ 経験値を 2 獲得。`, "info");
+          this.sendLog(`スライムを焼き尽くした！ 経験値を 2 獲得。`, "info");
           this.heroExp += 2;
           if (this.heroExp >= 10) {
             this.heroLevel++;
@@ -2088,20 +1909,14 @@ export class GridMovementScene extends Phaser.Scene {
             this.sendLog(`レベルアップ！ レベル ${this.heroLevel} になりました！`, "system");
           }
 
-          const spriteToDestroy = targetSlime.sprite;
-          this.dyingSlimes.push(spriteToDestroy);
           this.tweens.add({
-            targets: spriteToDestroy,
+            targets: targetSlime.sprite,
             scaleX: 0,
             scaleY: 0,
             alpha: 0,
             duration: 200,
             onComplete: () => {
-              if (spriteToDestroy && spriteToDestroy.active) spriteToDestroy.destroy();
-              const idx = this.dyingSlimes.indexOf(spriteToDestroy);
-              if (idx !== -1) {
-                this.dyingSlimes.splice(idx, 1);
-              }
+              if (targetSlime.sprite && targetSlime.sprite.active) targetSlime.sprite.destroy();
             }
           });
 
@@ -2308,13 +2123,13 @@ export class GridMovementScene extends Phaser.Scene {
     const iceDamage = 12; // 氷の魔法は周囲のみのため強力
     hitSlimes.forEach(targetSlime => {
       targetSlime.hp -= iceDamage;
-      this.sendLog(`サークル氷結が${this.getEnemyName()}に直撃！ ${iceDamage} ダメージ！ `, "combat");
+      this.sendLog(`サークル氷結がスライムに直撃！ ${iceDamage} ダメージ！ `, "combat");
 
       // 敵が力尽きたかチェック
       if (targetSlime.hp <= 0) {
         this.enemiesDefeated++;
         this.updateStats(this.currentGridX, this.currentGridY, this.currentCamGridX, this.currentCamGridY);
-        this.sendLog(`${this.getEnemyName()}を完全に凍りつかせて砕いた！ 経験値を 2 獲得。`, "info");
+        this.sendLog(`スライムを完全に凍りつかせて砕いた！ 経験値を 2 獲得。`, "info");
         this.heroExp += 2;
         if (this.heroExp >= 10) {
           this.heroLevel++;
@@ -2325,20 +2140,14 @@ export class GridMovementScene extends Phaser.Scene {
           this.sendLog(`レベルアップ！ レベル ${this.heroLevel} になりました！`, "system");
         }
 
-        const spriteToDestroy = targetSlime.sprite;
-        this.dyingSlimes.push(spriteToDestroy);
         this.tweens.add({
-          targets: spriteToDestroy,
+          targets: targetSlime.sprite,
           scaleX: 0,
           scaleY: 0,
           alpha: 0,
           duration: 200,
           onComplete: () => {
-            if (spriteToDestroy && spriteToDestroy.active) spriteToDestroy.destroy();
-            const idx = this.dyingSlimes.indexOf(spriteToDestroy);
-            if (idx !== -1) {
-              this.dyingSlimes.splice(idx, 1);
-            }
+            if (targetSlime.sprite && targetSlime.sprite.active) targetSlime.sprite.destroy();
           }
         });
 
