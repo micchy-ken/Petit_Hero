@@ -117,16 +117,16 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
             scene.mapData = startMap;
             scene.gridCols = startMap.width;
             scene.gridRows = startMap.height;
-            scene.onTestPlayClear = () => {
+            scene.onTestPlayClear = onTestPlayClear ? () => {
               setIsTurbo(false);
               scene.isTurboActive = false;
-              if (onTestPlayClear) onTestPlayClear();
-            };
-            scene.onTeleport = (targetMapId) => {
+              onTestPlayClear();
+            } : undefined;
+            scene.onTeleport = onTeleport ? (targetMapId) => {
               setIsTurbo(false);
               scene.isTurboActive = false;
-              if (onTeleport) onTeleport(targetMapId);
-            };
+              onTeleport(targetMapId);
+            } : undefined;
             
             // Apply map styles using scene's central method
             scene.applyMapSettings(startMap.bgMode, startMap.bgImage);
@@ -246,6 +246,28 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
       sceneRef.current.combatBehavior = combatBehavior;
     }
   }, [combatBehavior]);
+
+  useEffect(() => {
+    if (sceneRef.current) {
+      const scene = sceneRef.current;
+      scene.onTestPlayClear = onTestPlayClear ? () => {
+        setIsTurbo(false);
+        scene.isTurboActive = false;
+        onTestPlayClear();
+      } : undefined;
+    }
+  }, [onTestPlayClear]);
+
+  useEffect(() => {
+    if (sceneRef.current) {
+      const scene = sceneRef.current;
+      scene.onTeleport = onTeleport ? (targetMapId) => {
+        setIsTurbo(false);
+        scene.isTurboActive = false;
+        onTeleport(targetMapId);
+      } : undefined;
+    }
+  }, [onTeleport]);
 
   useEffect(() => {
     if (sceneRef.current) {
