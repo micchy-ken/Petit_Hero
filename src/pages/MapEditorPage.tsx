@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Box, Gem, Zap, Plus, Map as MapIcon, Save, Settings, Play, Loader2, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Box, Gem, Zap, Plus, Map as MapIcon, Save, Settings, Play, Loader2, RefreshCw, Check, AlertCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MapData } from '../types/MapData';
 import { getAvailableEnemies, getAvailableBosses } from '../data/EnemyAssets';
 import { PhaserGameContainer } from '../components/PhaserGameContainer';
 import { allMaps } from '../data/maps';
+import { fetchMapsFromFirestore, saveMapToFirestore, fetchEnemyAssetsFromFirestore } from '../lib/dbService';
 // @ts-ignore
 import grassBgUrl from '../../public/grass_bg_1782776475818.jpg';
 
@@ -16,6 +17,7 @@ export default function MapEditorPage() {
   const [isTestPlay, setIsTestPlay] = useState(false);
   const [showClearModal, setShowClearModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
 
   const [initialMaps, setInitialMaps] = useState<MapData[]>([]);
   const [pendingTransition, setPendingTransition] = useState<{
@@ -23,56 +25,55 @@ export default function MapEditorPage() {
     targetMapId?: string;
   } | null>(null);
 
-  const loadMapsFromContainer = (isInitial = false) => {
-    return fetch('/api/maps?t=' + Date.now(), { cache: 'no-store' })
-      .then(res => {
-        if (!res.ok) throw new Error('API not available');
-        return res.json();
-      })
-      .then(data => {
-        let loadedMaps = Array.isArray(data) ? data : [];
-        // Ensure map_beginning is always present in the selection list to preserve consistency
-        const hasBeginning = loadedMaps.some((m: MapData) => m.id === 'map_beginning');
-        if (!hasBeginning) {
-          const beginningMap = allMaps.find((m: MapData) => m.id === 'map_beginning') || allMaps[0];
-          loadedMaps = [beginningMap, ...loadedMaps];
-        }
-        setMaps(loadedMaps);
-        setInitialMaps(JSON.parse(JSON.stringify(loadedMaps)));
-        
-        if (isInitial) {
-          // Select 'map_beginning' as the default current map if it is available
+  const loadMapsFromFirestoreDB = async (isInitial = false) => {
+    try {
+      // Load custom enemy assets first to override local assets
+      await fetchEnemyAssetsFromFirestore();
+
+      // Load maps
+      let loadedMaps = await fetchMapsFromFirestore();
+      
+      // Ensure map_beginning is always present in the selection list to preserve consistency
+      const hasBeginning = loadedMaps.some((m: MapData) => m.id === 'map_beginning');
+      if (!hasBeginning) {
+        const beginningMap = allMaps.find((m: MapData) => m.id === 'map_beginning') || allMaps[0];
+        loadedMaps = [beginningMap, ...loadedMaps];
+      }
+      setMaps(loadedMaps);
+      setInitialMaps(JSON.parse(JSON.stringify(loadedMaps)));
+      
+      if (isInitial) {
+        // Select 'map_beginning' as the default current map if it is available
+        const defaultId = loadedMaps.some((m: MapData) => m.id === 'map_beginning')
+          ? 'map_beginning'
+          : (loadedMaps[0]?.id || '');
+        setCurrentMapId(defaultId);
+      } else {
+        // Keep current selection if it still exists
+        if (currentMapId && !loadedMaps.some((m: MapData) => m.id === currentMapId)) {
           const defaultId = loadedMaps.some((m: MapData) => m.id === 'map_beginning')
             ? 'map_beginning'
             : (loadedMaps[0]?.id || '');
           setCurrentMapId(defaultId);
-        } else {
-          // Keep current selection if it still exists
-          if (currentMapId && !loadedMaps.some((m: MapData) => m.id === currentMapId)) {
-            const defaultId = loadedMaps.some((m: MapData) => m.id === 'map_beginning')
-              ? 'map_beginning'
-              : (loadedMaps[0]?.id || '');
-            setCurrentMapId(defaultId);
-          }
         }
-        setIsLoading(false);
-      })
-      .catch(e => {
-        console.warn("Using bundled static maps:", e.message);
-        setMaps(allMaps);
-        setInitialMaps(JSON.parse(JSON.stringify(allMaps)));
-        if (isInitial) {
-          const defaultId = allMaps.some((m: MapData) => m.id === 'map_beginning')
-            ? 'map_beginning'
-            : (allMaps[0]?.id || '');
-          setCurrentMapId(defaultId);
-        }
-        setIsLoading(false);
-      });
+      }
+    } catch (e: any) {
+      console.warn("Fallback to bundled static maps:", e.message);
+      setMaps(allMaps);
+      setInitialMaps(JSON.parse(JSON.stringify(allMaps)));
+      if (isInitial) {
+        const defaultId = allMaps.some((m: MapData) => m.id === 'map_beginning')
+          ? 'map_beginning'
+          : (allMaps[0]?.id || '');
+        setCurrentMapId(defaultId);
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
-    loadMapsFromContainer(true);
+    loadMapsFromFirestoreDB(true);
   }, []);
 
   useEffect(() => {
@@ -341,35 +342,35 @@ export default function MapEditorPage() {
   };
 
   const handleSave = async (silent = false): Promise<boolean> => {
-    console.log("Attempting to save map:", currentMap);
+    console.log("Attempting to save map to Firestore:", currentMap);
+    if (!silent) {
+      setSaveStatus('saving');
+    }
     try {
-      const response = await fetch('/api/save-map', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(currentMap)
-      });
-      console.log("Save response status:", response.status);
-      if (response.ok) {
-        if (!silent) {
-          alert('保存しました (Reflected to JS file)');
-        }
-        setInitialMaps(prev => {
-          const exists = prev.some(m => m.id === currentMapId);
-          if (!exists) {
-            return [...prev, JSON.parse(JSON.stringify(currentMap))];
-          }
-          return prev.map(m => m.id === currentMapId ? JSON.parse(JSON.stringify(currentMap)) : m);
-        });
-        return true;
-      } else {
-        const errorText = await response.text();
-        console.error("Save failed:", errorText);
-        alert('保存に失敗しました: ' + errorText);
-        return false;
+      await saveMapToFirestore(currentMap);
+      if (!silent) {
+        setSaveStatus('success');
+        setTimeout(() => {
+          setSaveStatus('idle');
+        }, 3000);
       }
-    } catch (e) {
+      setInitialMaps(prev => {
+        const exists = prev.some(m => m.id === currentMapId);
+        if (!exists) {
+          return [...prev, JSON.parse(JSON.stringify(currentMap))];
+        }
+        return prev.map(m => m.id === currentMapId ? JSON.parse(JSON.stringify(currentMap)) : m);
+      });
+      return true;
+    } catch (e: any) {
       console.error("Save error:", e);
-      alert('保存エラー: サーバーが起動していない可能性があります');
+      if (!silent) {
+        setSaveStatus('error');
+        setTimeout(() => {
+          setSaveStatus('idle');
+        }, 3500);
+      }
+      alert('保存エラー: ' + e.message);
       return false;
     }
   };
@@ -479,9 +480,38 @@ export default function MapEditorPage() {
           </button>
           <button 
             onClick={handleSave}
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-bold shadow transition-colors"
+            disabled={saveStatus !== 'idle'}
+            className={`flex items-center gap-2 px-4 py-2 text-white rounded font-bold shadow transition-all duration-300 ${
+              saveStatus === 'idle' ? 'bg-emerald-600 hover:bg-emerald-500 active:scale-95' :
+              saveStatus === 'saving' ? 'bg-amber-600 cursor-not-allowed opacity-85 animate-pulse' :
+              saveStatus === 'success' ? 'bg-teal-500 shadow-[0_0_15px_rgba(20,184,166,0.6)]' :
+              'bg-red-600'
+            }`}
           >
-            <Save className="w-4 h-4" /> 反映 (Save)
+            {saveStatus === 'idle' && (
+              <>
+                <Save className="w-4 h-4" />
+                <span>反映 (Save)</span>
+              </>
+            )}
+            {saveStatus === 'saving' && (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>反映中...</span>
+              </>
+            )}
+            {saveStatus === 'success' && (
+              <>
+                <Check className="w-4 h-4 text-teal-100 animate-bounce" />
+                <span>反映完了！</span>
+              </>
+            )}
+            {saveStatus === 'error' && (
+              <>
+                <AlertCircle className="w-4 h-4 text-red-100" />
+                <span>保存失敗</span>
+              </>
+            )}
           </button>
           <span className="text-sm text-slate-300">
             {currentMap.name} ({currentMap.width}x{currentMap.height})
@@ -521,14 +551,14 @@ export default function MapEditorPage() {
                     return !original ? true : JSON.stringify(m) !== JSON.stringify(original);
                   });
                   if (anyDirty) {
-                    if (!confirm('未保存の変更があります。変更を破棄してコンテナの最新データと同期しますか？')) {
+                    if (!confirm('未保存の変更があります。変更を破棄してFirestoreの最新データと同期しますか？')) {
                       return;
                     }
                   }
                   setIsLoading(true);
                   try {
-                    await loadMapsFromContainer(false);
-                    alert('コンテナの最新状態をファイルエクスプローラーに同期しました。🔄');
+                    await loadMapsFromFirestoreDB(false);
+                    alert('Firestoreの最新状態を同期しました。🔄');
                   } catch (err: any) {
                     alert('同期エラー: ' + err.message);
                   } finally {
@@ -536,9 +566,9 @@ export default function MapEditorPage() {
                   }
                 }}
                 className="flex items-center justify-center gap-2 w-full px-3 py-2 bg-blue-700 hover:bg-blue-600 rounded text-sm transition-colors border border-blue-500 shadow-inner"
-                title="コンテナのマップ定義ファイルを再読込して同期します"
+                title="Firestoreのマップデータを再読込して同期します"
               >
-                <RefreshCw className="w-4 h-4" /> エクスプローラー同期 (更新)
+                <RefreshCw className="w-4 h-4" /> Firestore同期 (更新)
               </button>
               
               <button 
@@ -1193,6 +1223,27 @@ export default function MapEditorPage() {
                 キャンセル
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 保存完了通知トースト */}
+      {saveStatus === 'success' && (
+        <div className="fixed bottom-6 right-6 z-50 bg-emerald-600 text-white border border-emerald-400 px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-bounce">
+          <Check className="w-5 h-5 bg-emerald-500 rounded-full p-0.5 text-white" />
+          <div className="flex flex-col text-left">
+            <span className="font-bold text-sm">反映に成功しました！</span>
+            <span className="text-xs text-emerald-200">Firestoreに最新のマップ情報を同期しました。</span>
+          </div>
+        </div>
+      )}
+      
+      {saveStatus === 'error' && (
+        <div className="fixed bottom-6 right-6 z-50 bg-red-600 text-white border border-red-400 px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 bg-red-500 rounded-full p-0.5 text-white animate-pulse" />
+          <div className="flex flex-col text-left">
+            <span className="font-bold text-sm">反映エラー</span>
+            <span className="text-xs text-red-200">マップ情報の保存に失敗しました。</span>
           </div>
         </div>
       )}

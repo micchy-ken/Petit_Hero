@@ -37,25 +37,37 @@ export const BossAssets: Record<string, EnemyAsset[]> = {
   ],
 };
 
+let dynamicEnemyAssets: Record<string, EnemyAsset[]> | null = null;
+let dynamicBossAssets: Record<string, EnemyAsset[]> | null = null;
+
+export const setDynamicAssets = (enemies: Record<string, EnemyAsset[]>, bosses: Record<string, EnemyAsset[]>) => {
+  dynamicEnemyAssets = enemies;
+  dynamicBossAssets = bosses;
+};
+
 export const getAvailableEnemies = (bgMode: string) => {
-  if (bgMode === 'text-black') return EnemyAssets['text-black'];
-  if (bgMode === 'stone-gray') return EnemyAssets['stone-gray'];
-  return EnemyAssets['color'];
+  const assets = dynamicEnemyAssets || EnemyAssets;
+  if (bgMode === 'text-black') return assets['text-black'] || [];
+  if (bgMode === 'stone-gray') return assets['stone-gray'] || [];
+  return assets['color'] || [];
 };
 
 export const getAvailableBosses = (bgMode: string) => {
-  if (bgMode === 'text-black') return BossAssets['text-black'];
-  if (bgMode === 'stone-gray') return BossAssets['stone-gray'];
-  return BossAssets['color'];
+  const assets = dynamicBossAssets || BossAssets;
+  if (bgMode === 'text-black') return assets['text-black'] || [];
+  if (bgMode === 'stone-gray') return assets['stone-gray'] || [];
+  return assets['color'] || [];
 };
 
 export const getEnemyAssetById = (id: string): EnemyAsset | undefined => {
-  for (const bgMode in EnemyAssets) {
-    const found = EnemyAssets[bgMode].find(e => e.id === id);
+  const enemies = dynamicEnemyAssets || EnemyAssets;
+  const bosses = dynamicBossAssets || BossAssets;
+  for (const bgMode in enemies) {
+    const found = enemies[bgMode].find(e => e.id === id);
     if (found) return found;
   }
-  for (const bgMode in BossAssets) {
-    const found = BossAssets[bgMode].find(e => e.id === id);
+  for (const bgMode in bosses) {
+    const found = bosses[bgMode].find(e => e.id === id);
     if (found) return found;
   }
   return undefined;

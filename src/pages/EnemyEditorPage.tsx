@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save, Ghost, Loader2 } from 'lucide-react';
 import { EnemyAssets as initialEnemyAssets, BossAssets as initialBossAssets, EnemyAsset } from '../data/EnemyAssets';
+import { fetchEnemyAssetsFromFirestore, saveEnemyAssetsToFirestore } from '../lib/dbService';
 
 type BgMode = 'text-black' | 'stone-gray' | 'color';
 
@@ -224,7 +225,26 @@ export default function EnemyEditorPage() {
   const [selectedBgMode, setSelectedBgMode] = useState<BgMode>('text-black');
   const [selectedEnemyId, setSelectedEnemyId] = useState<string>('');
 
+  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Load enemy assets from Firestore on mount
+  useEffect(() => {
+    async function loadAssets() {
+      try {
+        const assets = await fetchEnemyAssetsFromFirestore();
+        if (assets) {
+          setEnemyAssets(assets.enemyAssets);
+          setBossAssets(assets.bossAssets);
+        }
+      } catch (e) {
+        console.error('Failed to load assets from Firestore:', e);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadAssets();
+  }, []);
 
   // Initialize selected enemy
   useEffect(() => {
@@ -258,22 +278,25 @@ export default function EnemyEditorPage() {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      const response = await fetch('/api/save-enemies', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enemyAssets, bossAssets })
-      });
-      if (response.ok) {
-        alert('Saved successfully!');
-      } else {
-        alert('Failed to save');
-      }
-    } catch (e) {
+      await saveEnemyAssetsToFirestore(enemyAssets, bossAssets);
+      alert('正常に保存されました！💾');
+    } catch (e: any) {
       console.error(e);
-      alert('Error saving enemies');
+      alert('保存に失敗しました: ' + e.message);
     }
     setIsSaving(false);
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+          <span className="text-sm font-medium text-slate-500">データを読み込み中...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col text-slate-800 font-sans">
