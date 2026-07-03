@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { PhaserGameContainer } from '../components/PhaserGameContainer';
 import { Gamepad2, Layers, Cpu, ShieldCheck, Loader2 } from 'lucide-react';
 import { MapData } from '../types/MapData';
-import { fetchMapsFromFirestore, fetchEnemyAssetsFromFirestore } from '../lib/dbService';
 import { allMaps as importedMaps } from '../data/maps';
 
 export default function GamePage() {
@@ -11,13 +10,13 @@ export default function GamePage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    async function loadGameData() {
-      try {
-        // Load enemy assets from Firestore first, so they are available in Phaser
-        await fetchEnemyAssetsFromFirestore();
-
-        // Load maps from Firestore
-        let loadedMaps = await fetchMapsFromFirestore();
+    fetch('/api/maps?t=' + Date.now(), { cache: 'no-store' })
+      .then(res => {
+        if (!res.ok) throw new Error('API not available');
+        return res.json();
+      })
+      .then(data => {
+        let loadedMaps = Array.isArray(data) ? data : [];
         const hasBeginning = loadedMaps.some((m: MapData) => m.id === 'map_beginning');
         if (!hasBeginning) {
           const beginningMap = importedMaps.find((m: MapData) => m.id === 'map_beginning') || importedMaps[0];
@@ -31,17 +30,15 @@ export default function GamePage() {
         } else if (loadedMaps.length > 0) {
           setCurrentMapId(loadedMaps[0].id);
         }
-      } catch (e: any) {
-        console.warn("Using bundled static maps for game due to load error:", e.message);
+        setIsLoading(false);
+      })
+      .catch(e => {
+        console.warn("Using bundled static maps for game:", e.message);
         setAllMaps(importedMaps);
         const defaultId = importedMaps.some((m: MapData) => m.id === 'map_beginning') ? 'map_beginning' : (importedMaps[0]?.id || '');
         setCurrentMapId(defaultId);
-      } finally {
         setIsLoading(false);
-      }
-    }
-
-    loadGameData();
+      });
   }, []);
 
   if (isLoading) {

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import Phaser from 'phaser';
 import { GridMovementScene, HeroState, Direction, ActionLog } from '../phaser/GridMovementScene';
 import { Play, Pause, RotateCcw, Eye, EyeOff, Sparkles, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Gauge, Grid, Image as ImageIcon, Heart, Sword, Star, Settings, X, Move, Flame, Zap, Map, Menu, User, Brain, Shield, Ghost } from 'lucide-react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 import { MapData } from '../types/MapData';
 
@@ -20,13 +20,9 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
   const sceneRef = useRef<GridMovementScene | null>(null);
   const lastLevelRef = useRef<number>(1);
   const navigate = useNavigate();
-  const location = useLocation();
-
-  const showSettingsOnInit = location.search.includes('settings=true') || location.hash.includes('settings=true');
 
   // UIステータス
-  const [showSettings, setShowSettings] = useState(showSettingsOnInit);
-  const [isTurbo, setIsTurbo] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [heroState, setHeroState] = useState<HeroState>({
     gridX: 7,
     gridY: 7,
@@ -117,16 +113,8 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
             scene.mapData = startMap;
             scene.gridCols = startMap.width;
             scene.gridRows = startMap.height;
-            scene.onTestPlayClear = onTestPlayClear ? () => {
-              setIsTurbo(false);
-              scene.isTurboActive = false;
-              onTestPlayClear();
-            } : undefined;
-            scene.onTeleport = onTeleport ? (targetMapId) => {
-              setIsTurbo(false);
-              scene.isTurboActive = false;
-              onTeleport(targetMapId);
-            } : undefined;
+            scene.onTestPlayClear = onTestPlayClear;
+            scene.onTeleport = onTeleport;
             
             // Apply map styles using scene's central method
             scene.applyMapSettings(startMap.bgMode, startMap.bgImage);
@@ -141,7 +129,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
             setDisplayMode(mode);
             setUseGrassBg(isImg);
             setIsHd2d(isImg);
-            setAllow8Way(false);
+            setAllow8Way(isImg);
             const targetSpeed = isImg ? 500 : isGrass ? 600 : isText ? 1000 : 800;
             setSpeed(targetSpeed);
             scene.setSpeed(targetSpeed);
@@ -194,10 +182,6 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
       const scene = sceneRef.current;
       const targetMap = maps.find(m => m.id === initialMapId);
       if (targetMap && (targetMap.id !== scene.mapData?.id || targetMap !== scene.mapData)) {
-        // マップ切り替え時はターボを安全のために強制リセット
-        setIsTurbo(false);
-        scene.isTurboActive = false;
-
         const fromMapId = scene.mapData?.id || null;
         scene.mapData = targetMap;
         scene.gridCols = targetMap.width;
@@ -214,7 +198,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
         setDisplayMode(mode);
         setUseGrassBg(isImg);
         setIsHd2d(isImg);
-        setAllow8Way(false);
+        setAllow8Way(isImg);
         const targetSpeed = isImg ? 500 : isGrass ? 600 : isText ? 1000 : 800;
         setSpeed(targetSpeed);
         scene.setSpeed(targetSpeed);
@@ -246,28 +230,6 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
       sceneRef.current.combatBehavior = combatBehavior;
     }
   }, [combatBehavior]);
-
-  useEffect(() => {
-    if (sceneRef.current) {
-      const scene = sceneRef.current;
-      scene.onTestPlayClear = onTestPlayClear ? () => {
-        setIsTurbo(false);
-        scene.isTurboActive = false;
-        onTestPlayClear();
-      } : undefined;
-    }
-  }, [onTestPlayClear]);
-
-  useEffect(() => {
-    if (sceneRef.current) {
-      const scene = sceneRef.current;
-      scene.onTeleport = onTeleport ? (targetMapId) => {
-        setIsTurbo(false);
-        scene.isTurboActive = false;
-        onTeleport(targetMapId);
-      } : undefined;
-    }
-  }, [onTeleport]);
 
   useEffect(() => {
     if (sceneRef.current) {
@@ -375,47 +337,31 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                 </div>
               </div>
               {/* Virtual Pad / Auto Toggle Overlay */}
-              {autoMode !== 'none' ? (
-                <div className="absolute bottom-4 left-4 z-20 flex flex-col gap-2">
-                  <button
-                    onPointerDown={() => {
-                      setIsTurbo(true);
-                      if (sceneRef.current) sceneRef.current.isTurboActive = true;
-                    }}
-                    onPointerUp={() => {
-                      setIsTurbo(false);
-                      if (sceneRef.current) sceneRef.current.isTurboActive = false;
-                    }}
-                    onPointerLeave={() => {
-                      setIsTurbo(false);
-                      if (sceneRef.current) sceneRef.current.isTurboActive = false;
-                    }}
-                    onPointerCancel={() => {
-                      setIsTurbo(false);
-                      if (sceneRef.current) sceneRef.current.isTurboActive = false;
-                    }}
-                    className={`px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-black rounded-xl shadow-lg border border-orange-400/50 flex items-center justify-center gap-1.5 select-none transition-all duration-150 active:scale-95 ${
-                      isTurbo ? 'brightness-125 scale-105 animate-pulse border-orange-300' : 'hover:brightness-110'
-                    }`}
-                    style={{ touchAction: 'none' }}
-                    title="押している間だけ0msで自動行動します"
-                  >
-                    <Flame className={`w-4 h-4 ${isTurbo ? 'animate-bounce' : ''}`} />
-                    TURBO
-                  </button>
+              <div className="absolute bottom-4 left-4 z-20 flex flex-col gap-2">
+                <button
+                  onClick={() => handleSpeedChange(speed <= 50 ? (isHd2d ? 500 : 800) : 50)}
+                  className={`text-xs font-bold px-4 py-2 rounded-xl shadow-lg backdrop-blur-sm transition-all border flex items-center justify-center gap-1.5 w-max ${
+                    speed <= 50
+                      ? 'bg-amber-500/90 hover:bg-amber-500 text-white border-amber-400'
+                      : 'bg-black/40 hover:bg-black/60 text-amber-400 border-white/20'
+                  }`}
+                >
+                  <Zap className="w-4 h-4" />
+                  TURBO
+                </button>
+                {autoMode !== 'none' ? (
                   <button
                     onClick={() => {
                       setAutoMode('none');
                       sceneRef.current?.setAutoMode('none');
                     }}
-                    className="bg-emerald-600/80 hover:bg-emerald-600 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-lg backdrop-blur-sm transition-all border border-emerald-400/50 flex items-center justify-center gap-1.5"
+                    className="bg-emerald-600/80 hover:bg-emerald-600 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-lg backdrop-blur-sm transition-all border border-emerald-400/50 flex items-center gap-1.5"
                   >
                     <Play className="w-4 h-4" />
                     AUTO
                   </button>
-                </div>
-              ) : (
-                <div className="absolute bottom-4 left-4 z-20">
+                ) : (
+                  <div>
                   <div className="grid grid-cols-3 gap-1 bg-slate-800/60 p-2.5 rounded-2xl backdrop-blur-sm border border-white/10 shadow-lg">
                     {/* Row 1: Up */}
                     <div />
@@ -444,7 +390,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                       className="bg-white/20 hover:bg-white/30 active:bg-white/40 w-12 h-12 rounded-xl flex items-center justify-center transition-colors shadow-sm"
                     ><ArrowRight className="w-6 h-6 text-white" /></button>
 
-                    {/* Row 3: Return to Auto (✕), Down, Empty */}
+                    {/* Row 3: Close (✕), Down, Empty */}
                     <button 
                       onClick={() => {
                         setAutoMode('seek');
@@ -465,6 +411,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                   </div>
                 </div>
               )}
+              </div>
 
               {/* アクションログオーバーレイ (最新5件) */}
               <div className="absolute bottom-2 right-2 w-96 pointer-events-none flex flex-col justify-end gap-1 z-10 p-2">
@@ -674,7 +621,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                   </div>
                   <input
                     type="range"
-                    min="150"
+                    min="50"
                     max="1000"
                     step="50"
                     value={speed}
@@ -682,7 +629,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                     className="w-full accent-emerald-600 h-2 bg-slate-100 rounded-lg cursor-pointer"
                   />
                   <div className="flex justify-between text-xs text-slate-400">
-                    <span>Fast (150ms)</span>
+                    <span>Fast (50ms)</span>
                     <span>Slow (1000ms)</span>
                   </div>
                 </div>

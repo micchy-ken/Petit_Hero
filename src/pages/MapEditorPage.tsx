@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Box, Gem, Zap, Plus, Map as MapIcon, Save, Settings, Play, Loader2, RefreshCw, Check, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Box, Gem, Zap, Plus, Map as MapIcon, Save, Settings, Play, Loader2, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MapData } from '../types/MapData';
 import { getAvailableEnemies, getAvailableBosses } from '../data/EnemyAssets';
 import { PhaserGameContainer } from '../components/PhaserGameContainer';
 import { allMaps } from '../data/maps';
-import { fetchMapsFromFirestore, saveMapToFirestore, fetchEnemyAssetsFromFirestore } from '../lib/dbService';
 // @ts-ignore
 import grassBgUrl from '../../public/grass_bg_1782776475818.jpg';
 
@@ -17,108 +16,41 @@ export default function MapEditorPage() {
   const [isTestPlay, setIsTestPlay] = useState(false);
   const [showClearModal, setShowClearModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+  const [isSaving, setIsSaving] = useState(false);
 
-  const [initialMaps, setInitialMaps] = useState<MapData[]>([]);
-  const [pendingTransition, setPendingTransition] = useState<{
-    type: 'switch_map' | 'go_back';
-    targetMapId?: string;
-  } | null>(null);
-
-  const loadMapsFromFirestoreDB = async (isInitial = false) => {
-    try {
-      // Load custom enemy assets first to override local assets
-      await fetchEnemyAssetsFromFirestore();
-
-      // Load maps
-      let loadedMaps = await fetchMapsFromFirestore();
-      
-      // Ensure map_beginning is always present in the selection list to preserve consistency
-      const hasBeginning = loadedMaps.some((m: MapData) => m.id === 'map_beginning');
-      if (!hasBeginning) {
-        const beginningMap = allMaps.find((m: MapData) => m.id === 'map_beginning') || allMaps[0];
-        loadedMaps = [beginningMap, ...loadedMaps];
-      }
-      setMaps(loadedMaps);
-      setInitialMaps(JSON.parse(JSON.stringify(loadedMaps)));
-      
-      if (isInitial) {
+  useEffect(() => {
+    fetch('/api/maps?t=' + Date.now(), { cache: 'no-store' })
+      .then(res => {
+        if (!res.ok) throw new Error('API not available');
+        return res.json();
+      })
+      .then(data => {
+        let loadedMaps = Array.isArray(data) ? data : [];
+        // Ensure map_beginning is always present in the selection list to preserve consistency
+        const hasBeginning = loadedMaps.some((m: MapData) => m.id === 'map_beginning');
+        if (!hasBeginning) {
+          const beginningMap = allMaps.find((m: MapData) => m.id === 'map_beginning') || allMaps[0];
+          loadedMaps = [beginningMap, ...loadedMaps];
+        }
+        setMaps(loadedMaps);
+        
         // Select 'map_beginning' as the default current map if it is available
         const defaultId = loadedMaps.some((m: MapData) => m.id === 'map_beginning')
           ? 'map_beginning'
           : (loadedMaps[0]?.id || '');
         setCurrentMapId(defaultId);
-      } else {
-        // Keep current selection if it still exists
-        if (currentMapId && !loadedMaps.some((m: MapData) => m.id === currentMapId)) {
-          const defaultId = loadedMaps.some((m: MapData) => m.id === 'map_beginning')
-            ? 'map_beginning'
-            : (loadedMaps[0]?.id || '');
-          setCurrentMapId(defaultId);
-        }
-      }
-    } catch (e: any) {
-      console.warn("Fallback to bundled static maps:", e.message);
-      setMaps(allMaps);
-      setInitialMaps(JSON.parse(JSON.stringify(allMaps)));
-      if (isInitial) {
+        setIsLoading(false);
+      })
+      .catch(e => {
+        console.warn("Using bundled static maps:", e.message);
+        setMaps(allMaps);
         const defaultId = allMaps.some((m: MapData) => m.id === 'map_beginning')
           ? 'map_beginning'
           : (allMaps[0]?.id || '');
         setCurrentMapId(defaultId);
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadMapsFromFirestoreDB(true);
+        setIsLoading(false);
+      });
   }, []);
-
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      const anyDirty = maps.some(m => {
-        const original = initialMaps.find(o => o.id === m.id);
-        return !original ? true : JSON.stringify(m) !== JSON.stringify(original);
-      });
-      if (anyDirty) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [maps, initialMaps]);
-
-  const isMapDirty = (mapId: string) => {
-    const current = maps.find(m => m.id === mapId);
-    const original = initialMaps.find(m => m.id === mapId);
-    if (!current) return false;
-    if (!original) return true;
-    return JSON.stringify(current) !== JSON.stringify(original);
-  };
-
-  const handleMapChange = (targetMapId: string) => {
-    if (isMapDirty(currentMapId)) {
-      setPendingTransition({
-        type: 'switch_map',
-        targetMapId
-      });
-    } else {
-      setCurrentMapId(targetMapId);
-    }
-  };
-
-  const handleBack = () => {
-    if (isMapDirty(currentMapId)) {
-      setPendingTransition({
-        type: 'go_back'
-      });
-    } else {
-      navigate('/?settings=true');
-    }
-  };
 
   const currentMap = maps.find(m => m.id === currentMapId) || maps[0];
 
@@ -290,6 +222,39 @@ export default function MapEditorPage() {
     setEditingEvent(null);
   };
 
+  const handleDeleteMap = async () => {
+    if (maps.length <= 1) {
+      alert("最後のマップは削除できません。");
+      return;
+    }
+    
+    if (!confirm(`本当にマップ「${currentMap?.name}」を削除しますか？`)) {
+      return;
+    }
+    
+    setIsSaving(true);
+    try {
+      const res = await fetch("/api/delete-map", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: currentMapId })
+      });
+      if (!res.ok) {
+        throw new Error("Failed to delete map");
+      }
+      
+      const newMaps = maps.filter(m => m.id !== currentMapId);
+      setMaps(newMaps);
+      setCurrentMapId(newMaps[0].id);
+      
+    } catch (e) {
+      console.error(e);
+      alert("マップの削除に失敗しました。");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleCreateNewMap = () => {
     if (!newMapName) return;
     const newId = `map_${Date.now()}`;
@@ -341,71 +306,26 @@ export default function MapEditorPage() {
     setMaps(maps.map(m => m.id === currentMapId ? { ...m, ...finalUpdates } : m));
   };
 
-  const handleSave = async (silent = false): Promise<boolean> => {
-    console.log("Attempting to save map to Firestore:", currentMap);
-    if (!silent) {
-      setSaveStatus('saving');
-    }
+  const handleSave = async () => {
+    console.log("Attempting to save map:", currentMap);
     try {
-      await saveMapToFirestore(currentMap);
-      if (!silent) {
-        setSaveStatus('success');
-        setTimeout(() => {
-          setSaveStatus('idle');
-        }, 3000);
-      }
-      setInitialMaps(prev => {
-        const exists = prev.some(m => m.id === currentMapId);
-        if (!exists) {
-          return [...prev, JSON.parse(JSON.stringify(currentMap))];
-        }
-        return prev.map(m => m.id === currentMapId ? JSON.parse(JSON.stringify(currentMap)) : m);
+      const response = await fetch('/api/save-map', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(currentMap)
       });
-      return true;
-    } catch (e: any) {
-      console.error("Save error:", e);
-      if (!silent) {
-        setSaveStatus('error');
-        setTimeout(() => {
-          setSaveStatus('idle');
-        }, 3500);
-      }
-      alert('保存エラー: ' + e.message);
-      return false;
-    }
-  };
-
-  const handleConfirmTransitionYes = async () => {
-    if (!pendingTransition) return;
-    const success = await handleSave(true);
-    if (success) {
-      if (pendingTransition.type === 'switch_map') {
-        setCurrentMapId(pendingTransition.targetMapId!);
-      } else if (pendingTransition.type === 'go_back') {
-        navigate('/?settings=true');
-      }
-      setPendingTransition(null);
-    }
-  };
-
-  const handleConfirmTransitionNo = () => {
-    if (!pendingTransition) return;
-    if (pendingTransition.type === 'switch_map') {
-      const originalMap = initialMaps.find(m => m.id === currentMapId);
-      if (originalMap) {
-        setMaps(prev => prev.map(m => m.id === currentMapId ? JSON.parse(JSON.stringify(originalMap)) : m));
+      console.log("Save response status:", response.status);
+      if (response.ok) {
+        alert('保存しました (Reflected to JS file)');
       } else {
-        setMaps(prev => prev.filter(m => m.id !== currentMapId));
+        const errorText = await response.text();
+        console.error("Save failed:", errorText);
+        alert('保存に失敗しました: ' + errorText);
       }
-      setCurrentMapId(pendingTransition.targetMapId!);
-    } else if (pendingTransition.type === 'go_back') {
-      navigate('/?settings=true');
+    } catch (e) {
+      console.error("Save error:", e);
+      alert('保存エラー: サーバーが起動していない可能性があります');
     }
-    setPendingTransition(null);
-  };
-
-  const handleConfirmTransitionCancel = () => {
-    setPendingTransition(null);
   };
 
   if (isLoading) {
@@ -462,7 +382,7 @@ export default function MapEditorPage() {
       <header className="w-full bg-gradient-to-b from-slate-600 to-slate-700 border-b border-slate-500 shadow-lg px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <button 
-            onClick={handleBack}
+            onClick={() => navigate('/')}
             className="p-2 bg-slate-800 hover:bg-slate-900 rounded border border-slate-600 transition-colors shadow-inner flex items-center justify-center"
           >
             <ArrowLeft className="w-5 h-5 text-slate-300" />
@@ -480,38 +400,9 @@ export default function MapEditorPage() {
           </button>
           <button 
             onClick={handleSave}
-            disabled={saveStatus !== 'idle'}
-            className={`flex items-center gap-2 px-4 py-2 text-white rounded font-bold shadow transition-all duration-300 ${
-              saveStatus === 'idle' ? 'bg-emerald-600 hover:bg-emerald-500 active:scale-95' :
-              saveStatus === 'saving' ? 'bg-amber-600 cursor-not-allowed opacity-85 animate-pulse' :
-              saveStatus === 'success' ? 'bg-teal-500 shadow-[0_0_15px_rgba(20,184,166,0.6)]' :
-              'bg-red-600'
-            }`}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-bold shadow transition-colors"
           >
-            {saveStatus === 'idle' && (
-              <>
-                <Save className="w-4 h-4" />
-                <span>反映 (Save)</span>
-              </>
-            )}
-            {saveStatus === 'saving' && (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>反映中...</span>
-              </>
-            )}
-            {saveStatus === 'success' && (
-              <>
-                <Check className="w-4 h-4 text-teal-100 animate-bounce" />
-                <span>反映完了！</span>
-              </>
-            )}
-            {saveStatus === 'error' && (
-              <>
-                <AlertCircle className="w-4 h-4 text-red-100" />
-                <span>保存失敗</span>
-              </>
-            )}
+            <Save className="w-4 h-4" /> 反映 (Save)
           </button>
           <span className="text-sm text-slate-300">
             {currentMap.name} ({currentMap.width}x{currentMap.height})
@@ -536,7 +427,7 @@ export default function MapEditorPage() {
             <div className="flex flex-col gap-2">
               <select 
                 value={currentMapId}
-                onChange={(e) => handleMapChange(e.target.value)}
+                onChange={(e) => setCurrentMapId(e.target.value)}
                 className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 outline-none focus:border-slate-400"
               >
                 {maps.map(m => (
@@ -545,37 +436,19 @@ export default function MapEditorPage() {
               </select>
               
               <button 
-                onClick={async () => {
-                  const anyDirty = maps.some(m => {
-                    const original = initialMaps.find(o => o.id === m.id);
-                    return !original ? true : JSON.stringify(m) !== JSON.stringify(original);
-                  });
-                  if (anyDirty) {
-                    if (!confirm('未保存の変更があります。変更を破棄してFirestoreの最新データと同期しますか？')) {
-                      return;
-                    }
-                  }
-                  setIsLoading(true);
-                  try {
-                    await loadMapsFromFirestoreDB(false);
-                    alert('Firestoreの最新状態を同期しました。🔄');
-                  } catch (err: any) {
-                    alert('同期エラー: ' + err.message);
-                  } finally {
-                    setIsLoading(false);
-                  }
-                }}
-                className="flex items-center justify-center gap-2 w-full px-3 py-2 bg-blue-700 hover:bg-blue-600 rounded text-sm transition-colors border border-blue-500 shadow-inner"
-                title="Firestoreのマップデータを再読込して同期します"
-              >
-                <RefreshCw className="w-4 h-4" /> Firestore同期 (更新)
-              </button>
-              
-              <button 
                 onClick={() => setShowNewMapModal(true)}
                 className="flex items-center justify-center gap-2 w-full px-3 py-2 bg-emerald-700 hover:bg-emerald-600 rounded text-sm transition-colors border border-emerald-500 shadow-inner"
               >
                 <Plus className="w-4 h-4" /> 新規マップ作成
+              </button>
+              
+              <button 
+                onClick={handleDeleteMap}
+                disabled={maps.length <= 1 || isSaving}
+                className="flex items-center justify-center gap-2 w-full px-3 py-2 bg-red-900/50 hover:bg-red-800 text-red-200 rounded text-sm transition-colors border border-red-700/50 shadow-inner disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                マップを削除
               </button>
             </div>
           </div>
@@ -1179,71 +1052,6 @@ export default function MapEditorPage() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* 未保存変更確認モーダル */}
-      {pendingTransition && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 animate-in fade-in">
-          <div 
-            className="bg-slate-800 border-2 border-slate-500 rounded-xl p-6 max-w-md w-full shadow-2xl relative animate-in zoom-in-95"
-            style={{
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.15), 0 10px 25px rgba(0,0,0,0.6)',
-              background: 'linear-gradient(135deg, #1e293b, #0f172a)'
-            }}
-          >
-            <div className="flex items-center gap-3 mb-4">
-              <Settings className="w-6 h-6 text-yellow-500" />
-              <h3 className="text-lg font-bold text-slate-100 tracking-wider">未保存の変更があります</h3>
-            </div>
-            
-            <p className="text-slate-300 text-sm mb-6 leading-relaxed">
-              マップ「<span className="text-emerald-400 font-semibold">{currentMap.name}</span>」の編集内容が保存（反映）されていません。<br />
-              移動する前に変更内容を反映しますか？
-            </p>
-            
-            <div className="flex flex-col sm:flex-row gap-3 justify-end">
-              <button
-                onClick={handleConfirmTransitionYes}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded shadow transition-colors text-sm flex items-center justify-center gap-2"
-              >
-                <Save className="w-4 h-4" /> はい (反映する)
-              </button>
-              <button
-                onClick={handleConfirmTransitionNo}
-                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded shadow transition-colors text-sm flex items-center justify-center gap-2"
-              >
-                いいえ (破棄する)
-              </button>
-              <button
-                onClick={handleConfirmTransitionCancel}
-                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 border border-slate-600 rounded shadow transition-colors text-sm"
-              >
-                キャンセル
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 保存完了通知トースト */}
-      {saveStatus === 'success' && (
-        <div className="fixed bottom-6 right-6 z-50 bg-emerald-600 text-white border border-emerald-400 px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-bounce">
-          <Check className="w-5 h-5 bg-emerald-500 rounded-full p-0.5 text-white" />
-          <div className="flex flex-col text-left">
-            <span className="font-bold text-sm">反映に成功しました！</span>
-            <span className="text-xs text-emerald-200">Firestoreに最新のマップ情報を同期しました。</span>
-          </div>
-        </div>
-      )}
-      
-      {saveStatus === 'error' && (
-        <div className="fixed bottom-6 right-6 z-50 bg-red-600 text-white border border-red-400 px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 bg-red-500 rounded-full p-0.5 text-white animate-pulse" />
-          <div className="flex flex-col text-left">
-            <span className="font-bold text-sm">反映エラー</span>
-            <span className="text-xs text-red-200">マップ情報の保存に失敗しました。</span>
           </div>
         </div>
       )}

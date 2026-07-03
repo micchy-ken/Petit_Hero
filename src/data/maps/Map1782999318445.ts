@@ -18,11 +18,8 @@ export const Map1782999318445: MapData = {
   ],
   "items": [],
   "enemies": [
-    "color_goblin",
-    "color_bat",
-    "color_slime_red"
+    "color_goblin"
   ],
   "bgImage": "grass_bg_1782776475818.jpg"
 };
-
-
+// Updated by editor
