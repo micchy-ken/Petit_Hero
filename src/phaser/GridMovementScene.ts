@@ -260,7 +260,7 @@ export class GridMovementScene extends Phaser.Scene {
       });
     });
 
-    // スライムのアニメーション
+    // スライムのアニメーション (ブルー)
     this.anims.create({
       key: 'slime-idle',
       frames: [{ key: 'slime_spritesheet', frame: 0 }],
@@ -275,6 +275,42 @@ export class GridMovementScene extends Phaser.Scene {
     this.anims.create({
       key: 'slime-jump',
       frames: [{ key: 'slime_spritesheet', frame: 3 }],
+      frameRate: 1
+    });
+
+    // スライムのアニメーション (グリーン)
+    this.anims.create({
+      key: 'slime-idle-green',
+      frames: [{ key: 'slime_spritesheet_green', frame: 0 }],
+      frameRate: 1
+    });
+    this.anims.create({
+      key: 'slime-shake-green',
+      frames: this.anims.generateFrameNumbers('slime_spritesheet_green', { start: 1, end: 2 }),
+      frameRate: 12,
+      repeat: -1
+    });
+    this.anims.create({
+      key: 'slime-jump-green',
+      frames: [{ key: 'slime_spritesheet_green', frame: 3 }],
+      frameRate: 1
+    });
+
+    // スライムのアニメーション (レッド)
+    this.anims.create({
+      key: 'slime-idle-red',
+      frames: [{ key: 'slime_spritesheet_red', frame: 0 }],
+      frameRate: 1
+    });
+    this.anims.create({
+      key: 'slime-shake-red',
+      frames: this.anims.generateFrameNumbers('slime_spritesheet_red', { start: 1, end: 2 }),
+      frameRate: 12,
+      repeat: -1
+    });
+    this.anims.create({
+      key: 'slime-jump-red',
+      frames: [{ key: 'slime_spritesheet_red', frame: 3 }],
       frameRate: 1
     });
 
@@ -497,11 +533,6 @@ export class GridMovementScene extends Phaser.Scene {
   }
 
   public update(time: number, delta: number) {
-    // Turboモードが有効で自動移動中、かつ移動中でない場合は、次の移動判定を即座に処理する（0ms移動を実現）
-    if (this.isTurboActive && this.autoMode !== 'none' && !this.isMoving) {
-      this.checkAndMoveRandomly();
-    }
-
     // 通常モード (レベル8以上) のみ、火の魔法と氷の魔法をサポート
     if (this.heroLevel >= 8) {
       // 火の魔法 自動詠唱 (3秒に1回、敵がいる場合)
@@ -892,17 +923,20 @@ export class GridMovementScene extends Phaser.Scene {
 
     // スライム系
     let tex = 'slime_spritesheet';
+    let slimeColorSuffix = suffix;
     if (isGray) {
       tex = 'slime_spritesheet_gray';
     } else if (enemyId === 'color_slime_green') {
       tex = 'slime_spritesheet_green';
+      slimeColorSuffix = '-green';
     } else if (enemyId === 'color_slime_red') {
       tex = 'slime_spritesheet_red';
+      slimeColorSuffix = '-red';
     }
 
-    let anim = `slime-idle${suffix}`;
-    if (action === 'shake') anim = `slime-shake${suffix}`;
-    if (action === 'jump') anim = `slime-jump${suffix}`;
+    let anim = `slime-idle${slimeColorSuffix}`;
+    if (action === 'shake') anim = `slime-shake${slimeColorSuffix}`;
+    if (action === 'jump') anim = `slime-jump${slimeColorSuffix}`;
 
     return { texture: tex, anim };
   }
@@ -1772,8 +1806,8 @@ export class GridMovementScene extends Phaser.Scene {
     const targetY = targetGridY * GRID_SIZE + GRID_SIZE / 2;
 
     // プルプルする時間 (移動速度の30%程度、最大150ms)
-    const shakeDuration = Math.min(150, this.moveSpeedMs * 0.3);
-    const moveDuration = this.moveSpeedMs - shakeDuration;
+    const shakeDuration = this.isTurboActive ? 2 : Math.min(150, this.moveSpeedMs * 0.3);
+    const moveDuration = this.isTurboActive ? 18 : (this.moveSpeedMs - shakeDuration);
 
     this.time.delayedCall(shakeDuration, () => {
       if (!slime.sprite || !slime.sprite.active) return;
@@ -1915,7 +1949,7 @@ export class GridMovementScene extends Phaser.Scene {
       targets: this.hero,
       x: targetX,
       y: targetY,
-      duration: this.isTurboActive ? 0 : this.moveSpeedMs,
+      duration: this.isTurboActive ? 20 : this.moveSpeedMs,
       ease: 'Linear',
       onComplete: () => {
         this.currentGridX = targetGridX;
@@ -1938,7 +1972,7 @@ export class GridMovementScene extends Phaser.Scene {
         targets: this.cameras.main,
         scrollX: targetCamGridX * GRID_SIZE,
         scrollY: targetCamGridY * GRID_SIZE,
-        duration: this.isTurboActive ? 0 : this.moveSpeedMs,
+        duration: this.isTurboActive ? 20 : this.moveSpeedMs,
         ease: 'Linear',
         onComplete: () => {
           this.currentCamGridX = targetCamGridX;
@@ -2078,7 +2112,11 @@ export class GridMovementScene extends Phaser.Scene {
   }
 
   public resetPosition(fromMapId?: string | null) {
-    if (this.isMoving) return;
+    // マップ切り替え時は強制的に移動アニメーション等をクリアしてリセットする
+    this.isMoving = false;
+    if (this.tweens) {
+      this.tweens.killAll();
+    }
 
     this.totalEnemiesSpawned = 0;
     this.enemiesDefeated = 0;

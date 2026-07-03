@@ -186,6 +186,10 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
       const scene = sceneRef.current;
       const targetMap = maps.find(m => m.id === initialMapId);
       if (targetMap && (targetMap.id !== scene.mapData?.id || targetMap !== scene.mapData)) {
+        // マップ切り替え時はターボを安全のために強制リセット
+        setIsTurbo(false);
+        scene.isTurboActive = false;
+
         const fromMapId = scene.mapData?.id || null;
         scene.mapData = targetMap;
         scene.gridCols = targetMap.width;
