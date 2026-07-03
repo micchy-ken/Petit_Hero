@@ -4,139 +4,77 @@ export interface EnemyAsset {
   image?: string;
   hp: number;
   attack: number;
-  defense?: number;
-  exp?: number;
+  defense: number;
+  exp: number;
   speed: number;
   behavior: string;
-  attackMethod?: 'melee' | 'fire';
 }
 
 export const EnemyAssets: Record<string, EnemyAsset[]> = {
-  "text-black": [
-    {
-      "id": "text_teki",
-      "name": "敵",
-      "hp": 10,
-      "attack": 2,
-      "speed": 1000,
-      "behavior": "seek"
-    }
+  'text-black': [
+    { id: 'text_teki', name: '敵', hp: 10, attack: 2, defense: 0, exp: 2, speed: 1000, behavior: 'seek' },
   ],
-  "stone-gray": [
-    {
-      "id": "gray_slime",
-      "name": "白黒スライム",
-      "hp": 12,
-      "attack": 3,
-      "speed": 800,
-      "behavior": "seek"
-    }
+  'stone-gray': [
+    { id: 'gray_slime', name: '白黒スライム', hp: 12, attack: 3, defense: 1, exp: 3, speed: 800, behavior: 'seek' },
   ],
-  "color": [
-    {
-      "id": "color_slime_green",
-      "name": "グリーンスライム",
-      "hp": 10,
-      "attack": 2,
-      "speed": 1000,
-      "behavior": "random"
-    },
-    {
-      "id": "color_slime_red",
-      "name": "レッドスライム",
-      "hp": 15,
-      "attack": 4,
-      "speed": 900,
-      "behavior": "seek"
-    },
-    {
-      "id": "color_slime_blue",
-      "name": "ブルースライム",
-      "hp": 12,
-      "attack": 3,
-      "speed": 800,
-      "behavior": "seek"
-    },
-    {
-      "id": "color_goblin",
-      "name": "ゴブリン",
-      "hp": 100,
-      "attack": 8,
-      "speed": 500,
-      "behavior": "seek"
-    },
-    {
-      "id": "color_bat",
-      "name": "コウモリ",
-      "hp": 8,
-      "attack": 2,
-      "speed": 800,
-      "behavior": "random"
-    }
-  ]
+  'color': [
+    { id: 'color_slime_green', name: 'グリーンスライム', hp: 10, attack: 2, defense: 0, exp: 2, speed: 1000, behavior: 'random' },
+    { id: 'color_slime_red', name: 'レッドスライム', hp: 15, attack: 4, defense: 2, exp: 4, speed: 900, behavior: 'seek' },
+    { id: 'color_slime_blue', name: 'ブルースライム', hp: 12, attack: 3, defense: 1, exp: 3, speed: 800, behavior: 'seek' },
+    { id: 'color_goblin', name: 'ゴブリン', hp: 20, attack: 5, defense: 2, exp: 5, speed: 700, behavior: 'seek' },
+    { id: 'color_bat', name: 'コウモリ', hp: 8, attack: 2, defense: 0, exp: 1, speed: 500, behavior: 'random' },
+  ],
 };
 
 export const BossAssets: Record<string, EnemyAsset[]> = {
-  "text-black": [
-    {
-      "id": "text_boss",
-      "name": "ボス",
-      "hp": 50,
-      "attack": 10,
-      "speed": 1200,
-      "behavior": "seek"
-    }
+  'text-black': [
+    { id: 'text_boss', name: 'ボス', hp: 50, attack: 10, defense: 5, exp: 50, speed: 1200, behavior: 'seek' },
   ],
-  "stone-gray": [
-    {
-      "id": "gray_boss",
-      "name": "白黒魔王",
-      "hp": 60,
-      "attack": 12,
-      "speed": 1000,
-      "behavior": "seek"
-    }
+  'stone-gray': [
+    { id: 'gray_boss', name: '白黒魔王', hp: 60, attack: 12, defense: 6, exp: 60, speed: 1000, behavior: 'seek' },
   ],
-  "color": [
-    {
-      "id": "color_dragon",
-      "name": "ドラゴン",
-      "hp": 80,
-      "attack": 15,
-      "speed": 1500,
-      "behavior": "seek"
-    },
-    {
-      "id": "color_demon_king",
-      "name": "魔王",
-      "hp": 100,
-      "attack": 20,
-      "speed": 800,
-      "behavior": "seek"
-    }
-  ]
+  'color': [
+    { id: 'color_dragon', name: 'ドラゴン', hp: 80, attack: 15, defense: 10, exp: 100, speed: 1500, behavior: 'seek' },
+    { id: 'color_demon_king', name: '魔王', hp: 100, attack: 20, defense: 15, exp: 200, speed: 800, behavior: 'seek' },
+  ],
+};
+
+let dynamicEnemyAssets: Record<string, EnemyAsset[]> | null = null;
+let dynamicBossAssets: Record<string, EnemyAsset[]> | null = null;
+
+export const setDynamicAssets = (enemies: Record<string, EnemyAsset[]>, bosses: Record<string, EnemyAsset[]>) => {
+  dynamicEnemyAssets = enemies;
+  dynamicBossAssets = bosses;
 };
 
 export const getAvailableEnemies = (bgMode: string) => {
-  if (bgMode === 'text-black') return EnemyAssets['text-black'];
-  if (bgMode === 'stone-gray') return EnemyAssets['stone-gray'];
-  return EnemyAssets['color'];
+  const assets = dynamicEnemyAssets || EnemyAssets;
+  if (bgMode === 'text-black') return assets['text-black'] || [];
+  if (bgMode === 'stone-gray') return assets['stone-gray'] || [];
+  return assets['color'] || [];
 };
 
 export const getAvailableBosses = (bgMode: string) => {
-  if (bgMode === 'text-black') return BossAssets['text-black'];
-  if (bgMode === 'stone-gray') return BossAssets['stone-gray'];
-  return BossAssets['color'];
+  const assets = dynamicBossAssets || BossAssets;
+  if (bgMode === 'text-black') return assets['text-black'] || [];
+  if (bgMode === 'stone-gray') return assets['stone-gray'] || [];
+  return assets['color'] || [];
 };
 
 export const getEnemyAssetById = (id: string): EnemyAsset | undefined => {
-  for (const bgMode in EnemyAssets) {
-    const found = EnemyAssets[bgMode].find(e => e.id === id);
+  const enemies = dynamicEnemyAssets || EnemyAssets;
+  const bosses = dynamicBossAssets || BossAssets;
+  for (const bgMode in enemies) {
+    const found = enemies[bgMode].find(e => e.id === id);
     if (found) return found;
   }
-  for (const bgMode in BossAssets) {
-    const found = BossAssets[bgMode].find(e => e.id === id);
+  for (const bgMode in bosses) {
+    const found = bosses[bgMode].find(e => e.id === id);
     if (found) return found;
   }
   return undefined;
 };
+
+
+
+

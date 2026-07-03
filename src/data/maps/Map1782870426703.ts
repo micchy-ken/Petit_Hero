@@ -20,7 +20,7 @@ export const Map1782870426703: MapData = {
       "y": 0,
       "type": "teleport",
       "data": {
-        "targetMap": "map_beginning",
+        "targetMap": "map_1782950565893",
         "requiredDefeatRate": 80
       }
     }

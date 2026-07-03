@@ -70,53 +70,7 @@ export const allMaps: MapData[] = [
     }
   });
 
-  
-  app.post("/api/delete-map", (req, res) => {
-    try {
-      const { id } = req.body;
-      if (!id) {
-        return res.status(400).json({ error: "Invalid map id" });
-      }
-
-      let exportName = id
-        .split('_')
-        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-        .join('');
-      
-      if (id === 'map_beginning') {
-        exportName = 'BeginningMap';
-      }
-
-      const fileName = `${exportName}.ts`;
-      const filePath = require('path').join(process.cwd(), "src", "data", "maps", fileName);
-      
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-        console.log(`Successfully deleted file: ${filePath}`);
-      }
-
-      const mapsDir = require('path').join(process.cwd(), "src", "data", "maps");
-      const files = fs.readdirSync(mapsDir);
-      const mapFiles = files.filter(f => f.endsWith(".ts") && f !== "index.ts");
-      
-      const imports = mapFiles.map(f => {
-        const name = f.replace(".ts", "");
-        return `import { ${name} } from './${name}';`;
-      }).join("\n");
-      
-      const exports = mapFiles.map(f => f.replace(".ts", "")).join(",\n  ");
-      
-      const indexContent = `import { MapData } from '../../types/MapData';\n${imports}\n\nexport const allMaps: MapData[] = [\n  ${exports}\n];\n`;
-      fs.writeFileSync(require('path').join(mapsDir, "index.ts"), indexContent);
-      
-      res.json({ success: true });
-    } catch (e) {
-      console.error("Error in /api/delete-map:", e);
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-app.post("/api/save-enemies", (req, res) => {
+  app.post("/api/save-enemies", (req, res) => {
     try {
       const { enemyAssets, bossAssets } = req.body;
       if (!enemyAssets || !bossAssets) {

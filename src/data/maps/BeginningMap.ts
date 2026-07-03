@@ -5,7 +5,8 @@ export const BeginningMap: MapData = {
   "name": "始まり",
   "width": 8,
   "height": 8,
-  "bgMode": "text-black",
+  "bgMode": "image",
+  "bgImage": "grass_bg_1782776475818.jpg",
   "events": [
     {
       "x": 0,

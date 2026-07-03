@@ -26,6 +26,12 @@ export const Map1782950565893: MapData = {
     }
   ],
   "items": [],
-  "enemies": [],
+  "enemies": [
+    "color_slime_green",
+    "color_slime_red",
+    "color_bat"
+  ],
   "maxEnemies": 20
 };
+
+
