@@ -2027,6 +2027,7 @@ export class GridMovementScene extends Phaser.Scene {
       if (eventData.requiredDefeatRate && dRate < eventData.requiredDefeatRate) met = false;
       
       if (met) {
+        this.isTurboActive = false;
         if (this.onTestPlayClear) {
           this.onTestPlayClear();
         } else if (this.onTeleport && eventData.targetMap) {

@@ -117,8 +117,16 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
             scene.mapData = startMap;
             scene.gridCols = startMap.width;
             scene.gridRows = startMap.height;
-            scene.onTestPlayClear = onTestPlayClear;
-            scene.onTeleport = onTeleport;
+            scene.onTestPlayClear = () => {
+              setIsTurbo(false);
+              scene.isTurboActive = false;
+              if (onTestPlayClear) onTestPlayClear();
+            };
+            scene.onTeleport = (targetMapId) => {
+              setIsTurbo(false);
+              scene.isTurboActive = false;
+              if (onTeleport) onTeleport(targetMapId);
+            };
             
             // Apply map styles using scene's central method
             scene.applyMapSettings(startMap.bgMode, startMap.bgImage);

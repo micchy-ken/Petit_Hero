@@ -5,7 +5,7 @@ export const Map1782870426703: MapData = {
   "name": "白黒の世界",
   "width": 16,
   "height": 16,
-  "bgMode": "text-black",
+  "bgMode": "stone-gray",
   "events": [
     {
       "x": 15,
@@ -27,9 +27,7 @@ export const Map1782870426703: MapData = {
   ],
   "items": [],
   "enemies": [
-    "text_teki"
+    "gray_slime"
   ],
   "maxEnemies": 10
 };
-
-

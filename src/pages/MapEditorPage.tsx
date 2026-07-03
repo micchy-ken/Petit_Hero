@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Box, Gem, Zap, Plus, Map as MapIcon, Save, Settings, Play, Loader2 } from 'lucide-react';
+import { ArrowLeft, Box, Gem, Zap, Plus, Map as MapIcon, Save, Settings, Play, Loader2, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MapData } from '../types/MapData';
 import { getAvailableEnemies, getAvailableBosses } from '../data/EnemyAssets';
@@ -23,8 +23,8 @@ export default function MapEditorPage() {
     targetMapId?: string;
   } | null>(null);
 
-  useEffect(() => {
-    fetch('/api/maps?t=' + Date.now(), { cache: 'no-store' })
+  const loadMapsFromContainer = (isInitial = false) => {
+    return fetch('/api/maps?t=' + Date.now(), { cache: 'no-store' })
       .then(res => {
         if (!res.ok) throw new Error('API not available');
         return res.json();
@@ -40,23 +40,39 @@ export default function MapEditorPage() {
         setMaps(loadedMaps);
         setInitialMaps(JSON.parse(JSON.stringify(loadedMaps)));
         
-        // Select 'map_beginning' as the default current map if it is available
-        const defaultId = loadedMaps.some((m: MapData) => m.id === 'map_beginning')
-          ? 'map_beginning'
-          : (loadedMaps[0]?.id || '');
-        setCurrentMapId(defaultId);
+        if (isInitial) {
+          // Select 'map_beginning' as the default current map if it is available
+          const defaultId = loadedMaps.some((m: MapData) => m.id === 'map_beginning')
+            ? 'map_beginning'
+            : (loadedMaps[0]?.id || '');
+          setCurrentMapId(defaultId);
+        } else {
+          // Keep current selection if it still exists
+          if (currentMapId && !loadedMaps.some((m: MapData) => m.id === currentMapId)) {
+            const defaultId = loadedMaps.some((m: MapData) => m.id === 'map_beginning')
+              ? 'map_beginning'
+              : (loadedMaps[0]?.id || '');
+            setCurrentMapId(defaultId);
+          }
+        }
         setIsLoading(false);
       })
       .catch(e => {
         console.warn("Using bundled static maps:", e.message);
         setMaps(allMaps);
         setInitialMaps(JSON.parse(JSON.stringify(allMaps)));
-        const defaultId = allMaps.some((m: MapData) => m.id === 'map_beginning')
-          ? 'map_beginning'
-          : (allMaps[0]?.id || '');
-        setCurrentMapId(defaultId);
+        if (isInitial) {
+          const defaultId = allMaps.some((m: MapData) => m.id === 'map_beginning')
+            ? 'map_beginning'
+            : (allMaps[0]?.id || '');
+          setCurrentMapId(defaultId);
+        }
         setIsLoading(false);
       });
+  };
+
+  useEffect(() => {
+    loadMapsFromContainer(true);
   }, []);
 
   useEffect(() => {
@@ -497,6 +513,33 @@ export default function MapEditorPage() {
                   <option key={m.id} value={m.id}>{m.name} ({m.width}x{m.height})</option>
                 ))}
               </select>
+              
+              <button 
+                onClick={async () => {
+                  const anyDirty = maps.some(m => {
+                    const original = initialMaps.find(o => o.id === m.id);
+                    return !original ? true : JSON.stringify(m) !== JSON.stringify(original);
+                  });
+                  if (anyDirty) {
+                    if (!confirm('未保存の変更があります。変更を破棄してコンテナの最新データと同期しますか？')) {
+                      return;
+                    }
+                  }
+                  setIsLoading(true);
+                  try {
+                    await loadMapsFromContainer(false);
+                    alert('コンテナの最新状態をファイルエクスプローラーに同期しました。🔄');
+                  } catch (err: any) {
+                    alert('同期エラー: ' + err.message);
+                  } finally {
+                    setIsLoading(false);
+                  }
+                }}
+                className="flex items-center justify-center gap-2 w-full px-3 py-2 bg-blue-700 hover:bg-blue-600 rounded text-sm transition-colors border border-blue-500 shadow-inner"
+                title="コンテナのマップ定義ファイルを再読込して同期します"
+              >
+                <RefreshCw className="w-4 h-4" /> エクスプローラー同期 (更新)
+              </button>
               
               <button 
                 onClick={() => setShowNewMapModal(true)}
