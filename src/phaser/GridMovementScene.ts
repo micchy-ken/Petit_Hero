@@ -78,6 +78,11 @@ export class GridMovementScene extends Phaser.Scene {
   private slimes: SlimeData[] = [];
   private itemSprites: { gridX: number, gridY: number, sprite: Phaser.GameObjects.GameObject, itemId: string }[] = [];
   private teleportPortals: { x: number, y: number, container: Phaser.GameObjects.Container, met: boolean }[] = [];
+  // モノローグ管理
+  private monologueContainer?: Phaser.GameObjects.Container;
+  private monologueTextElement?: Phaser.GameObjects.Text;
+  public isShowingMonologue: boolean = false;
+  private pendingTeleportAction: (() => void) | null = null;
 
   // 状態管理
   private currentGridX: number = 7; // 16x16の中央付近(7,7)
@@ -544,6 +549,7 @@ export class GridMovementScene extends Phaser.Scene {
   }
 
   public update(time: number, delta: number) {
+    if (this.isShowingMonologue) return;
     // 通常モード (レベル8以上) のみ、火の魔法と氷の魔法をサポート
     if (this.heroLevel >= 8) {
       // 火の魔法 自動詠唱 (3秒に1回、敵がいる場合)
@@ -1091,6 +1097,7 @@ export class GridMovementScene extends Phaser.Scene {
   }
 
   private checkAndMoveRandomly() {
+    if (this.isShowingMonologue) return;
     if (this.autoMode === 'none') {
       if (this.pointerTargetGridX !== null && this.pointerTargetGridY !== null) {
         if (!this.isMoving) {
@@ -2024,10 +2031,81 @@ export class GridMovementScene extends Phaser.Scene {
     }
   }
 
+  
+  public showMonologue(text: string, onComplete?: () => void) {
+    if (this.isShowingMonologue) return;
+    this.isShowingMonologue = true;
+    this.pendingTeleportAction = onComplete || null;
+
+    if (!this.monologueContainer) {
+      const { width, height } = this.cameras.main;
+      this.monologueContainer = this.add.container(0, 0);
+      this.monologueContainer.setDepth(100);
+      this.monologueContainer.setScrollFactor(0);
+
+      const bg = this.add.rectangle(width / 2, height - (height / 3) / 2 - 10, width - 40, height / 3, 0x000000, 0.8);
+      bg.setStrokeStyle(4, 0x10b981);
+      
+      this.monologueTextElement = this.add.text(40, height - height / 3 + 10, '', {
+        fontFamily: '"Inter", sans-serif',
+        fontSize: '20px',
+        color: '#ffffff',
+        wordWrap: { width: width - 80, useAdvancedWrap: true }
+      });
+      
+      const promptText = this.add.text(width / 2, height - 30, '▼ クリックして進む', {
+        fontFamily: '"Inter", sans-serif',
+        fontSize: '14px',
+        color: '#a7f3d0'
+      }).setOrigin(0.5, 0.5);
+
+      this.monologueContainer.add([bg, this.monologueTextElement, promptText]);
+
+      // Click to dismiss
+      bg.setInteractive({ useHandCursor: true });
+      bg.on('pointerdown', () => {
+        this.dismissMonologue();
+      });
+    }
+
+    this.monologueTextElement?.setText(text);
+    this.monologueContainer.setVisible(true);
+  }
+
+  private dismissMonologue() {
+    if (!this.isShowingMonologue) return;
+    this.isShowingMonologue = false;
+    if (this.monologueContainer) {
+      this.monologueContainer.setVisible(false);
+    }
+    if (this.pendingTeleportAction) {
+      const action = this.pendingTeleportAction;
+      this.pendingTeleportAction = null;
+      action();
+    }
+  }
+
   private checkMapEvents() {
     if (!this.mapData || !this.mapData.events) return;
-    const event = this.mapData.events.find((e: any) => e.x === this.currentGridX && e.y === this.currentGridY);
-    if (event && event.type === 'teleport') {
+    const eventsHere = this.mapData.events.filter((e: any) => e.x === this.currentGridX && e.y === this.currentGridY);
+    const teleportEvent = eventsHere.find((e: any) => e.type === 'teleport');
+    const monologueEvent = eventsHere.find((e: any) => e.type === 'monologue');
+
+    if (monologueEvent) {
+      this.showMonologue(monologueEvent.data?.text || '', () => {
+        if (teleportEvent) {
+          this.handleTeleport(teleportEvent);
+        }
+      });
+      return;
+    }
+
+    if (teleportEvent) {
+      this.handleTeleport(teleportEvent);
+    }
+  }
+
+  private handleTeleport(event: any) {
       const eventData = event.data || {};
       let met = true;
       const expRate = (this.visitedGrids.size / this.totalGrids) * 100;
@@ -2062,7 +2140,6 @@ export class GridMovementScene extends Phaser.Scene {
         if (reqDefeat > 0 && dRate < reqDefeat) reason += ` 撃破率: ${Math.floor(dRate)}% / ${reqDefeat}%`;
         this.sendLog(`イベント発生条件を満たしていません:${reason}`, 'info');
       }
-    }
   }
 
   private spawnStepTrail(px: number, py: number) {
@@ -2216,6 +2293,14 @@ export class GridMovementScene extends Phaser.Scene {
     this.currentDirection = 'idle';
     this.spawnMapItems();
     this.notifyStateChange(false);
+
+    // Initial monologue check
+    if (this.mapData && this.mapData.events) {
+      const monologueEvent = this.mapData.events.find((e: any) => e.type === 'monologue' && e.x === this.currentGridX && e.y === this.currentGridY);
+      if (monologueEvent) {
+        this.showMonologue(monologueEvent.data?.text || '');
+      }
+    }
   }
 
   private spawnMapItems() {

@@ -126,12 +126,13 @@ export default function MapEditorPage() {
   const [placeMode, setPlaceMode] = useState<'obstacle' | 'item' | 'event'>('obstacle');
   
   // イベント配置用の状態
-  const [eventType, setEventType] = useState<'start_point' | 'teleport'>('start_point');
+  const [eventType, setEventType] = useState<'start_point' | 'teleport' | 'monologue'>('start_point');
   const [startPointFromMap, setStartPointFromMap] = useState<string>('');
   const [teleportTargetMap, setTeleportTargetMap] = useState<string>('');
   const [eventCondExpRate, setEventCondExpRate] = useState<number | null>(null);
   const [eventCondSearchRate, setEventCondSearchRate] = useState<number | null>(null);
   const [eventCondDefeatRate, setEventCondDefeatRate] = useState<number | null>(null);
+  const [monologueText, setMonologueText] = useState<string>('');
   
   // アイテム配置用の状態
   const [itemType, setItemType] = useState<string>('treasure_text');
@@ -146,9 +147,10 @@ export default function MapEditorPage() {
     index: number;
     x: number;
     y: number;
-    type: 'start_point' | 'teleport';
+    type: 'start_point' | 'teleport' | 'monologue';
     fromMap: string;
     targetMap: string;
+    text: string;
     requiredExplorationRate: number | null;
     requiredSearchRate: number | null;
     requiredDefeatRate: number | null;
@@ -177,9 +179,10 @@ export default function MapEditorPage() {
           index: existingIndex,
           x: ev.x,
           y: ev.y,
-          type: ev.type as 'start_point' | 'teleport',
+          type: ev.type as 'start_point' | 'teleport' | 'monologue',
           fromMap: ev.data?.fromMap || '',
           targetMap: ev.data?.targetMap || '',
+          text: ev.data?.text || '',
           requiredExplorationRate: ev.data?.requiredExplorationRate ?? null,
           requiredSearchRate: ev.data?.requiredSearchRate ?? null,
           requiredDefeatRate: ev.data?.requiredDefeatRate ?? null,
@@ -199,6 +202,8 @@ export default function MapEditorPage() {
         } else if (eventType === 'teleport') {
           if (!teleportTargetMap) return;
           data = { targetMap: teleportTargetMap };
+        } else if (eventType === 'monologue') {
+          data = { text: monologueText };
         }
         
         if (eventCondExpRate !== null) data.requiredExplorationRate = eventCondExpRate;
@@ -240,12 +245,14 @@ export default function MapEditorPage() {
     let data: any = {};
     if (editingEvent.type === 'start_point') {
       data.fromMap = editingEvent.fromMap || null;
-    } else {
+    } else if (editingEvent.type === 'teleport') {
       if (!editingEvent.targetMap) {
         alert('移動先マップを選択してください');
         return;
       }
       data.targetMap = editingEvent.targetMap;
+    } else if (editingEvent.type === 'monologue') {
+      data.text = editingEvent.text || '';
     }
 
     if (editingEvent.requiredExplorationRate !== null) {
@@ -761,6 +768,7 @@ export default function MapEditorPage() {
                   >
                     <option value="start_point">初期値 (Start Point)</option>
                     <option value="teleport">マップ移動 (Teleport)</option>
+                    <option value="monologue">モノローグ (Monologue)</option>
                   </select>
                 </div>
 
@@ -793,6 +801,19 @@ export default function MapEditorPage() {
                         <option key={m.id} value={m.id}>{m.name}</option>
                       ))}
                     </select>
+                  </div>
+                )}
+
+                {eventType === 'monologue' && (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-slate-400 font-bold uppercase">モノローグテキスト</label>
+                    <textarea 
+                      value={monologueText}
+                      onChange={(e) => setMonologueText(e.target.value)}
+                      className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
+                      rows={3}
+                      placeholder="表示するテキストを入力"
+                    />
                   </div>
                 )}
 
@@ -887,6 +908,11 @@ export default function MapEditorPage() {
                      {hasEvent && hasEvent.type === 'teleport' && (
                         <div className="w-full h-full bg-blue-500/50 flex items-center justify-center text-xs font-bold text-blue-100" title={`移動 (to: ${hasEvent.data?.targetMap})`}>
                           T
+                        </div>
+                     )}
+                     {hasEvent && hasEvent.type === 'monologue' && (
+                        <div className="w-full h-full bg-emerald-500/50 flex items-center justify-center text-xs font-bold text-emerald-100" title={`モノローグ\n${hasEvent.data?.text || ''}`}>
+                          M
                         </div>
                      )}
                      {hasItem && hasItem.itemId === 'treasure_text' && (
@@ -1111,6 +1137,7 @@ export default function MapEditorPage() {
                 >
                   <option value="start_point">初期値 (Start Point)</option>
                   <option value="teleport">マップ移動 (Teleport)</option>
+                  <option value="monologue">モノローグ (Monologue)</option>
                 </select>
               </div>
 
@@ -1143,6 +1170,18 @@ export default function MapEditorPage() {
                       <option key={m.id} value={m.id}>{m.name}</option>
                     ))}
                   </select>
+                </div>
+              )}
+
+              {editingEvent.type === 'monologue' && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-300 font-bold uppercase">モノローグテキスト</label>
+                  <textarea 
+                    value={editingEvent.text}
+                    onChange={(e) => setEditingEvent({ ...editingEvent, text: e.target.value })}
+                    className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                    rows={4}
+                  />
                 </div>
               )}
 
