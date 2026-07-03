@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Box, Gem, Zap, Plus, Map as MapIcon, Save, Settings, Play, Loader2, RefreshCw, Check, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Box, Gem, Zap, Plus, Map as MapIcon, Save, Settings, Play, Loader2, RefreshCw, Check, AlertCircle, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MapData } from '../types/MapData';
 import { getAvailableEnemies, getAvailableBosses } from '../data/EnemyAssets';
 import { PhaserGameContainer } from '../components/PhaserGameContainer';
 import { allMaps } from '../data/maps';
-import { fetchMapsFromFirestore, saveMapToFirestore, fetchEnemyAssetsFromFirestore } from '../lib/dbService';
+import { fetchMapsFromFirestore, saveMapToFirestore, deleteMapFromFirestore, fetchEnemyAssetsFromFirestore } from '../lib/dbService';
 // @ts-ignore
 import grassBgUrl from '../../public/grass_bg_1782776475818.jpg';
 
@@ -312,6 +312,39 @@ export default function MapEditorPage() {
     setNewMapHeight(16);
   };
 
+  const handleDeleteMap = async () => {
+    if (!currentMap) return;
+    
+    if (currentMapId === 'map_beginning') {
+      alert('始まりのマップは削除できません。');
+      return;
+    }
+    
+    if (!window.confirm(`本当にマップ「${currentMap.name}」を削除しますか？\nこの操作は取り消せません。`)) {
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await deleteMapFromFirestore(currentMapId);
+      
+      const newMaps = maps.filter(m => m.id !== currentMapId);
+      setMaps(newMaps);
+      setInitialMaps(newMaps);
+      
+      const defaultId = newMaps.some((m: MapData) => m.id === 'map_beginning')
+        ? 'map_beginning'
+        : (newMaps[0]?.id || '');
+      setCurrentMapId(defaultId);
+      alert('マップを削除しました。');
+    } catch (err: any) {
+      console.error('Error deleting map:', err);
+      alert('削除エラー: ' + err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleUpdateCurrentMap = (updates: Partial<MapData>) => {
     console.log("Updating map with:", updates);
     let finalUpdates = { ...updates };
@@ -577,6 +610,14 @@ export default function MapEditorPage() {
                 className="flex items-center justify-center gap-2 w-full px-3 py-2 bg-emerald-700 hover:bg-emerald-600 rounded text-sm transition-colors border border-emerald-500 shadow-inner"
               >
                 <Plus className="w-4 h-4" /> 新規マップ作成
+              </button>
+
+              <button 
+                onClick={handleDeleteMap}
+                disabled={currentMapId === 'map_beginning'}
+                className="flex items-center justify-center gap-2 w-full px-3 py-2 bg-red-700 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm transition-colors border border-red-500 shadow-inner"
+              >
+                <Trash2 className="w-4 h-4" /> マップ削除
               </button>
             </div>
           </div>
@@ -924,9 +965,9 @@ export default function MapEditorPage() {
                 {[0, 1, 2].map((index) => (
                   <select
                     key={index}
-                    value={currentMap.enemies[index] || ''}
+                    value={(currentMap.enemies || [])[index] || ''}
                     onChange={(e) => {
-                      const newEnemies = [...currentMap.enemies];
+                      const newEnemies = [...(currentMap.enemies || [])];
                       newEnemies[index] = e.target.value;
                       handleUpdateCurrentMap({ enemies: newEnemies.filter(v => v !== undefined && v !== '') });
                     }}
