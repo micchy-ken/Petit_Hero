@@ -51,8 +51,13 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
   const [activeNodeIndex, setActiveNodeIndex] = useState(0);
   const [onEventComplete, setOnEventComplete] = useState<(() => void) | null>(null);
 
+  const [isEventsLoaded, setIsEventsLoaded] = useState(false);
   useEffect(() => {
-    fetchCustomEventsFromFirestore().then(setCustomEvents);
+    fetchCustomEventsFromFirestore().then((data) => {
+      setCustomEvents(data);
+      customEventsRef.current = data;
+      setIsEventsLoaded(true);
+    });
   }, []);
 
   // UIステータス
@@ -144,6 +149,37 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
         sceneRef.current = scene;
         lastLevelRef.current = 1;
         
+
+        scene.setOnStateChange((newState: HeroState) => {
+          setHeroState(newState);
+          if (newState.level !== lastLevelRef.current) {
+            lastLevelRef.current = newState.level;
+          }
+        });
+        
+        scene.setOnLog((newLog) => {
+          setLogs(prev => [...prev.slice(-49), newLog]);
+        });
+
+        scene.setOnCustomEvent((eventId, onComplete) => {
+          const ev = customEventsRef.current.find(e => e.id === eventId);
+          if (ev && ev.nodes.length > 0) {
+            setActiveEvent(ev);
+            setActiveNodeIndex(0);
+            setOnEventComplete(() => onComplete);
+          } else {
+            onComplete();
+          }
+        });
+
+
+
+        scene.setOnStatsChange = (expRate: number, sRate: number, dRate: number | null) => {
+          setExplorationRate(expRate);
+          setSearchRate(sRate);
+          setDefeatRate(dRate);
+        };
+
         if (maps && initialMapId) {
           const startMap = maps.find(m => m.id === initialMapId);
           if (startMap) {
@@ -184,23 +220,6 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
           }
         }
 
-        scene.setOnStatsChange = (expRate: number, sRate: number, dRate: number | null) => {
-          setExplorationRate(expRate);
-          setSearchRate(sRate);
-          setDefeatRate(dRate);
-        };
-        scene.setOnStateChange((newState) => {
-          setHeroState(newState);
-
-          if (newState.level !== lastLevelRef.current) {
-            lastLevelRef.current = newState.level;
-          }
-        });
-        
-        scene.setOnLog((newLog) => {
-          setLogs(prev => [...prev.slice(-49), newLog]); // 最新50件を保持
-        });
-
         // テクスチャからプレビュー用URLを抽出
         setTimeout(() => {
           if (game.textures.exists('hero_spritesheet')) {
@@ -219,7 +238,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
       gameInstanceRef.current = null;
       sceneRef.current = null;
     };
-  }, []); // Only run once on mount
+  }, [isEventsLoaded]); // Run when events are loaded
 
   // Watch for initialMapId changes (e.g. teleporting)
   useEffect(() => {
@@ -399,11 +418,17 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
               {activeEvent && activeEvent.nodes[activeNodeIndex] && (
                 <div 
                   className="absolute inset-x-0 bottom-0 z-50 h-1/3 bg-black/80 border-t-4 border-indigo-500 p-4 flex gap-4 cursor-pointer"
-                  onClick={handleNextConversationNode}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.stopPropagation(); handleNextConversationNode(); }}
                 >
                   <div className="flex-shrink-0 w-24 h-24 bg-slate-800 border-2 border-indigo-400 rounded-lg overflow-hidden flex items-center justify-center">
                     {PORTRAITS[activeEvent.nodes[activeNodeIndex].portraitId || 'none'] ? (
-                      <img src={PORTRAITS[activeEvent.nodes[activeNodeIndex].portraitId || 'none']} alt="portrait" className="w-full h-full object-cover" />
+                      <img 
+                        src={PORTRAITS[activeEvent.nodes[activeNodeIndex].portraitId || 'none']} 
+                        alt="portrait" 
+                        className={`w-full h-full ${activeEvent.nodes[activeNodeIndex].portraitId === 'hero' ? 'object-cover' : 'object-contain'} `}
+                        style={{ imageRendering: activeEvent.nodes[activeNodeIndex].portraitId !== 'hero' ? 'pixelated' : 'auto' }}
+                      />
                     ) : (
                       <div className="text-slate-500 text-xs text-center">No Image</div>
                     )}

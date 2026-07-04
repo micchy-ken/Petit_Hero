@@ -81,6 +81,48 @@ export class GridMovementScene extends Phaser.Scene {
   private slimes: SlimeData[] = [];
   private itemSprites: { gridX: number, gridY: number, sprite: Phaser.GameObjects.GameObject, itemId: string }[] = [];
   private teleportPortals: { x: number, y: number, container: Phaser.GameObjects.Container, met: boolean }[] = [];
+
+  private playedMapEvents: Set<string> = new Set();
+  
+  private getGlobalPlayedEvents(): Set<string> {
+    try {
+      const data = localStorage.getItem('playedGlobalEvents');
+      return data ? new Set(JSON.parse(data)) : new Set();
+    } catch {
+      return new Set();
+    }
+  }
+  
+  private addGlobalPlayedEvent(eventId: string) {
+    const set = this.getGlobalPlayedEvents();
+    set.add(eventId);
+    localStorage.setItem('playedGlobalEvents', JSON.stringify(Array.from(set)));
+  }
+
+  private canPlayEvent(event: any): boolean {
+    const mode = event.data?.playMode || 'always';
+    if (mode === 'always') return true;
+    const uniqueId = `${this.mapData?.id}_${event.x}_${event.y}_${event.type}`;
+    if (mode === 'once_per_map') {
+      if (this.playedMapEvents.has(uniqueId)) return false;
+    } else if (mode === 'once_global') {
+      const globalSet = this.getGlobalPlayedEvents();
+      if (globalSet.has(uniqueId)) return false;
+    }
+    return true;
+  }
+  
+  private markEventPlayed(event: any) {
+    const mode = event.data?.playMode || 'always';
+    if (mode === 'always') return;
+    const uniqueId = `${this.mapData?.id}_${event.x}_${event.y}_${event.type}`;
+    if (mode === 'once_per_map') {
+      this.playedMapEvents.add(uniqueId);
+    } else if (mode === 'once_global') {
+      this.addGlobalPlayedEvent(uniqueId);
+    }
+  }
+
   // モノローグ管理
   private monologueContainer?: Phaser.GameObjects.Container;
   private monologueTextElement?: Phaser.GameObjects.Text;
@@ -2099,8 +2141,9 @@ export class GridMovementScene extends Phaser.Scene {
     
     const teleportHasCustomEvent = teleportEvent && teleportEvent.data?.eventId;
 
-    if (customEvent && this.onCustomEventCallback) {
+    if (customEvent && this.onCustomEventCallback && this.canPlayEvent(customEvent)) {
       this.isShowingMonologue = true; 
+      this.markEventPlayed(customEvent);
       this.onCustomEventCallback(customEvent.data?.eventId || '', () => {
         this.isShowingMonologue = false;
         if (teleportEvent) {
@@ -2110,8 +2153,9 @@ export class GridMovementScene extends Phaser.Scene {
       return;
     }
     
-    if (teleportHasCustomEvent && this.onCustomEventCallback) {
+    if (teleportHasCustomEvent && this.onCustomEventCallback && this.canPlayEvent(teleportEvent)) {
       this.isShowingMonologue = true;
+      this.markEventPlayed(teleportEvent);
       this.onCustomEventCallback(teleportEvent.data.eventId, () => {
         this.isShowingMonologue = false;
         this.handleTeleport(teleportEvent);
@@ -2119,7 +2163,8 @@ export class GridMovementScene extends Phaser.Scene {
       return;
     }
 
-    if (monologueEvent) {
+    if (monologueEvent && this.canPlayEvent(monologueEvent)) {
+      this.markEventPlayed(monologueEvent);
       this.showMonologue(monologueEvent.data?.text || '', () => {
         if (teleportEvent) {
           this.handleTeleport(teleportEvent);
@@ -2246,6 +2291,11 @@ export class GridMovementScene extends Phaser.Scene {
     this.totalEnemiesSpawned = 0;
     this.enemiesDefeated = 0;
     
+    // マップ切り替え時の処理
+    if (fromMapId !== undefined && fromMapId !== this.mapData?.id) {
+       this.playedMapEvents.clear();
+    }
+    
     // 踏破・視野情報をクリアし、表示もクリアする
     this.visitedGrids.clear();
     this.viewedGrids.clear();
@@ -2330,18 +2380,20 @@ export class GridMovementScene extends Phaser.Scene {
       const customEvent = this.mapData.events.find((e: any) => e.type === 'custom_event' && e.x === this.currentGridX && e.y === this.currentGridY);
       const startPointEvent = this.mapData.events.find((e: any) => e.type === 'start_point' && e.x === this.currentGridX && e.y === this.currentGridY);
       
-      const eventIdToPlay = customEvent ? customEvent.data?.eventId : (startPointEvent ? startPointEvent.data?.eventId : null);
-
-      if (eventIdToPlay && this.onCustomEventCallback) {
+      const activeEvent = customEvent || startPointEvent;
+      
+      if (activeEvent && activeEvent.data?.eventId && this.onCustomEventCallback && this.canPlayEvent(activeEvent)) {
         this.isShowingMonologue = true;
-        this.onCustomEventCallback(eventIdToPlay, () => {
+        this.markEventPlayed(activeEvent);
+        this.onCustomEventCallback(activeEvent.data.eventId, () => {
           this.isShowingMonologue = false;
         });
         return;
       }
 
       const monologueEvent = this.mapData.events.find((e: any) => e.type === 'monologue' && e.x === this.currentGridX && e.y === this.currentGridY);
-      if (monologueEvent) {
+      if (monologueEvent && this.canPlayEvent(monologueEvent)) {
+        this.markEventPlayed(monologueEvent);
         this.showMonologue(monologueEvent.data?.text || '');
       }
     }
