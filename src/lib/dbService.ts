@@ -3,6 +3,9 @@ import { collection, doc, getDocs, getDoc, setDoc, deleteDoc } from 'firebase/fi
 import { MapData } from '../types/MapData';
 import { allMaps as staticMaps } from '../data/maps';
 import { EnemyAssets as staticEnemyAssets, BossAssets as staticBossAssets, setDynamicAssets } from '../data/EnemyAssets';
+import { CustomEvent } from '../types/CustomEvent';
+import { HeroStatus } from '../types/HeroStatus';
+import { DefaultHeroStatus, setDynamicHeroStatus } from '../data/HeroStatusAssets';
 
 /**
  * Fetch all maps from Firestore.
@@ -108,4 +111,70 @@ export async function saveEnemyAssetsToFirestore(enemyAssets: any, bossAssets: a
   await setDoc(docRef, { enemyAssets, bossAssets });
   setDynamicAssets(enemyAssets, bossAssets);
   console.log('Saved custom enemy/boss assets to Firestore');
+}
+
+/**
+ * Fetch hero status from Firestore.
+ */
+export async function fetchHeroStatusFromFirestore(): Promise<HeroStatus[]> {
+  try {
+    const docRef = doc(db, 'config', 'hero_status');
+    const docSnap = await getDoc(docRef);
+    
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      const statusList = data.statusList || DefaultHeroStatus;
+      setDynamicHeroStatus(statusList);
+      console.log('Loaded hero status from Firestore');
+      return statusList;
+    } else {
+      console.log('No hero status found in Firestore. Seeding with defaults...');
+      await setDoc(docRef, { statusList: DefaultHeroStatus });
+      setDynamicHeroStatus(DefaultHeroStatus);
+      return DefaultHeroStatus;
+    }
+  } catch (error) {
+    console.error('Error fetching hero status from Firestore:', error);
+    setDynamicHeroStatus(DefaultHeroStatus);
+    return DefaultHeroStatus;
+  }
+}
+
+/**
+ * Save hero status to Firestore.
+ */
+export async function saveHeroStatusToFirestore(statusList: HeroStatus[]): Promise<void> {
+  const docRef = doc(db, 'config', 'hero_status');
+  await setDoc(docRef, { statusList });
+  setDynamicHeroStatus(statusList);
+  console.log('Saved hero status to Firestore');
+}
+
+
+
+export async function fetchCustomEventsFromFirestore(): Promise<CustomEvent[]> {
+  try {
+    const docRef = doc(db, 'config', 'custom_events');
+    const docSnap = await getDoc(docRef);
+    
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      const events = data.events || [];
+      console.log('Loaded custom events from Firestore');
+      return events;
+    } else {
+      console.log('No custom events found in Firestore. Seeding with empty array...');
+      await setDoc(docRef, { events: [] });
+      return [];
+    }
+  } catch (error) {
+    console.error('Error fetching custom events from Firestore:', error);
+    return [];
+  }
+}
+
+export async function saveCustomEventsToFirestore(events: CustomEvent[]): Promise<void> {
+  const docRef = doc(db, 'config', 'custom_events');
+  await setDoc(docRef, { events });
+  console.log('Saved custom events to Firestore');
 }

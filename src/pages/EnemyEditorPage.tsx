@@ -227,6 +227,7 @@ export default function EnemyEditorPage() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
 
   // Load enemy assets from Firestore on mount
   useEffect(() => {
@@ -279,7 +280,8 @@ export default function EnemyEditorPage() {
     setIsSaving(true);
     try {
       await saveEnemyAssetsToFirestore(enemyAssets, bossAssets);
-      alert('正常に保存されました！💾');
+      setSaveMessage('保存しました');
+      setTimeout(() => setSaveMessage(''), 3000);
     } catch (e: any) {
       console.error(e);
       alert('保存に失敗しました: ' + e.message);
@@ -317,6 +319,11 @@ export default function EnemyEditorPage() {
             </div>
           </div>
           
+          {saveMessage && (
+            <span className="text-sm font-medium text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">
+              {saveMessage}
+            </span>
+          )}
           <button
             onClick={handleSave}
             disabled={isSaving}

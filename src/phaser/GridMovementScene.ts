@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { generateHeroSpritesheet } from './HeroSpritesheet';
 import { generateSlimeSpritesheet, generateBatSpritesheet, generateGoblinSpritesheet } from './MonsterSpritesheets';
 import { getEnemyAssetById, EnemyAsset } from '../data/EnemyAssets';
+import { getHeroStatusByLevel, getAllHeroStatus } from '../data/HeroStatusAssets';
 // @ts-ignore
 import grassBgUrl from '../../public/grass_bg_1782776475818.jpg';
 
@@ -19,8 +20,10 @@ export interface HeroState {
   hp: number;
   maxHp: number;
   attack: number;
+  defense: number;
   level: number;
   exp: number;
+  requiredExp: number;
 }
 
 interface SlimeData {
@@ -108,6 +111,7 @@ export class GridMovementScene extends Phaser.Scene {
   private heroHp: number = 20;
   private heroMaxHp: number = 20;
   private heroAttack: number = 5;
+  private heroDefense: number = 0;
   private heroLevel: number = 1;
   private heroExp: number = 0;
   private lastFireMagicTime: number = 0;
@@ -151,6 +155,12 @@ export class GridMovementScene extends Phaser.Scene {
     super({ key: 'GridMovementScene' });
   }
 
+  public onCustomEventCallback?: (eventId: string, onComplete: () => void) => void;
+
+  public setOnCustomEvent(callback: (eventId: string, onComplete: () => void) => void) {
+    this.onCustomEventCallback = callback;
+  }
+
   public setOnStateChange(callback: (state: HeroState) => void) {
     this.onStateChangeCallback = callback;
     this.notifyStateChange();
@@ -190,6 +200,14 @@ export class GridMovementScene extends Phaser.Scene {
 
   create() {
     const { GRID_SIZE, VIEWPORT_COLS, VIEWPORT_ROWS } = GridMovementScene;
+
+    const initialStatus = getHeroStatusByLevel(this.heroLevel);
+    if (initialStatus) {
+      this.heroMaxHp = initialStatus.maxHp;
+      this.heroHp = this.heroMaxHp;
+      this.heroAttack = initialStatus.attack;
+      this.heroDefense = initialStatus.defense;
+    }
 
     // カメラ境界を設定
     this.cameras.main.setBounds(0, 0, this.gridCols * GRID_SIZE, this.gridRows * GRID_SIZE);
@@ -1706,15 +1724,7 @@ export class GridMovementScene extends Phaser.Scene {
           const gainedExp = slime.exp !== undefined ? slime.exp : 2;
           this.sendLog(`${slime.name || 'スライム'}を倒した！ 経験値を ${gainedExp} 獲得。 🌟`, 'info');
           this.heroExp += gainedExp;
-          
-          if (this.heroExp >= 10) {
-            this.heroLevel++;
-            this.heroExp = 0;
-            this.heroMaxHp += 5;
-            this.heroHp = this.heroMaxHp;
-            this.heroAttack += 2;
-            this.sendLog(`レベルアップ！ レベル ${this.heroLevel} になりました！ 🎉`, 'system');
-          }
+          this.checkLevelUp();
           
           this.tweens.add({
             targets: slime.sprite,
@@ -1757,7 +1767,7 @@ export class GridMovementScene extends Phaser.Scene {
         }
         slime.isMoving = false;
         
-        const damage = slime.attack || 2;
+        const damage = Math.max(1, (slime.attack || 2) - this.heroDefense);
         this.heroHp = Math.max(0, this.heroHp - damage);
         this.sendLog(`${slime.name || 'スライム'}の攻撃！ 勇者は ${damage} ダメージを受けた！ 💥`, 'damage');
         
@@ -2014,12 +2024,7 @@ export class GridMovementScene extends Phaser.Scene {
       if (item.itemId === 'treasure_text') {
         this.sendLog('宝を手に入れた！ ✨ (Exp +50)', 'info');
         this.heroExp += 50;
-        if (this.heroExp >= 10) {
-          while (this.heroExp >= 10) {
-             this.heroExp -= 10;
-             this.addLevel();
-          }
-        }
+        this.checkLevelUp();
       } else {
         this.sendLog(`アイテムを手に入れた！ (${item.itemId})`, 'info');
       }
@@ -2090,6 +2095,29 @@ export class GridMovementScene extends Phaser.Scene {
     const eventsHere = this.mapData.events.filter((e: any) => e.x === this.currentGridX && e.y === this.currentGridY);
     const teleportEvent = eventsHere.find((e: any) => e.type === 'teleport');
     const monologueEvent = eventsHere.find((e: any) => e.type === 'monologue');
+    const customEvent = eventsHere.find((e: any) => e.type === 'custom_event');
+    
+    const teleportHasCustomEvent = teleportEvent && teleportEvent.data?.eventId;
+
+    if (customEvent && this.onCustomEventCallback) {
+      this.isShowingMonologue = true; 
+      this.onCustomEventCallback(customEvent.data?.eventId || '', () => {
+        this.isShowingMonologue = false;
+        if (teleportEvent) {
+          this.handleTeleport(teleportEvent);
+        }
+      });
+      return;
+    }
+    
+    if (teleportHasCustomEvent && this.onCustomEventCallback) {
+      this.isShowingMonologue = true;
+      this.onCustomEventCallback(teleportEvent.data.eventId, () => {
+        this.isShowingMonologue = false;
+        this.handleTeleport(teleportEvent);
+      });
+      return;
+    }
 
     if (monologueEvent) {
       this.showMonologue(monologueEvent.data?.text || '', () => {
@@ -2187,6 +2215,7 @@ export class GridMovementScene extends Phaser.Scene {
     this.updateStats(this.currentGridX, this.currentGridY, this.currentCamGridX, this.currentCamGridY);
     
     if (this.onStateChangeCallback) {
+      const statusAsset = getHeroStatusByLevel(this.heroLevel);
       this.onStateChangeCallback({
         gridX: this.currentGridX,
         gridY: this.currentGridY,
@@ -2199,8 +2228,10 @@ export class GridMovementScene extends Phaser.Scene {
         hp: this.heroHp,
         maxHp: this.heroMaxHp,
         attack: this.heroAttack,
+        defense: this.heroDefense,
         level: this.heroLevel,
-        exp: this.heroExp
+        exp: this.heroExp,
+        requiredExp: statusAsset?.requiredExp || 10
       });
     }
   }
@@ -2294,8 +2325,21 @@ export class GridMovementScene extends Phaser.Scene {
     this.spawnMapItems();
     this.notifyStateChange(false);
 
-    // Initial monologue check
+    // Initial check (start_point, custom_event, monologue)
     if (this.mapData && this.mapData.events) {
+      const customEvent = this.mapData.events.find((e: any) => e.type === 'custom_event' && e.x === this.currentGridX && e.y === this.currentGridY);
+      const startPointEvent = this.mapData.events.find((e: any) => e.type === 'start_point' && e.x === this.currentGridX && e.y === this.currentGridY);
+      
+      const eventIdToPlay = customEvent ? customEvent.data?.eventId : (startPointEvent ? startPointEvent.data?.eventId : null);
+
+      if (eventIdToPlay && this.onCustomEventCallback) {
+        this.isShowingMonologue = true;
+        this.onCustomEventCallback(eventIdToPlay, () => {
+          this.isShowingMonologue = false;
+        });
+        return;
+      }
+
       const monologueEvent = this.mapData.events.find((e: any) => e.type === 'monologue' && e.x === this.currentGridX && e.y === this.currentGridY);
       if (monologueEvent) {
         this.showMonologue(monologueEvent.data?.text || '');
@@ -2327,14 +2371,35 @@ export class GridMovementScene extends Phaser.Scene {
     });
   }
 
-  public addLevel() {
-    this.heroLevel++;
-    this.heroMaxHp += 5;
-    this.heroHp = this.heroMaxHp;
-    this.heroAttack += 2;
-    this.heroExp = 0;
-    this.sendLog(`[デモ] レベルアップ！ レベル ${this.heroLevel} になりました！ 🎉`, 'system');
+  private checkLevelUp() {
+    let statusAsset = getHeroStatusByLevel(this.heroLevel);
+    while (statusAsset && this.heroExp >= statusAsset.requiredExp) {
+      this.heroExp -= statusAsset.requiredExp;
+      this.heroLevel++;
+      
+      const newStatus = getHeroStatusByLevel(this.heroLevel);
+      if (newStatus) {
+        this.heroMaxHp = newStatus.maxHp;
+        this.heroHp = this.heroMaxHp;
+        this.heroAttack = newStatus.attack;
+        this.heroDefense = newStatus.defense;
+      } else {
+        // Fallback or max level
+        this.heroMaxHp += 5;
+        this.heroHp = this.heroMaxHp;
+        this.heroAttack += 2;
+        this.heroDefense += 1;
+      }
+      this.sendLog(`レベルアップ！ レベル ${this.heroLevel} になりました！ 🎉`, 'system');
+      statusAsset = getHeroStatusByLevel(this.heroLevel);
+    }
     this.notifyStateChange();
+  }
+
+  public addLevel() {
+    const statusAsset = getHeroStatusByLevel(this.heroLevel);
+    this.heroExp += (statusAsset?.requiredExp || 10);
+    this.checkLevelUp();
   }
 
   public castFireMagic() {
@@ -2456,14 +2521,7 @@ export class GridMovementScene extends Phaser.Scene {
           const gainedExp = targetSlime.exp !== undefined ? targetSlime.exp : 2;
           this.sendLog(`${targetSlime.name || 'スライム'}を焼き尽くした！ 経験値を ${gainedExp} 獲得。`, "info");
           this.heroExp += gainedExp;
-          if (this.heroExp >= 10) {
-            this.heroLevel++;
-            this.heroExp = 0;
-            this.heroMaxHp += 5;
-            this.heroHp = this.heroMaxHp;
-            this.heroAttack += 2;
-            this.sendLog(`レベルアップ！ レベル ${this.heroLevel} になりました！`, "system");
-          }
+          this.checkLevelUp();
 
           this.tweens.add({
             targets: targetSlime.sprite,
@@ -2690,14 +2748,7 @@ export class GridMovementScene extends Phaser.Scene {
         const gainedExp = targetSlime.exp !== undefined ? targetSlime.exp : 2;
         this.sendLog(`${targetSlime.name || 'スライム'}を完全に凍りつかせて砕いた！ 経験値を ${gainedExp} 獲得。`, "info");
         this.heroExp += gainedExp;
-        if (this.heroExp >= 10) {
-          this.heroLevel++;
-          this.heroExp = 0;
-          this.heroMaxHp += 5;
-          this.heroHp = this.heroMaxHp;
-          this.heroAttack += 2;
-          this.sendLog(`レベルアップ！ レベル ${this.heroLevel} になりました！`, "system");
-        }
+        this.checkLevelUp();
 
         this.tweens.add({
           targets: targetSlime.sprite,
@@ -2722,9 +2773,18 @@ export class GridMovementScene extends Phaser.Scene {
 
   public resetHero() {
     this.heroLevel = 1;
-    this.heroMaxHp = 20;
-    this.heroHp = 20;
-    this.heroAttack = 5;
+    const initialStatus = getHeroStatusByLevel(1);
+    if (initialStatus) {
+      this.heroMaxHp = initialStatus.maxHp;
+      this.heroHp = this.heroMaxHp;
+      this.heroAttack = initialStatus.attack;
+      this.heroDefense = initialStatus.defense;
+    } else {
+      this.heroMaxHp = 20;
+      this.heroHp = 20;
+      this.heroAttack = 5;
+      this.heroDefense = 0;
+    }
     this.heroExp = 0;
     this.sendLog(`[デモ] ステータスがレベル 1 にリセットされました。 🔄`, 'system');
     this.notifyStateChange();

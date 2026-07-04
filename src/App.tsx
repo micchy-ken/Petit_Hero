@@ -3,6 +3,8 @@ import { HashRouter, Routes, Route } from 'react-router-dom';
 import GamePage from './pages/GamePage';
 import MapEditorPage from './pages/MapEditorPage';
 import EnemyEditorPage from './pages/EnemyEditorPage';
+import HeroEditorPage from './pages/HeroEditorPage';
+import EventEditorPage from './pages/EventEditorPage';
 
 export default function App() {
   return (
@@ -11,6 +13,8 @@ export default function App() {
         <Route path="/" element={<GamePage />} />
         <Route path="/editor/map" element={<MapEditorPage />} />
         <Route path="/editor/enemy" element={<EnemyEditorPage />} />
+        <Route path="/editor/hero" element={<HeroEditorPage />} />
+        <Route path="/editor/event" element={<EventEditorPage />} />
       </Routes>
     </HashRouter>
   );

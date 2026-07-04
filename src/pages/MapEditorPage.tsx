@@ -5,7 +5,8 @@ import { MapData } from '../types/MapData';
 import { getAvailableEnemies, getAvailableBosses } from '../data/EnemyAssets';
 import { PhaserGameContainer } from '../components/PhaserGameContainer';
 import { allMaps } from '../data/maps';
-import { fetchMapsFromFirestore, saveMapToFirestore, deleteMapFromFirestore, fetchEnemyAssetsFromFirestore } from '../lib/dbService';
+import { fetchMapsFromFirestore, saveMapToFirestore, deleteMapFromFirestore, fetchEnemyAssetsFromFirestore, fetchCustomEventsFromFirestore } from '../lib/dbService';
+import { CustomEvent } from '../types/CustomEvent';
 // @ts-ignore
 import grassBgUrl from '../../public/grass_bg_1782776475818.jpg';
 
@@ -20,6 +21,7 @@ export default function MapEditorPage() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
 
   const [initialMaps, setInitialMaps] = useState<MapData[]>([]);
+  const [customEvents, setCustomEvents] = useState<CustomEvent[]>([]);
   const [pendingTransition, setPendingTransition] = useState<{
     type: 'switch_map' | 'go_back';
     targetMapId?: string;
@@ -29,6 +31,10 @@ export default function MapEditorPage() {
     try {
       // Load custom enemy assets first to override local assets
       await fetchEnemyAssetsFromFirestore();
+      
+      // Load custom events
+      const loadedCustomEvents = await fetchCustomEventsFromFirestore();
+      setCustomEvents(loadedCustomEvents);
 
       // Load maps
       let loadedMaps = await fetchMapsFromFirestore();
@@ -126,13 +132,14 @@ export default function MapEditorPage() {
   const [placeMode, setPlaceMode] = useState<'obstacle' | 'item' | 'event'>('obstacle');
   
   // イベント配置用の状態
-  const [eventType, setEventType] = useState<'start_point' | 'teleport' | 'monologue'>('start_point');
+  const [eventType, setEventType] = useState<'start_point' | 'teleport' | 'monologue' | 'custom_event'>('start_point');
   const [startPointFromMap, setStartPointFromMap] = useState<string>('');
   const [teleportTargetMap, setTeleportTargetMap] = useState<string>('');
   const [eventCondExpRate, setEventCondExpRate] = useState<number | null>(null);
   const [eventCondSearchRate, setEventCondSearchRate] = useState<number | null>(null);
   const [eventCondDefeatRate, setEventCondDefeatRate] = useState<number | null>(null);
   const [monologueText, setMonologueText] = useState<string>('');
+  const [customEventId, setCustomEventId] = useState<string>('');
   
   // アイテム配置用の状態
   const [itemType, setItemType] = useState<string>('treasure_text');
@@ -147,10 +154,11 @@ export default function MapEditorPage() {
     index: number;
     x: number;
     y: number;
-    type: 'start_point' | 'teleport' | 'monologue';
+    type: 'start_point' | 'teleport' | 'monologue' | 'custom_event';
     fromMap: string;
     targetMap: string;
     text: string;
+    eventId: string;
     requiredExplorationRate: number | null;
     requiredSearchRate: number | null;
     requiredDefeatRate: number | null;
@@ -179,10 +187,11 @@ export default function MapEditorPage() {
           index: existingIndex,
           x: ev.x,
           y: ev.y,
-          type: ev.type as 'start_point' | 'teleport' | 'monologue',
+          type: ev.type as 'start_point' | 'teleport' | 'monologue' | 'custom_event',
           fromMap: ev.data?.fromMap || '',
           targetMap: ev.data?.targetMap || '',
           text: ev.data?.text || '',
+          eventId: ev.data?.eventId || '',
           requiredExplorationRate: ev.data?.requiredExplorationRate ?? null,
           requiredSearchRate: ev.data?.requiredSearchRate ?? null,
           requiredDefeatRate: ev.data?.requiredDefeatRate ?? null,
@@ -198,12 +207,14 @@ export default function MapEditorPage() {
           if (sameFromMapIndex >= 0) {
             newEvents.splice(sameFromMapIndex, 1);
           }
-          data = { fromMap: targetFromMap };
+          data = { fromMap: targetFromMap, eventId: customEventId || undefined };
         } else if (eventType === 'teleport') {
           if (!teleportTargetMap) return;
-          data = { targetMap: teleportTargetMap };
+          data = { targetMap: teleportTargetMap, eventId: customEventId || undefined };
         } else if (eventType === 'monologue') {
           data = { text: monologueText };
+        } else if (eventType === 'custom_event') {
+          data = { eventId: customEventId };
         }
         
         if (eventCondExpRate !== null) data.requiredExplorationRate = eventCondExpRate;
@@ -245,14 +256,18 @@ export default function MapEditorPage() {
     let data: any = {};
     if (editingEvent.type === 'start_point') {
       data.fromMap = editingEvent.fromMap || null;
+      data.eventId = editingEvent.eventId || undefined;
     } else if (editingEvent.type === 'teleport') {
       if (!editingEvent.targetMap) {
         alert('移動先マップを選択してください');
         return;
       }
       data.targetMap = editingEvent.targetMap;
+      data.eventId = editingEvent.eventId || undefined;
     } else if (editingEvent.type === 'monologue') {
       data.text = editingEvent.text || '';
+    } else if (editingEvent.type === 'custom_event') {
+      data.eventId = editingEvent.eventId || '';
     }
 
     if (editingEvent.requiredExplorationRate !== null) {
@@ -519,8 +534,13 @@ export default function MapEditorPage() {
           >
             <Play className="w-4 h-4" /> テストプレイ
           </button>
+          {saveStatus === 'success' && (
+            <span className="text-sm font-bold text-teal-300 bg-teal-900/50 px-3 py-1.5 rounded-full border border-teal-500/30">
+              保存しました
+            </span>
+          )}
           <button 
-            onClick={handleSave}
+            onClick={() => handleSave(false)}
             disabled={saveStatus !== 'idle'}
             className={`flex items-center gap-2 px-4 py-2 text-white rounded font-bold shadow transition-all duration-300 ${
               saveStatus === 'idle' ? 'bg-emerald-600 hover:bg-emerald-500 active:scale-95' :
@@ -769,8 +789,25 @@ export default function MapEditorPage() {
                     <option value="start_point">初期値 (Start Point)</option>
                     <option value="teleport">マップ移動 (Teleport)</option>
                     <option value="monologue">モノローグ (Monologue)</option>
+                    <option value="custom_event">カスタムイベント (Custom Event)</option>
                   </select>
                 </div>
+
+                {(eventType === 'custom_event' || eventType === 'start_point' || eventType === 'teleport') && (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-slate-400 font-bold uppercase">連動イベント (任意)</label>
+                    <select 
+                      value={customEventId}
+                      onChange={(e) => setCustomEventId(e.target.value)}
+                      className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
+                    >
+                      <option value="">設定なし</option>
+                      {customEvents.map(ev => (
+                        <option key={ev.id} value={ev.id}>{ev.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 {eventType === 'start_point' && (
                   <div className="flex flex-col gap-1">
@@ -913,6 +950,11 @@ export default function MapEditorPage() {
                      {hasEvent && hasEvent.type === 'monologue' && (
                         <div className="w-full h-full bg-emerald-500/50 flex items-center justify-center text-xs font-bold text-emerald-100" title={`モノローグ\n${hasEvent.data?.text || ''}`}>
                           M
+                        </div>
+                     )}
+                     {hasEvent && hasEvent.type === 'custom_event' && (
+                        <div className="w-full h-full bg-indigo-500/50 flex items-center justify-center text-xs font-bold text-indigo-100" title={`カスタムイベント: ${hasEvent.data?.eventId || ''}`}>
+                          C
                         </div>
                      )}
                      {hasItem && hasItem.itemId === 'treasure_text' && (
@@ -1131,15 +1173,32 @@ export default function MapEditorPage() {
                   value={editingEvent.type}
                   onChange={(e) => setEditingEvent({ 
                     ...editingEvent, 
-                    type: e.target.value as 'start_point' | 'teleport' 
+                    type: e.target.value as 'start_point' | 'teleport' | 'monologue' | 'custom_event'
                   })}
                   className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 outline-none focus:border-emerald-500"
                 >
                   <option value="start_point">初期値 (Start Point)</option>
                   <option value="teleport">マップ移動 (Teleport)</option>
                   <option value="monologue">モノローグ (Monologue)</option>
+                  <option value="custom_event">カスタムイベント (Custom Event)</option>
                 </select>
               </div>
+
+              {(editingEvent.type === 'custom_event' || editingEvent.type === 'start_point' || editingEvent.type === 'teleport') && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-300 font-bold uppercase">連動イベント (任意)</label>
+                  <select 
+                    value={editingEvent.eventId}
+                    onChange={(e) => setEditingEvent({ ...editingEvent, eventId: e.target.value })}
+                    className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                  >
+                    <option value="">設定なし</option>
+                    {customEvents.map(ev => (
+                      <option key={ev.id} value={ev.id}>{ev.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {editingEvent.type === 'start_point' && (
                 <div className="flex flex-col gap-1">
@@ -1308,26 +1367,7 @@ export default function MapEditorPage() {
         </div>
       )}
 
-      {/* 保存完了通知トースト */}
-      {saveStatus === 'success' && (
-        <div className="fixed bottom-6 right-6 z-50 bg-emerald-600 text-white border border-emerald-400 px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-bounce">
-          <Check className="w-5 h-5 bg-emerald-500 rounded-full p-0.5 text-white" />
-          <div className="flex flex-col text-left">
-            <span className="font-bold text-sm">反映に成功しました！</span>
-            <span className="text-xs text-emerald-200">Firestoreに最新のマップ情報を同期しました。</span>
-          </div>
-        </div>
-      )}
-      
-      {saveStatus === 'error' && (
-        <div className="fixed bottom-6 right-6 z-50 bg-red-600 text-white border border-red-400 px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 bg-red-500 rounded-full p-0.5 text-white animate-pulse" />
-          <div className="flex flex-col text-left">
-            <span className="font-bold text-sm">反映エラー</span>
-            <span className="text-xs text-red-200">マップ情報の保存に失敗しました。</span>
-          </div>
-        </div>
-      )}
+
 
     </div>
   );

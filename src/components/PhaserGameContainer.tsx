@@ -1,10 +1,13 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import Phaser from 'phaser';
 import { GridMovementScene, HeroState, Direction, ActionLog } from '../phaser/GridMovementScene';
-import { Play, Pause, RotateCcw, Eye, EyeOff, Sparkles, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Gauge, Grid, Image as ImageIcon, Heart, Sword, Star, Settings, X, Move, Flame, Zap, Map, Menu, User, Brain, Shield, Ghost } from 'lucide-react';
+import { Play, Pause, RotateCcw, Eye, EyeOff, Sparkles, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Gauge, Grid, Image as ImageIcon, Heart, Sword, Star, Settings, X, Move, Flame, Zap, Map, Menu, User, Brain, Shield, Ghost, MessageSquare } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 import { MapData } from '../types/MapData';
+import { CustomEvent, ConversationNode } from '../types/CustomEvent';
+import { fetchCustomEventsFromFirestore } from '../lib/dbService';
+import { PORTRAITS } from '../data/portraits';
 
 export interface PhaserGameContainerProps {
   isTestPlay?: boolean;
@@ -24,6 +27,34 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
 
   const showSettingsOnInit = location.search.includes('settings=true') || location.hash.includes('settings=true');
 
+  // カスタムイベント再生ステータス
+  const [customEvents, setCustomEvents] = useState<CustomEvent[]>([]);
+  const customEventsRef = useRef<CustomEvent[]>([]);
+  const handleNextConversationNode = () => {
+    if (!activeEvent) return;
+    if (activeNodeIndex < activeEvent.nodes.length - 1) {
+      setActiveNodeIndex(activeNodeIndex + 1);
+    } else {
+      setActiveEvent(null);
+      if (onEventComplete) {
+        onEventComplete();
+        setOnEventComplete(null);
+      }
+    }
+  };
+
+
+  useEffect(() => {
+    customEventsRef.current = customEvents;
+  }, [customEvents]);
+  const [activeEvent, setActiveEvent] = useState<CustomEvent | null>(null);
+  const [activeNodeIndex, setActiveNodeIndex] = useState(0);
+  const [onEventComplete, setOnEventComplete] = useState<(() => void) | null>(null);
+
+  useEffect(() => {
+    fetchCustomEventsFromFirestore().then(setCustomEvents);
+  }, []);
+
   // UIステータス
   const [showSettings, setShowSettings] = useState(showSettingsOnInit);
   const [isTurbo, setIsTurbo] = useState(false);
@@ -39,8 +70,10 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
     hp: 20,
     maxHp: 20,
     attack: 5,
+    defense: 0,
     level: 1,
-    exp: 0
+    exp: 0,
+    requiredExp: 10
   });
 
   const [logs, setLogs] = useState<ActionLog[]>([]);
@@ -362,6 +395,32 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                 ref={gameContainerRef} 
                 className="w-full h-full"
               />
+              {/* 会話イベントオーバーレイ */}
+              {activeEvent && activeEvent.nodes[activeNodeIndex] && (
+                <div 
+                  className="absolute inset-x-0 bottom-0 z-50 h-1/3 bg-black/80 border-t-4 border-indigo-500 p-4 flex gap-4 cursor-pointer"
+                  onClick={handleNextConversationNode}
+                >
+                  <div className="flex-shrink-0 w-24 h-24 bg-slate-800 border-2 border-indigo-400 rounded-lg overflow-hidden flex items-center justify-center">
+                    {PORTRAITS[activeEvent.nodes[activeNodeIndex].portraitId || 'none'] ? (
+                      <img src={PORTRAITS[activeEvent.nodes[activeNodeIndex].portraitId || 'none']} alt="portrait" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="text-slate-500 text-xs text-center">No Image</div>
+                    )}
+                  </div>
+                  <div className="flex-1 flex flex-col min-w-0">
+                    <div className="font-bold text-indigo-300 text-sm mb-1 truncate">
+                      {activeEvent.nodes[activeNodeIndex].speakerName}
+                    </div>
+                    <div className="text-white text-base leading-relaxed break-words overflow-y-auto">
+                      {activeEvent.nodes[activeNodeIndex].message}
+                    </div>
+                    <div className="mt-auto self-end text-xs text-indigo-400 animate-pulse mt-2">
+                      ▼ クリックして進む
+                    </div>
+                  </div>
+                </div>
+              )}
               {/* 踏破率・捜索率・撃破率 表示 */}
               <div className="absolute top-2 left-2 z-20 flex flex-col gap-1 text-[11px] font-bold text-white drop-shadow-md pointer-events-none">
                 <div className="bg-black/60 px-2.5 py-0.5 rounded border border-white/20 shadow">
@@ -503,12 +562,12 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                   <Star className="w-3.5 h-3.5 text-amber-400" /> Lv.{heroState.level} EXP
                 </div>
                 <div className="text-base font-bold text-sky-300">
-                  {heroState.exp} / 10
+                  {heroState.exp} / {heroState.requiredExp}
                 </div>
                 <div className="w-full bg-slate-700 h-1.5 rounded-full mt-2 overflow-hidden">
                   <div 
                     className="h-full bg-sky-400 rounded-full transition-all" 
-                    style={{ width: `${(heroState.exp / 10) * 100}%` }} 
+                    style={{ width: `${Math.min(100, Math.max(0, (heroState.exp / heroState.requiredExp) * 100))}%` }} 
                   />
                 </div>
               </div>
@@ -642,6 +701,20 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                   <Ghost className="w-5 h-5 text-indigo-300" />
                   エネミーエディターを開く
                 </button>
+                <button
+                  onClick={() => navigate('/editor/hero')}
+                  className="flex items-center justify-center gap-2 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-colors border border-emerald-500"
+                >
+                  <Sword className="w-5 h-5 text-emerald-200" />
+                  主人公ステータス設定を開く
+                </button>
+                <button
+                  onClick={() => navigate('/editor/event')}
+                  className="flex items-center justify-center gap-2 w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-colors border border-amber-500"
+                >
+                  <MessageSquare className="w-5 h-5 text-amber-200" />
+                  イベントエディターを開く
+                </button>
 
                 {/* 自動移動モード切替 */}
                 <div className="flex items-center justify-between bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
@@ -757,7 +830,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                     </div>
                     <div className="flex justify-between text-slate-600">
                       <span>経験値</span>
-                      <span className="font-bold text-slate-900">{heroState.exp} / 10</span>
+                      <span className="font-bold text-slate-900">{heroState.exp} / {heroState.requiredExp}</span>
                     </div>
                     <div className="flex justify-between text-slate-600">
                       <span>HP</span>
@@ -766,6 +839,10 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                     <div className="flex justify-between text-slate-600">
                       <span>攻撃力</span>
                       <span className="font-bold text-slate-900">{heroState.attack}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-600">
+                      <span>防御力</span>
+                      <span className="font-bold text-slate-900">{heroState.defense}</span>
                     </div>
                   </div>
                 </div>

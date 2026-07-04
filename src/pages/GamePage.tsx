@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { PhaserGameContainer } from '../components/PhaserGameContainer';
 import { Gamepad2, Layers, Cpu, ShieldCheck, Loader2 } from 'lucide-react';
 import { MapData } from '../types/MapData';
-import { fetchMapsFromFirestore, fetchEnemyAssetsFromFirestore } from '../lib/dbService';
+import { fetchMapsFromFirestore, fetchEnemyAssetsFromFirestore, fetchHeroStatusFromFirestore } from '../lib/dbService';
 import { allMaps as importedMaps } from '../data/maps';
 
 export default function GamePage() {
@@ -13,8 +13,9 @@ export default function GamePage() {
   useEffect(() => {
     async function loadGameData() {
       try {
-        // Load enemy assets from Firestore first, so they are available in Phaser
+        // Load assets from Firestore first, so they are available in Phaser
         await fetchEnemyAssetsFromFirestore();
+        await fetchHeroStatusFromFirestore();
 
         // Load maps from Firestore
         let loadedMaps = await fetchMapsFromFirestore();
