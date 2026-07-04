@@ -426,8 +426,8 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                       <img 
                         src={PORTRAITS[activeEvent.nodes[activeNodeIndex].portraitId || 'none']} 
                         alt="portrait" 
-                        className={`w-full h-full ${activeEvent.nodes[activeNodeIndex].portraitId === 'hero' ? 'object-cover' : 'object-contain'} `}
-                        style={{ imageRendering: activeEvent.nodes[activeNodeIndex].portraitId !== 'hero' ? 'pixelated' : 'auto' }}
+                        className="w-full h-full object-cover"
+                        style={{ imageRendering: 'auto' }}
                       />
                     ) : (
                       <div className="text-slate-500 text-xs text-center">No Image</div>

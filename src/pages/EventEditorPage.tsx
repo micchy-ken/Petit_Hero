@@ -92,10 +92,23 @@ export default function EventEditorPage() {
 
   const updateNode = (eventIndex: number, nodeIndex: number, field: keyof ConversationNode, value: string) => {
     const newEvents = [...events];
-    newEvents[eventIndex].nodes[nodeIndex] = {
+    const updatedNode = {
       ...newEvents[eventIndex].nodes[nodeIndex],
       [field]: value
     };
+    
+    // 顔グラフィック変更時にデフォルト名前を自動設定
+    if (field === 'portraitId') {
+      if (value === 'hero') {
+        updatedNode.speakerName = '主人公';
+      } else if (value === 'villager') {
+        updatedNode.speakerName = '村人';
+      } else if (value === 'none') {
+        updatedNode.speakerName = '';
+      }
+    }
+    
+    newEvents[eventIndex].nodes[nodeIndex] = updatedNode;
     setEvents(newEvents);
   };
 
@@ -259,8 +272,8 @@ export default function EventEditorPage() {
                 <img 
                   src={PORTRAITS[previewEvent.nodes[previewNodeIndex].portraitId || 'none']} 
                   alt="portrait" 
-                  className={`w-full h-full ${previewEvent.nodes[previewNodeIndex].portraitId === 'hero' ? 'object-cover' : 'object-contain'} `}
-                  style={{ imageRendering: previewEvent.nodes[previewNodeIndex].portraitId !== 'hero' ? 'pixelated' : 'auto' }}
+                  className="w-full h-full object-cover"
+                  style={{ imageRendering: 'auto' }}
                 />
               ) : (
                 <div className="text-slate-500 text-xs text-center">No Image</div>
