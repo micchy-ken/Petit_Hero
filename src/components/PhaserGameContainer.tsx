@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import Phaser from 'phaser';
 import { GridMovementScene, HeroState, Direction, ActionLog } from '../phaser/GridMovementScene';
-import { Play, Pause, RotateCcw, Eye, EyeOff, Sparkles, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Gauge, Grid, Image as ImageIcon, Heart, Sword, Star, Settings, X, Move, Flame, Zap, Map, Menu, User, Brain, Shield, Ghost, MessageSquare } from 'lucide-react';
+import { Play, Pause, RotateCcw, Eye, EyeOff, Sparkles, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Gauge, Grid, Image as ImageIcon, Heart, Sword, Star, Settings, X, Move, Flame, Zap, Map, Menu, User, Brain, Shield, Ghost, MessageSquare, Package } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 import { MapData } from '../types/MapData';
 import { CustomEvent, ConversationNode } from '../types/CustomEvent';
-import { fetchCustomEventsFromFirestore } from '../lib/dbService';
+import { fetchCustomEventsFromFirestore, fetchCustomItemsFromFirestore } from '../lib/dbService';
+import { CustomItem } from '../types/CustomItem';
 import { PORTRAITS } from '../data/portraits';
 
 export interface PhaserGameContainerProps {
@@ -40,6 +41,19 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
         onEventComplete();
         setOnEventComplete(null);
       }
+      
+      // ゲーム画面（キャンバス）にフォーカスを強制的に戻してキーボード入力を即再開させる
+      setTimeout(() => {
+        if (gameContainerRef.current) {
+          const canvas = gameContainerRef.current.querySelector('canvas');
+          if (canvas) {
+            canvas.focus();
+            if (sceneRef.current && sceneRef.current.input && sceneRef.current.input.keyboard) {
+              sceneRef.current.input.keyboard.resetKeys();
+            }
+          }
+        }
+      }, 50);
     }
   };
 
@@ -54,11 +68,23 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
   const [onEventComplete, setOnEventComplete] = useState<(() => void) | null>(null);
 
   const [isEventsLoaded, setIsEventsLoaded] = useState(false);
+  const [customItems, setCustomItems] = useState<CustomItem[]>([]);
+  const customItemsRef = useRef<CustomItem[]>([]);
+
   useEffect(() => {
-    fetchCustomEventsFromFirestore().then((data) => {
-      setCustomEvents(data);
-      customEventsRef.current = data;
+    Promise.all([
+      fetchCustomEventsFromFirestore(),
+      fetchCustomItemsFromFirestore()
+    ]).then(([eventsData, itemsData]) => {
+      setCustomEvents(eventsData);
+      customEventsRef.current = eventsData;
+      setCustomItems(itemsData);
+      customItemsRef.current = itemsData;
       setIsEventsLoaded(true);
+
+      if (sceneRef.current) {
+        sceneRef.current.customItems = itemsData;
+      }
     });
   }, []);
 
@@ -173,6 +199,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
       const scene = game.scene.getScene('GridMovementScene') as GridMovementScene;
       if (scene) {
         sceneRef.current = scene;
+        scene.customItems = customItemsRef.current;
         lastLevelRef.current = 1;
         
 
@@ -230,6 +257,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
           const startMap = maps.find(m => m.id === initialMapId);
           if (startMap) {
             scene.mapData = startMap;
+            scene.customItems = customItemsRef.current;
             scene.gridCols = startMap.width;
             scene.gridRows = startMap.height;
             scene.onTestPlayClear = onTestPlayClear ? () => {
@@ -298,6 +326,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
 
         const fromMapId = scene.mapData?.id || null;
         scene.mapData = targetMap;
+        scene.customItems = customItemsRef.current;
         scene.gridCols = targetMap.width;
         scene.gridRows = targetMap.height;
         
@@ -480,18 +509,16 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                   onClick={(e) => { e.stopPropagation(); handleNextConversationNode(); }}
                 >
                   <div className="absolute inset-x-0 bottom-0 h-1/3 bg-black/80 border-t-4 border-indigo-500 p-4 flex gap-4">
-                  <div className="flex-shrink-0 w-24 h-24 bg-slate-800 border-2 border-indigo-400 rounded-lg overflow-hidden flex items-center justify-center">
-                    {PORTRAITS[activeEvent.nodes[activeNodeIndex].portraitId || 'none'] ? (
+                  {PORTRAITS[activeEvent.nodes[activeNodeIndex].portraitId || 'none'] && (
+                    <div className="flex-shrink-0 w-24 h-24 bg-slate-800 border-2 border-indigo-400 rounded-lg overflow-hidden flex items-center justify-center">
                       <img 
                         src={PORTRAITS[activeEvent.nodes[activeNodeIndex].portraitId || 'none']} 
                         alt="portrait" 
                         className="w-full h-full object-cover"
                         style={{ imageRendering: 'auto' }}
                       />
-                    ) : (
-                      <div className="text-slate-500 text-xs text-center">No Image</div>
-                    )}
-                  </div>
+                    </div>
+                  )}
                   <div className="flex-1 flex flex-col min-w-0">
                     <div className="font-bold text-indigo-300 text-sm mb-1 truncate">
                       {activeEvent.nodes[activeNodeIndex].speakerName}
@@ -811,6 +838,13 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                   <MessageSquare className="w-5 h-5 text-amber-200" />
                   イベントエディターを開く
                 </button>
+                <button
+                  onClick={() => navigate('/editor/item')}
+                  className="flex items-center justify-center gap-2 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-colors border border-indigo-500"
+                >
+                  <Package className="w-5 h-5 text-indigo-200" />
+                  アイテムエディターを開く
+                </button>
 
                 {/* 自動移動モード切替 */}
                 <div className="flex items-center justify-between bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
@@ -1048,7 +1082,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                       className="w-full bg-white border border-slate-300 text-slate-800 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2.5 outline-none font-bold shadow-sm"
                     >
                       <option value="all_messages_and_map_move">すべてのメッセージ、マップ移動後</option>
-                      <option value="all_messages">すべてのメッセージ（アイテムゲット、レベルアップ、イベント発生）</option>
+                      <option value="all_messages">すべてのメッセージ（アイテムゲット、システムメッセージ、イベント発生）</option>
                       <option value="item_and_event">アイテムゲット、イベント発生</option>
                       <option value="event_only">イベント発生のみ</option>
                       <option value="none">クリック待ちなし</option>

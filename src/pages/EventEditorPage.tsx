@@ -270,18 +270,16 @@ export default function EventEditorPage() {
       {previewEvent && previewEvent.nodes[previewNodeIndex] && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={nextPreviewNode}>
           <div className="w-full max-w-2xl bg-black/80 border-t-4 border-indigo-500 p-6 flex gap-6 cursor-pointer shadow-2xl rounded-lg">
-            <div className="flex-shrink-0 w-24 h-24 bg-slate-800 border-2 border-indigo-400 rounded-lg overflow-hidden flex items-center justify-center">
-              {PORTRAITS[previewEvent.nodes[previewNodeIndex].portraitId || 'none'] ? (
+            {PORTRAITS[previewEvent.nodes[previewNodeIndex].portraitId || 'none'] && (
+              <div className="flex-shrink-0 w-24 h-24 bg-slate-800 border-2 border-indigo-400 rounded-lg overflow-hidden flex items-center justify-center">
                 <img 
                   src={PORTRAITS[previewEvent.nodes[previewNodeIndex].portraitId || 'none']} 
                   alt="portrait" 
                   className="w-full h-full object-cover"
                   style={{ imageRendering: 'auto' }}
                 />
-              ) : (
-                <div className="text-slate-500 text-xs text-center">No Image</div>
-              )}
-            </div>
+              </div>
+            )}
             <div className="flex-1 flex flex-col min-w-0">
               <div className="font-bold text-indigo-300 text-lg mb-2 truncate">
                 {previewEvent.nodes[previewNodeIndex].speakerName}

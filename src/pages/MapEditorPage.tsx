@@ -5,8 +5,9 @@ import { MapData } from '../types/MapData';
 import { getAvailableEnemies, getAvailableBosses } from '../data/EnemyAssets';
 import { PhaserGameContainer } from '../components/PhaserGameContainer';
 import { allMaps } from '../data/maps';
-import { fetchMapsFromFirestore, saveMapToFirestore, deleteMapFromFirestore, fetchEnemyAssetsFromFirestore, fetchCustomEventsFromFirestore } from '../lib/dbService';
+import { fetchMapsFromFirestore, saveMapToFirestore, deleteMapFromFirestore, fetchEnemyAssetsFromFirestore, fetchCustomEventsFromFirestore, fetchCustomItemsFromFirestore } from '../lib/dbService';
 import { CustomEvent } from '../types/CustomEvent';
+import { CustomItem } from '../types/CustomItem';
 // @ts-ignore
 import grassBgUrl from '../../public/grass_bg_1782776475818.jpg';
 
@@ -22,6 +23,7 @@ export default function MapEditorPage() {
 
   const [initialMaps, setInitialMaps] = useState<MapData[]>([]);
   const [customEvents, setCustomEvents] = useState<CustomEvent[]>([]);
+  const [customItems, setCustomItems] = useState<CustomItem[]>([]);
   const [pendingTransition, setPendingTransition] = useState<{
     type: 'switch_map' | 'go_back';
     targetMapId?: string;
@@ -35,6 +37,13 @@ export default function MapEditorPage() {
       // Load custom events
       const loadedCustomEvents = await fetchCustomEventsFromFirestore();
       setCustomEvents(loadedCustomEvents);
+
+      // Load custom items
+      const loadedCustomItems = await fetchCustomItemsFromFirestore();
+      setCustomItems(loadedCustomItems);
+      if (loadedCustomItems.length > 0 && isInitial) {
+        setItemType(loadedCustomItems[0].id);
+      }
 
       // Load maps
       let loadedMaps = await fetchMapsFromFirestore();
@@ -791,7 +800,11 @@ export default function MapEditorPage() {
                     className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
                   >
                     {bgMode === 'text-black' && <option value="treasure_text">宝 (Text)</option>}
-                    <option value="potion">ポーション (未実装)</option>
+                    {customItems.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.chestGraphic || '📦'} {item.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -998,9 +1011,9 @@ export default function MapEditorPage() {
                           C
                         </div>
                      )}
-                     {hasItem && hasItem.itemId === 'treasure_text' && (
+                     {hasItem && (
                         <div className="w-full h-full bg-amber-500/50 flex items-center justify-center text-xs font-bold text-amber-100" title={`アイテム: ${hasItem.itemId}`}>
-                          宝
+                          {hasItem.itemId === 'treasure_text' ? '宝' : (customItems.find(it => it.id === hasItem.itemId)?.chestGraphic || '🎁')}
                         </div>
                      )}
                   </div>

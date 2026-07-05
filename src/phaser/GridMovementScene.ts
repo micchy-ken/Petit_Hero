@@ -78,6 +78,7 @@ export class GridMovementScene extends Phaser.Scene {
     return this.allow8Way;
   }
   public tracerColor: 'green' | 'blue' | 'red' | 'gray' | 'none' = 'green';
+  public customItems: any[] = [];
   private slimes: SlimeData[] = [];
   private itemSprites: { gridX: number, gridY: number, sprite: Phaser.GameObjects.GameObject, itemId: string }[] = [];
   private teleportPortals: { x: number, y: number, container: Phaser.GameObjects.Container, met: boolean }[] = [];
@@ -2078,15 +2079,27 @@ export class GridMovementScene extends Phaser.Scene {
     const itemIndex = this.itemSprites.findIndex(i => i.gridX === this.currentGridX && i.gridY === this.currentGridY);
     if (itemIndex >= 0) {
       const item = this.itemSprites[itemIndex];
-      if (item.itemId === 'treasure_text') {
+      const isDefault = item.itemId === 'treasure_text';
+      const customItem = this.customItems.find((it: any) => it.id === item.itemId);
+
+      if (isDefault) {
         this.sendLog('宝を手に入れた！ ✨ (Exp +50)', 'info');
         this.enqueueMessage('item', '宝を手に入れた！ ✨ (Exp +50)');
         this.heroExp += 50;
+        this.checkLevelUp();
+      } else if (customItem) {
+        const typeLabel = customItem.type === 'equipment' ? '装備品' : customItem.type === 'magic' ? '魔法' : customItem.type === 'move_asset' ? 'ムーブアセット' : customItem.type === 'event' ? 'イベント' : customItem.type === 'drop' ? 'ドロップ' : 'アーティファクト';
+        const descText = customItem.description ? `\n${customItem.description}` : '';
+        const msg = `『${customItem.name}』(${typeLabel})を手に入れた！ ✨${descText}`;
+        this.sendLog(`『${customItem.name}』を手に入れた！ ✨`, 'info');
+        this.enqueueMessage('item', msg);
+        this.heroExp += 30;
         this.checkLevelUp();
       } else {
         this.sendLog(`アイテムを手に入れた！ (${item.itemId})`, 'info');
         this.enqueueMessage('item', `アイテムを手に入れた！ (${item.itemId})`);
       }
+
       if (item.sprite && item.sprite.active) {
         item.sprite.destroy();
       }
@@ -2110,11 +2123,20 @@ export class GridMovementScene extends Phaser.Scene {
     const msg = this.messageQueue.shift();
     if (!msg) return;
 
+    // Reset movement inputs on monologue trigger to prevent running away or locked inputs
+    this.virtualInput = { up: false, down: false, left: false, right: false };
+    if (this.input && this.input.keyboard) {
+      this.input.keyboard.resetKeys();
+    }
+
     this.isShowingMonologue = true;
 
     if (this.onSystemMessageCallback) {
         this.onSystemMessageCallback(msg.type, msg.text, () => {
             this.isShowingMonologue = false;
+            if (this.input && this.input.keyboard) {
+              this.input.keyboard.resetKeys();
+            }
             if (msg.onComplete) {
               const action = msg.onComplete;
               action();
@@ -2138,8 +2160,6 @@ export class GridMovementScene extends Phaser.Scene {
     const monologueEvent = eventsHere.find((e: any) => e.type === 'monologue');
     const customEvent = eventsHere.find((e: any) => e.type === 'custom_event');
     
-    const teleportHasCustomEvent = teleportEvent && teleportEvent.data?.eventId;
-
     if (customEvent && this.onCustomEventCallback && this.canPlayEvent(customEvent)) {
       this.isShowingMonologue = true; 
       this.markEventPlayed(customEvent);
@@ -2148,16 +2168,6 @@ export class GridMovementScene extends Phaser.Scene {
         if (teleportEvent) {
           this.handleTeleport(teleportEvent);
         }
-      });
-      return;
-    }
-    
-    if (teleportHasCustomEvent && this.onCustomEventCallback && this.canPlayEvent(teleportEvent)) {
-      this.isShowingMonologue = true;
-      this.markEventPlayed(teleportEvent);
-      this.onCustomEventCallback(teleportEvent.data.eventId, () => {
-        this.isShowingMonologue = false;
-        this.handleTeleport(teleportEvent);
       });
       return;
     }
@@ -2193,14 +2203,28 @@ export class GridMovementScene extends Phaser.Scene {
       if (eventData.requiredDefeatRate && dRate < eventData.requiredDefeatRate) met = false;
       
       if (met) {
-        this.isTurboActive = false;
-        if (this.onTestPlayClear) {
-          this.onTestPlayClear();
-        } else if (this.onTeleport && eventData.targetMap) {
-          this.sendLog(`条件クリア！次のマップへ移動します。`, 'system');
-          this.onTeleport(eventData.targetMap);
+        const doTransition = () => {
+          this.isTurboActive = false;
+          if (this.onTestPlayClear) {
+            this.onTestPlayClear();
+          } else if (this.onTeleport && eventData.targetMap) {
+            this.sendLog(`条件クリア！次のマップへ移動します。`, 'system');
+            this.onTeleport(eventData.targetMap);
+          } else {
+            this.sendLog(`条件クリア！次のマップへ移動します。(※移動先未設定)`, 'system');
+          }
+        };
+
+        const teleportHasCustomEvent = eventData.eventId;
+        if (teleportHasCustomEvent && this.onCustomEventCallback && this.canPlayEvent(event)) {
+          this.isShowingMonologue = true;
+          this.markEventPlayed(event);
+          this.onCustomEventCallback(eventData.eventId, () => {
+            this.isShowingMonologue = false;
+            doTransition();
+          });
         } else {
-          this.sendLog(`条件クリア！次のマップへ移動します。(※移動先未設定)`, 'system');
+          doTransition();
         }
       } else {
         const reqExp = eventData.requiredExplorationRate || 0;
@@ -2403,22 +2427,24 @@ export class GridMovementScene extends Phaser.Scene {
     const { GRID_SIZE } = GridMovementScene;
     
     this.mapData.items.forEach((item: any) => {
-      if (item.itemId === 'treasure_text') {
-        const text = this.add.text(
-          item.x * GRID_SIZE + GRID_SIZE / 2, 
-          item.y * GRID_SIZE + GRID_SIZE / 2, 
-          '宝', 
-          { fontFamily: 'serif', fontSize: '24px', color: '#fbbf24', fontStyle: 'bold' }
-        );
-        text.setOrigin(0.5, 0.5);
-        text.setDepth(5);
-        this.itemSprites.push({
-          gridX: item.x,
-          gridY: item.y,
-          sprite: text,
-          itemId: item.itemId
-        });
-      }
+      const isDefault = item.itemId === 'treasure_text';
+      const customItem = this.customItems.find((it: any) => it.id === item.itemId);
+      const graphic = isDefault ? '宝' : (customItem ? customItem.chestGraphic : '🎁');
+
+      const text = this.add.text(
+        item.x * GRID_SIZE + GRID_SIZE / 2, 
+        item.y * GRID_SIZE + GRID_SIZE / 2, 
+        graphic, 
+        { fontFamily: 'serif', fontSize: '24px', color: '#fbbf24', fontStyle: 'bold' }
+      );
+      text.setOrigin(0.5, 0.5);
+      text.setDepth(5);
+      this.itemSprites.push({
+        gridX: item.x,
+        gridY: item.y,
+        sprite: text,
+        itemId: item.itemId
+      });
     });
   }
 
@@ -2951,6 +2977,7 @@ export class GridMovementScene extends Phaser.Scene {
 
           if (!forceRebuild) {
             this.sendLog(`条件達成！テレポートゲートが現れた！ 🌀 (${event.x}, ${event.y})`, 'system');
+            this.enqueueMessage('system', '条件達成！テレポートゲートが現れた！ 🌀');
             
             for (let i = 0; i < 12; i++) {
               const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);

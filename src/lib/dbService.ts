@@ -6,6 +6,7 @@ import { EnemyAssets as staticEnemyAssets, BossAssets as staticBossAssets, setDy
 import { CustomEvent } from '../types/CustomEvent';
 import { HeroStatus } from '../types/HeroStatus';
 import { DefaultHeroStatus, setDynamicHeroStatus } from '../data/HeroStatusAssets';
+import { CustomItem } from '../types/CustomItem';
 
 /**
  * Fetch all maps from Firestore.
@@ -178,3 +179,31 @@ export async function saveCustomEventsToFirestore(events: CustomEvent[]): Promis
   await setDoc(docRef, { events });
   console.log('Saved custom events to Firestore');
 }
+
+export async function fetchCustomItemsFromFirestore(): Promise<CustomItem[]> {
+  try {
+    const docRef = doc(db, 'config', 'custom_items');
+    const docSnap = await getDoc(docRef);
+    
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      const items = data.items || [];
+      console.log('Loaded custom items from Firestore');
+      return items;
+    } else {
+      console.log('No custom items found in Firestore. Seeding with empty array...');
+      await setDoc(docRef, { items: [] });
+      return [];
+    }
+  } catch (error) {
+    console.error('Error fetching custom items from Firestore:', error);
+    return [];
+  }
+}
+
+export async function saveCustomItemsToFirestore(items: CustomItem[]): Promise<void> {
+  const docRef = doc(db, 'config', 'custom_items');
+  await setDoc(docRef, { items });
+  console.log('Saved custom items to Firestore');
+}
+
