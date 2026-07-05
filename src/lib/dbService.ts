@@ -207,3 +207,37 @@ export async function saveCustomItemsToFirestore(items: CustomItem[]): Promise<v
   console.log('Saved custom items to Firestore');
 }
 
+import { MagicData } from '../types/MagicData';
+
+export async function fetchMagicDataFromFirestore(): Promise<MagicData[]> {
+  try {
+    const docRef = doc(db, 'config', 'custom_magics');
+    const docSnap = await getDoc(docRef);
+    
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      const magics = data.magics || [];
+      console.log('Loaded custom magics from Firestore');
+      return magics;
+    } else {
+      console.log('No custom magics found in Firestore. Seeding with default magics...');
+      const defaultMagics: MagicData[] = [
+        { id: 'magic_fire', name: 'ファイアボルト', attribute: 'fire', power: 12, interval: 3, acquisitionType: 'item', acquisitionValue: 'item_fire_scroll' },
+        { id: 'magic_ice', name: 'アイスブラスト', attribute: 'ice', power: 12, interval: 3, acquisitionType: 'item', acquisitionValue: 'item_ice_scroll' }
+      ];
+      await setDoc(docRef, { magics: defaultMagics });
+      return defaultMagics;
+    }
+  } catch (error) {
+    console.error('Error fetching custom magics from Firestore:', error);
+    return [];
+  }
+}
+
+export async function saveMagicDataToFirestore(magics: MagicData[]): Promise<void> {
+  const docRef = doc(db, 'config', 'custom_magics');
+  await setDoc(docRef, { magics });
+  console.log('Saved custom magics to Firestore');
+}
+
+

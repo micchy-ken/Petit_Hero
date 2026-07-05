@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save, Plus, Trash2, Loader2, Package, Sparkles, Check, HelpCircle } from 'lucide-react';
 import { CustomItem, ItemType } from '../types/CustomItem';
-import { fetchCustomItemsFromFirestore, saveCustomItemsToFirestore } from '../lib/dbService';
+import { fetchCustomItemsFromFirestore, saveCustomItemsToFirestore, fetchMagicDataFromFirestore } from '../lib/dbService';
+import { MagicData } from '../types/MagicData';
 
 const CHEST_GRAPHICS = [
   { key: '📦', label: 'ノーマル木箱 (📦)' },
@@ -27,6 +28,7 @@ const ITEM_TYPES: { value: ItemType; label: string; color: string; description: 
 export default function ItemEditorPage() {
   const navigate = useNavigate();
   const [items, setItems] = useState<CustomItem[]>([]);
+  const [magics, setMagics] = useState<MagicData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
@@ -37,13 +39,17 @@ export default function ItemEditorPage() {
 
   const loadData = async () => {
     setIsLoading(true);
-    const data = await fetchCustomItemsFromFirestore();
+    const [data, magicsData] = await Promise.all([
+      fetchCustomItemsFromFirestore(),
+      fetchMagicDataFromFirestore()
+    ]);
     
     // Seed default items if empty
     if (data.length === 0) {
       const defaultItems: CustomItem[] = [
         { id: 'item_iron_sword', name: '鋼鉄の剣', type: 'equipment', chestGraphic: '📦', description: '攻撃力が上昇する頑丈な剣。' },
-        { id: 'item_fire_scroll', name: 'ファイアボルト', type: 'magic', chestGraphic: '🔥', description: '炎の弾を撃ち出す古代の呪文書。' },
+        { id: 'item_fire_scroll', name: 'ファイアボルト', type: 'magic', chestGraphic: '🔥', description: '炎の弾を撃ち出す古代の呪文書。', targetMagicId: 'magic_fire' },
+        { id: 'item_ice_scroll', name: 'アイスブラスト', type: 'magic', chestGraphic: '❄️', description: '冷たい吹雪を巻き起こす呪文書。', targetMagicId: 'magic_ice' },
         { id: 'item_teleport_boots', name: 'エルメスの靴', type: 'move_asset', chestGraphic: '💎', description: 'すばやく移動できるようになる不思議な靴。' },
         { id: 'item_gate_key', name: '古びた真鍮の鍵', type: 'event', chestGraphic: '🗝️', description: 'ゲートを開くために必要な古い鍵。' },
       ];
@@ -51,6 +57,7 @@ export default function ItemEditorPage() {
     } else {
       setItems(data);
     }
+    setMagics(magicsData);
     setIsLoading(false);
   };
 
@@ -235,6 +242,25 @@ export default function ItemEditorPage() {
                         rows={1}
                       />
                     </div>
+
+                    {item.type === 'magic' && (
+                      <div className="md:col-span-12 mt-2 bg-purple-50 p-3 rounded-lg border border-purple-100 flex items-center gap-3">
+                        <Sparkles className="text-purple-500 w-5 h-5 flex-shrink-0" />
+                        <div className="flex-1">
+                          <label className="block text-xs font-bold text-purple-700 uppercase tracking-wider mb-1.5">習得する魔法 (Magic to learn)</label>
+                          <select
+                            value={item.targetMagicId || ''}
+                            onChange={(e) => updateItem(index, 'targetMagicId', e.target.value)}
+                            className="w-full bg-white border border-purple-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-sm"
+                          >
+                            <option value="">-- 魔法を選択してください --</option>
+                            {magics.filter(m => m.acquisitionType === 'item').map(m => (
+                              <option key={m.id} value={m.id}>{m.name} ({m.id})</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* プレビュー・お助け情報 */}

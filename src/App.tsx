@@ -6,6 +6,7 @@ import EnemyEditorPage from './pages/EnemyEditorPage';
 import HeroEditorPage from './pages/HeroEditorPage';
 import EventEditorPage from './pages/EventEditorPage';
 import ItemEditorPage from './pages/ItemEditorPage';
+import MagicEditorPage from './pages/MagicEditorPage';
 
 export default function App() {
   return (
@@ -17,8 +18,10 @@ export default function App() {
         <Route path="/editor/hero" element={<HeroEditorPage />} />
         <Route path="/editor/event" element={<EventEditorPage />} />
         <Route path="/editor/item" element={<ItemEditorPage />} />
+        <Route path="/editor/magic" element={<MagicEditorPage />} />
       </Routes>
     </HashRouter>
   );
 }
+
 

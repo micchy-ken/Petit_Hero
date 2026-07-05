@@ -6,4 +6,5 @@ export interface CustomItem {
   chestGraphic: string; // Predefined chest visual key, e.g., '🎁', '📦', '💎', '⭐', '💀', '🔔'
   type: ItemType;
   description: string;
+  targetMagicId?: string;
 }

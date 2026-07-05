@@ -79,6 +79,9 @@ export class GridMovementScene extends Phaser.Scene {
   }
   public tracerColor: 'green' | 'blue' | 'red' | 'gray' | 'none' = 'green';
   public customItems: any[] = [];
+  public magics: any[] = [];
+  public acquiredItems: Set<string> = new Set();
+  private lastMagicCastTime: Record<string, number> = {};
   private slimes: SlimeData[] = [];
   private itemSprites: { gridX: number, gridY: number, sprite: Phaser.GameObjects.GameObject, itemId: string }[] = [];
   private teleportPortals: { x: number, y: number, container: Phaser.GameObjects.Container, met: boolean }[] = [];
@@ -621,28 +624,31 @@ export class GridMovementScene extends Phaser.Scene {
 
   public update(time: number, delta: number) {
     if (this.isShowingMonologue) return;
-    // 通常モード (レベル8以上) のみ、火の魔法と氷の魔法をサポート
-    if (this.heroLevel >= 8) {
-      // 火の魔法 自動詠唱 (3秒に1回、敵がいる場合)
-      if (time - this.lastFireMagicTime > 3000) {
-        if (this.slimes.length > 0) {
-          this.castFireMagic();
-          this.lastFireMagicTime = time;
+    
+    // 魔法自動詠唱
+    if (this.slimes.length > 0) {
+      this.magics.forEach(magic => {
+        let hasMagic = false;
+        if (magic.acquisitionType === 'item') {
+          const acquiredByMagicId = this.customItems.some((item: any) => item.targetMagicId === magic.id && this.acquiredItems.has(item.id));
+          hasMagic = this.acquiredItems.has(magic.acquisitionValue) || acquiredByMagicId;
+        } else if (magic.acquisitionType === 'event') {
+          // Check if event was played (using basic string inclusion for now or if event ID matches)
+          hasMagic = Array.from(this.playedMapEvents).some(id => id.includes(magic.acquisitionValue)) || 
+                     Array.from(this.getGlobalPlayedEvents()).some(id => id.includes(magic.acquisitionValue));
+        } else if (magic.acquisitionType === 'level') {
+          hasMagic = this.heroLevel >= Number(magic.acquisitionValue);
         }
-      }
 
-      // 氷の魔法 自動詠唱 (5秒に1回、敵がいる場合)
-      if (time - this.lastIceMagicTime > 5000) {
-        if (this.slimes.length > 0) {
-          this.castIceMagic();
-          this.lastIceMagicTime = time;
+        if (hasMagic) {
+          const lastTime = this.lastMagicCastTime[magic.id] || 0;
+          const intervalMs = (magic.interval || 3) * 1000;
+          if (time - lastTime > intervalMs) {
+            this.castMagic(magic);
+            this.lastMagicCastTime[magic.id] = time;
+          }
         }
-      }
-
-      // 手動詠唱 (Spaceキーが押された場合)
-      if (this.cursors && Phaser.Input.Keyboard.JustDown(this.cursors.space)) {
-        this.castFireMagic();
-      }
+      });
     }
 
     if (this.autoMode === 'none' && !this.isMoving) {
@@ -1263,38 +1269,53 @@ export class GridMovementScene extends Phaser.Scene {
     // 勇者の自動移動
     if (this.autoMode !== 'none' && !this.isMoving) {
       if (this.autoMode === 'seek') {
-        // 1. まずゴールが画面に映っていて条件を満たしている（出現している）かチェック
+        // 1. まずアイテムやゴールが画面に映っているかチェック
         let targetGoal: any = null;
-        if (this.goalBehavior === 'seek_visible' && this.mapData && this.mapData.events) {
-          const expRate = (this.visitedGrids.size / this.totalGrids) * 100;
-          const sRate = (this.viewedGrids.size / this.totalGrids) * 100;
-          const maxEnemies = this.mapData?.maxEnemies;
-          let dRate = 0;
-          if (maxEnemies !== undefined && maxEnemies !== 'infinite' && (maxEnemies as number) > 0) {
-            dRate = (this.enemiesDefeated / (maxEnemies as number)) * 100;
-          }
-
-          const activeGoals = this.mapData.events.filter((event: any) => {
-            if (event.type !== 'teleport') return false;
-            const eventData = event.data || {};
-            let met = true;
-            if (eventData.requiredExplorationRate && expRate < eventData.requiredExplorationRate) met = false;
-            if (eventData.requiredSearchRate && sRate < eventData.requiredSearchRate) met = false;
-            if (eventData.requiredDefeatRate && dRate < eventData.requiredDefeatRate) met = false;
-            if (!met) return false;
-
-            // 画面に映っている (現在のカメラビューポート内)
-            const onScreen = (
-              event.x >= this.currentCamGridX &&
-              event.x < this.currentCamGridX + GridMovementScene.VIEWPORT_COLS &&
-              event.y >= this.currentCamGridY &&
-              event.y < this.currentCamGridY + GridMovementScene.VIEWPORT_ROWS
+        if (this.goalBehavior === 'seek_visible') {
+          // まずアイテムをチェック
+          const visibleItems = this.itemSprites.filter((item) => {
+            if (!item.sprite || !item.sprite.active) return false;
+            return (
+              item.gridX >= this.currentCamGridX &&
+              item.gridX < this.currentCamGridX + GridMovementScene.VIEWPORT_COLS &&
+              item.gridY >= this.currentCamGridY &&
+              item.gridY < this.currentCamGridY + GridMovementScene.VIEWPORT_ROWS
             );
-            return onScreen;
           });
 
-          if (activeGoals.length > 0) {
-            targetGoal = activeGoals[0];
+          if (visibleItems.length > 0) {
+            targetGoal = { x: visibleItems[0].gridX, y: visibleItems[0].gridY };
+          } else if (this.mapData && this.mapData.events) {
+            const expRate = (this.visitedGrids.size / this.totalGrids) * 100;
+            const sRate = (this.viewedGrids.size / this.totalGrids) * 100;
+            const maxEnemies = this.mapData?.maxEnemies;
+            let dRate = 0;
+            if (maxEnemies !== undefined && maxEnemies !== 'infinite' && (maxEnemies as number) > 0) {
+              dRate = (this.enemiesDefeated / (maxEnemies as number)) * 100;
+            }
+
+            const activeGoals = this.mapData.events.filter((event: any) => {
+              if (event.type !== 'teleport') return false;
+              const eventData = event.data || {};
+              let met = true;
+              if (eventData.requiredExplorationRate && expRate < eventData.requiredExplorationRate) met = false;
+              if (eventData.requiredSearchRate && sRate < eventData.requiredSearchRate) met = false;
+              if (eventData.requiredDefeatRate && dRate < eventData.requiredDefeatRate) met = false;
+              if (!met) return false;
+
+              // 画面に映っている (現在のカメラビューポート内)
+              const onScreen = (
+                event.x >= this.currentCamGridX &&
+                event.x < this.currentCamGridX + GridMovementScene.VIEWPORT_COLS &&
+                event.y >= this.currentCamGridY &&
+                event.y < this.currentCamGridY + GridMovementScene.VIEWPORT_ROWS
+              );
+              return onScreen;
+            });
+
+            if (activeGoals.length > 0) {
+              targetGoal = activeGoals[0];
+            }
           }
         }
 
@@ -2079,6 +2100,7 @@ export class GridMovementScene extends Phaser.Scene {
     const itemIndex = this.itemSprites.findIndex(i => i.gridX === this.currentGridX && i.gridY === this.currentGridY);
     if (itemIndex >= 0) {
       const item = this.itemSprites[itemIndex];
+      this.acquiredItems.add(item.itemId);
       const isDefault = item.itemId === 'treasure_text';
       const customItem = this.customItems.find((it: any) => it.id === item.itemId);
 
@@ -2480,17 +2502,17 @@ export class GridMovementScene extends Phaser.Scene {
     this.checkLevelUp();
   }
 
-  public castFireMagic() {
-    if (this.heroLevel < 8) {
-      this.sendLog("火の魔法は通常モード（Lv.8以上）でのみ使用可能です。", "system");
-      return;
-    }
-
+  public castMagic(magic: any) {
     if (this.slimes.length === 0) {
       return;
     }
 
-    // 最も近いスライムをターゲットにする
+    if (magic.attribute === 'ice') {
+      this.castIceMagicEffect(magic);
+      return;
+    }
+
+    // Default or fire: 最も近いスライムをターゲットにする
     let targetSlime: SlimeData | null = null;
     let minDistance = Infinity;
 
@@ -2503,11 +2525,11 @@ export class GridMovementScene extends Phaser.Scene {
     });
 
     if (targetSlime) {
-      this.shootFireball(targetSlime);
+      this.shootFireball(targetSlime, magic);
     }
   }
 
-  private shootFireball(targetSlime: SlimeData) {
+  private shootFireball(targetSlime: SlimeData, magic: any) {
     const startX = this.hero.x;
     const startY = this.hero.y;
     const endX = targetSlime.sprite.x;
@@ -2544,7 +2566,7 @@ export class GridMovementScene extends Phaser.Scene {
     const speed = 400; // ピクセル/秒の飛行速度
     const duration = (dist / speed) * 1000;
 
-    this.sendLog("火の魔法（ファイアボール）を直線に放った！ 🔥", "combat");
+    this.sendLog(`火の魔法（${magic.name || 'ファイアボール'}）を直線に放った！ 🔥`, "combat");
 
     this.tweens.add({
       targets: fireball,
@@ -2570,13 +2592,12 @@ export class GridMovementScene extends Phaser.Scene {
       onComplete: () => {
         fireball.destroy();
         // 直撃ポイント近くにいるスライムすべてにダメージを与える
-        this.triggerFireExplosionAt(targetX, targetY);
+        this.triggerFireExplosionAt(targetX, targetY, magic.power || 12);
       }
     });
   }
 
-  private triggerFireExplosionAt(x: number, y: number) {
-    const fireDamage = 8;
+  private triggerFireExplosionAt(x: number, y: number, fireDamage: number) {
     
     // 爆発の近く（48px以内）にいるスライムを探す
     const hitSlimes = this.slimes.filter(slime => {
@@ -2654,13 +2675,8 @@ export class GridMovementScene extends Phaser.Scene {
     this.notifyStateChange(false);
   }
 
-  public castIceMagic() {
-    if (this.heroLevel < 8) {
-      this.sendLog("氷の魔法は通常モード（Lv.8以上）でのみ使用可能です。", "system");
-      return;
-    }
-
-    this.sendLog("氷の魔法（アイシクル・サークル）！ ❄️", "combat");
+  public castIceMagicEffect(magic: any) {
+    this.sendLog(`氷の魔法（${magic.name || 'アイシクル・サークル'}）！ ❄️`, "combat");
 
     const GRID_SIZE = GridMovementScene.GRID_SIZE;
     const hx = this.hero.x;
@@ -2812,7 +2828,7 @@ export class GridMovementScene extends Phaser.Scene {
     }
 
     // 5. ダメージ適用 (効果は周囲8マスのまま)
-    const iceDamage = 12; // 氷の魔法は周囲のみのため強力
+    const iceDamage = magic.power || 12; // 氷の魔法は周囲のみのため強力
     hitSlimes.forEach(targetSlime => {
       const actualIceDamage = Math.max(1, iceDamage - (targetSlime.defense || 0));
       targetSlime.hp -= actualIceDamage;

@@ -6,7 +6,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 
 import { MapData } from '../types/MapData';
 import { CustomEvent, ConversationNode } from '../types/CustomEvent';
-import { fetchCustomEventsFromFirestore, fetchCustomItemsFromFirestore } from '../lib/dbService';
+import { fetchCustomEventsFromFirestore, fetchCustomItemsFromFirestore, fetchMagicDataFromFirestore } from '../lib/dbService';
 import { CustomItem } from '../types/CustomItem';
 import { PORTRAITS } from '../data/portraits';
 
@@ -37,9 +37,10 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
       setActiveNodeIndex(activeNodeIndex + 1);
     } else {
       setActiveEvent(null);
-      if (onEventComplete) {
-        onEventComplete();
-        setOnEventComplete(null);
+      const currentCallback = onEventComplete;
+      setOnEventComplete(null);
+      if (currentCallback) {
+        currentCallback();
       }
       
       // ゲーム画面（キャンバス）にフォーカスを強制的に戻してキーボード入力を即再開させる
@@ -70,20 +71,24 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
   const [isEventsLoaded, setIsEventsLoaded] = useState(false);
   const [customItems, setCustomItems] = useState<CustomItem[]>([]);
   const customItemsRef = useRef<CustomItem[]>([]);
+  const magicsRef = useRef<any[]>([]);
 
   useEffect(() => {
     Promise.all([
       fetchCustomEventsFromFirestore(),
-      fetchCustomItemsFromFirestore()
-    ]).then(([eventsData, itemsData]) => {
+      fetchCustomItemsFromFirestore(),
+      fetchMagicDataFromFirestore()
+    ]).then(([eventsData, itemsData, magicsData]) => {
       setCustomEvents(eventsData);
       customEventsRef.current = eventsData;
       setCustomItems(itemsData);
       customItemsRef.current = itemsData;
+      magicsRef.current = magicsData;
       setIsEventsLoaded(true);
 
       if (sceneRef.current) {
         sceneRef.current.customItems = itemsData;
+        sceneRef.current.magics = magicsData;
       }
     });
   }, []);
@@ -163,7 +168,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
   ];
 
   const availableGoalBehaviors = [
-    { id: 'seek_visible', label: 'ゴールが視認できたら即座に目指す', description: '画面内にゴールが現れた場合、それを最優先で目指します。' },
+    { id: 'seek_visible', label: 'ゴール、アイテムが発見できたら即座に目指す', description: '画面内にゴールやアイテムが現れた場合、それを最優先で目指します。' },
     { id: 'ignore', label: 'ゴールを無視する', description: 'ゴールが出現しても特別な行動をしません。' },
   ];
 
@@ -200,6 +205,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
       if (scene) {
         sceneRef.current = scene;
         scene.customItems = customItemsRef.current;
+        scene.magics = magicsRef.current;
         lastLevelRef.current = 1;
         
 
@@ -696,72 +702,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
               </div>
             </div>
 
-            {/* 魔法スロット（通常モード Lv8以上で解放） */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-              {/* 火の魔法 */}
-              <div className={`p-3 rounded-xl border flex items-center justify-between text-xs font-mono transition-all duration-300 ${
-                heroState.level >= 8 
-                  ? "bg-gradient-to-r from-red-950/70 to-orange-950/70 border-orange-500/30 text-orange-200" 
-                  : "bg-slate-900/40 border-slate-800 text-slate-500"
-              }`}>
-                <div className="flex flex-col gap-0.5">
-                  <div className={`flex items-center gap-1.5 font-sans font-bold ${heroState.level >= 8 ? 'text-orange-400' : 'text-slate-500'}`}>
-                    <Flame className={`w-4 h-4 ${heroState.level >= 8 ? 'text-orange-500 animate-pulse' : 'text-slate-600'}`} />
-                    <span>火の魔法 (ファイア)</span>
-                  </div>
-                  <span className="text-[10px] text-slate-400">
-                    {heroState.level >= 8 
-                      ? "4方向直線: 3秒毎 / [Space]" 
-                      : "Lv.8以上で解放"}
-                  </span>
-                </div>
-                <button
-                  onClick={() => sceneRef.current?.castFireMagic()}
-                  disabled={heroState.level < 8}
-                  className={`font-bold py-1.5 px-3 rounded-lg flex items-center gap-1 transition-all text-xs active:scale-95 ${
-                    heroState.level >= 8
-                      ? "bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 text-white cursor-pointer shadow-md shadow-red-500/20"
-                      : "bg-slate-800 text-slate-600 border border-slate-700/50 cursor-not-allowed"
-                  }`}
-                >
-                  <Zap className="w-3.5 h-3.5" />
-                  詠唱
-                </button>
-              </div>
-
-              {/* 氷の魔法 */}
-              <div className={`p-3 rounded-xl border flex items-center justify-between text-xs font-mono transition-all duration-300 ${
-                heroState.level >= 8 
-                  ? "bg-gradient-to-r from-sky-950/70 to-blue-950/70 border-sky-500/30 text-sky-200" 
-                  : "bg-slate-900/40 border-slate-800 text-slate-500"
-              }`}>
-                <div className="flex flex-col gap-0.5">
-                  <div className={`flex items-center gap-1.5 font-sans font-bold ${heroState.level >= 8 ? 'text-sky-400' : 'text-slate-500'}`}>
-                    <Sparkles className={`w-4 h-4 ${heroState.level >= 8 ? 'text-sky-400 animate-pulse' : 'text-slate-600'}`} />
-                    <span>氷の魔法 (アイシクル)</span>
-                  </div>
-                  <span className="text-[10px] text-slate-400">
-                    {heroState.level >= 8 
-                      ? "周囲8マス: 5秒毎自動" 
-                      : "Lv.8以上で解放"}
-                  </span>
-                </div>
-                <button
-                  onClick={() => sceneRef.current?.castIceMagic()}
-                  disabled={heroState.level < 8}
-                  className={`font-bold py-1.5 px-3 rounded-lg flex items-center gap-1 transition-all text-xs active:scale-95 ${
-                    heroState.level >= 8
-                      ? "bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white cursor-pointer shadow-md shadow-sky-500/20"
-                      : "bg-slate-800 text-slate-600 border border-slate-700/50 cursor-not-allowed"
-                  }`}
-                >
-                  <Zap className="w-3.5 h-3.5" />
-                  詠唱
-                </button>
-              </div>
-            </div>
-
-            {/* レベル別デモ等、不必要な要素は削除されました */}
+            {/* 魔法スロット（廃止） */}
           </div>
         </div>
       
@@ -844,6 +785,13 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                 >
                   <Package className="w-5 h-5 text-indigo-200" />
                   アイテムエディターを開く
+                </button>
+                <button
+                  onClick={() => navigate('/editor/magic')}
+                  className="flex items-center justify-center gap-2 w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-colors border border-purple-500"
+                >
+                  <Sparkles className="w-5 h-5 text-purple-200" />
+                  マジックエディターを開く
                 </button>
 
                 {/* 自動移動モード切替 */}
@@ -1105,7 +1053,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                 <div className="flex flex-col gap-2">
                   <h4 className="font-bold text-slate-800 flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-amber-500" />
-                    ゴール発見時の行動指針
+                    アイテム・ゴール発見時の行動指針
                   </h4>
                   <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-col gap-2">
                     <select
