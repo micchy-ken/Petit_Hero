@@ -87,7 +87,7 @@ export default function ItemEditorPage() {
     setItems([...items, newItem]);
   };
 
-  const updateItem = (index: number, field: keyof CustomItem, value: string) => {
+  const updateItem = (index: number, field: keyof CustomItem, value: any) => {
     const newItems = [...items];
     newItems[index] = {
       ...newItems[index],
@@ -257,6 +257,63 @@ export default function ItemEditorPage() {
                             {magics.filter(m => m.acquisitionType === 'item').map(m => (
                               <option key={m.id} value={m.id}>{m.name} ({m.id})</option>
                             ))}
+                          </select>
+                        </div>
+                      </div>
+                    )}
+
+                    {item.type === 'equipment' && (
+                      <div className="md:col-span-12 mt-2 bg-indigo-50 p-4 rounded-xl border border-indigo-100 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div>
+                          <label className="block text-xs font-bold text-indigo-700 uppercase tracking-wider mb-1.5">攻撃力 (Attack)</label>
+                          <input
+                            type="number"
+                            value={item.attack !== undefined ? item.attack : 0}
+                            onChange={(e) => updateItem(index, 'attack', parseInt(e.target.value) || 0)}
+                            className="w-full bg-white border border-indigo-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                            min="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-indigo-700 uppercase tracking-wider mb-1.5">防御力 (Defense)</label>
+                          <input
+                            type="number"
+                            value={item.defense !== undefined ? item.defense : 0}
+                            onChange={(e) => updateItem(index, 'defense', parseInt(e.target.value) || 0)}
+                            className="w-full bg-white border border-indigo-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                            min="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-indigo-700 uppercase tracking-wider mb-1.5">攻撃属性 (Atk Element)</label>
+                          <select
+                            value={item.attackElement || ''}
+                            onChange={(e) => updateItem(index, 'attackElement', e.target.value)}
+                            className="w-full bg-white border border-indigo-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                          >
+                            <option value="">無属性 (None)</option>
+                            <option value="fire">火属性 (Fire)</option>
+                            <option value="water">水属性 (Water)</option>
+                            <option value="wind">風属性 (Wind)</option>
+                            <option value="earth">地属性 (Earth)</option>
+                            <option value="light">光属性 (Light)</option>
+                            <option value="dark">闇属性 (Dark)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-indigo-700 uppercase tracking-wider mb-1.5">防御属性 (Def Element)</label>
+                          <select
+                            value={item.defenseElement || ''}
+                            onChange={(e) => updateItem(index, 'defenseElement', e.target.value)}
+                            className="w-full bg-white border border-indigo-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                          >
+                            <option value="">無属性 (None)</option>
+                            <option value="fire">火属性 (Fire)</option>
+                            <option value="water">水属性 (Water)</option>
+                            <option value="wind">風属性 (Wind)</option>
+                            <option value="earth">地属性 (Earth)</option>
+                            <option value="light">光属性 (Light)</option>
+                            <option value="dark">闇属性 (Dark)</option>
                           </select>
                         </div>
                       </div>

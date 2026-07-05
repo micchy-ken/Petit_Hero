@@ -7,4 +7,8 @@ export interface CustomItem {
   type: ItemType;
   description: string;
   targetMagicId?: string;
+  attack?: number;
+  defense?: number;
+  attackElement?: string;
+  defenseElement?: string;
 }

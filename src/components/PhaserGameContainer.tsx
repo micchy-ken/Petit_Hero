@@ -111,7 +111,9 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
     defense: 0,
     level: 1,
     exp: 0,
-    requiredExp: 10
+    requiredExp: 10,
+    acquiredItems: [],
+    equippedEquipmentId: null
   });
 
   const [logs, setLogs] = useState<ActionLog[]>([]);
@@ -930,29 +932,136 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                     <Shield className="w-4 h-4 text-sky-600" />
                     現在の装備
                   </h4>
-                  <div className="flex flex-col gap-3 text-sm">
-                    <div className="flex justify-between items-center bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm">
-                      <div className="flex items-center gap-2">
-                        <Sword className="w-4 h-4 text-slate-400" />
-                        <span className="text-slate-600">武器</span>
+                  {customItems.find(it => it.id === heroState.equippedEquipmentId) ? (() => {
+                    const eq = customItems.find(it => it.id === heroState.equippedEquipmentId)!;
+                    return (
+                      <div className="flex justify-between items-center bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm text-sm">
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-xl">{eq.chestGraphic || '⚔️'}</span>
+                          <div>
+                            <div className="font-bold text-slate-800">{eq.name}</div>
+                            <div className="text-[10px] text-slate-500 flex gap-1.5 font-bold">
+                              {eq.attack !== undefined && eq.attack > 0 && <span className="text-red-500">攻+{eq.attack}</span>}
+                              {eq.defense !== undefined && eq.defense > 0 && <span className="text-blue-500">防+{eq.defense}</span>}
+                              {eq.attackElement && (
+                                <span className="text-[9px] px-1 bg-red-50 text-red-600 border border-red-200 rounded">
+                                  攻:{{ fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' }[eq.attackElement] || eq.attackElement}
+                                </span>
+                              )}
+                              {eq.defenseElement && (
+                                <span className="text-[9px] px-1 bg-blue-50 text-blue-600 border border-blue-200 rounded">
+                                  防:{{ fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' }[eq.defenseElement] || eq.defenseElement}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            if (sceneRef.current) sceneRef.current.equipItem(null);
+                          }}
+                          className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1 rounded font-bold border border-slate-300 transition-colors"
+                        >
+                          外す
+                        </button>
                       </div>
-                      <span className="font-bold text-slate-800">ひのきのぼう</span>
+                    );
+                  })() : (
+                    <span className="text-slate-400 italic text-xs block text-center py-2 bg-white rounded-lg border border-slate-200">未装備</span>
+                  )}
+                </div>
+
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                  <h4 className="font-bold text-slate-800 border-b border-slate-200 pb-2 mb-3 flex items-center justify-between">
+                    <span className="flex items-center gap-2">
+                      <Package className="w-4 h-4 text-indigo-600" />
+                      アイテムボックス
+                    </span>
+                    <span className="text-xs font-normal text-slate-500 font-mono">
+                      {heroState.acquiredItems?.length || 0} 個
+                    </span>
+                  </h4>
+                  
+                  {heroState.acquiredItems && heroState.acquiredItems.length > 0 ? (
+                    <div className="grid grid-cols-1 gap-1.5 max-h-[180px] overflow-y-auto pr-1">
+                      {heroState.acquiredItems.map((itemId) => {
+                        const item = customItems.find(it => it.id === itemId);
+                        if (!item) return null;
+                        const isEquipped = heroState.equippedEquipmentId === itemId;
+                        const isEquipment = item.type === 'equipment';
+
+                        return (
+                          <div 
+                            key={itemId}
+                            className={`flex justify-between items-center p-2 rounded-lg border text-xs transition-all ${
+                              isEquipped 
+                                ? 'bg-indigo-50/70 border-indigo-300 ring-1 ring-indigo-200' 
+                                : 'bg-white border-slate-200 hover:border-slate-300'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 overflow-hidden flex-1">
+                              <div className="relative flex-shrink-0 w-8 h-8 bg-slate-100 rounded flex items-center justify-center border border-slate-200">
+                                <span className="text-lg">{item.chestGraphic || '🎁'}</span>
+                                {isEquipped && (
+                                  <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] font-extrabold w-4 h-4 rounded-full border border-white flex items-center justify-center shadow-sm">
+                                    E
+                                  </span>
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="font-bold text-slate-800 truncate flex items-center gap-1">
+                                  {item.name}
+                                  {isEquipped && <span className="text-[9px] text-indigo-600 font-extrabold">[E]</span>}
+                                </div>
+                                <div className="text-[10px] text-slate-400 truncate">
+                                  {item.description || '説明なし'}
+                                </div>
+                                <div className="text-[10px] flex gap-1.5 mt-0.5 font-bold flex-wrap">
+                                  {item.attack !== undefined && item.attack > 0 && <span className="text-red-500">攻+{item.attack}</span>}
+                                  {item.defense !== undefined && item.defense > 0 && <span className="text-blue-500">防+{item.defense}</span>}
+                                  {item.attackElement && (
+                                    <span className="text-[9px] px-1 bg-red-50 text-red-600 rounded border border-red-100 font-extrabold">
+                                      {{ fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' }[item.attackElement] || item.attackElement}攻
+                                    </span>
+                                  )}
+                                  {item.defenseElement && (
+                                    <span className="text-[9px] px-1 bg-blue-50 text-blue-600 rounded border border-blue-100 font-extrabold">
+                                      {{ fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' }[item.defenseElement] || item.defenseElement}防
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            
+                            {isEquipment && (
+                              <button
+                                onClick={() => {
+                                  if (sceneRef.current) {
+                                    if (isEquipped) {
+                                      sceneRef.current.equipItem(null);
+                                    } else {
+                                      sceneRef.current.equipItem(itemId);
+                                    }
+                                  }
+                                }}
+                                className={`text-[10px] font-bold px-2 py-1 rounded border transition-colors ${
+                                  isEquipped
+                                    ? 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100'
+                                    : 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 shadow-sm'
+                                }`}
+                              >
+                                {isEquipped ? '外す' : '装備'}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
-                    <div className="flex justify-between items-center bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm">
-                      <div className="flex items-center gap-2">
-                        <Shield className="w-4 h-4 text-slate-400" />
-                        <span className="text-slate-600">盾</span>
-                      </div>
-                      <span className="font-bold text-slate-800">おなべのふた</span>
+                  ) : (
+                    <div className="bg-white p-3 rounded-lg border border-slate-200 text-slate-400 text-center text-xs">
+                      アイテムボックスは空です。
                     </div>
-                    <div className="flex justify-between items-center bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm">
-                      <div className="flex items-center gap-2">
-                        <Heart className="w-4 h-4 text-slate-400" />
-                        <span className="text-slate-600">アクセサリー</span>
-                      </div>
-                      <span className="text-slate-400 italic">未装備</span>
-                    </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* スプライト生成ボタンをこちらへ移動 */}

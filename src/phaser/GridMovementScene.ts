@@ -24,6 +24,8 @@ export interface HeroState {
   level: number;
   exp: number;
   requiredExp: number;
+  acquiredItems?: string[];
+  equippedEquipmentId?: string | null;
 }
 
 interface SlimeData {
@@ -162,6 +164,9 @@ export class GridMovementScene extends Phaser.Scene {
   private heroMaxHp: number = 20;
   private heroAttack: number = 5;
   private heroDefense: number = 0;
+  private baseHeroAttack: number = 5;
+  private baseHeroDefense: number = 0;
+  public equippedEquipmentId: string | null = null;
   private heroLevel: number = 1;
   private heroExp: number = 0;
   private lastFireMagicTime: number = 0;
@@ -256,9 +261,10 @@ export class GridMovementScene extends Phaser.Scene {
     if (initialStatus) {
       this.heroMaxHp = initialStatus.maxHp;
       this.heroHp = this.heroMaxHp;
-      this.heroAttack = initialStatus.attack;
-      this.heroDefense = initialStatus.defense;
+      this.baseHeroAttack = initialStatus.attack;
+      this.baseHeroDefense = initialStatus.defense;
     }
+    this.recalculateStats();
 
     // カメラ境界を設定
     this.cameras.main.setBounds(0, 0, this.gridCols * GRID_SIZE, this.gridRows * GRID_SIZE);
@@ -510,9 +516,36 @@ export class GridMovementScene extends Phaser.Scene {
     const initialSpawnCount = isInfinite ? 5 : Math.min(5, maxEnemies as number);
 
     for (let i = 0; i < initialSpawnCount; i++) {
-      const sx = Phaser.Math.Between(2, this.gridCols - 3);
-      const sy = Phaser.Math.Between(2, this.gridRows - 3);
-      
+      let sx = 0;
+      let sy = 0;
+      let found = false;
+      let attempts = 0;
+
+      // Ensure they don't overlap with hero, items, events, or other slimes
+      while (attempts < 500) {
+        sx = Phaser.Math.Between(2, this.gridCols - 3);
+        sy = Phaser.Math.Between(2, this.gridRows - 3);
+        if (!this.isTileOccupiedByAnything(sx, sy)) {
+          found = true;
+          break;
+        }
+        attempts++;
+      }
+
+      if (!found) {
+        // Fallback: at least avoid overlap with hero and other slimes if map is too crowded
+        attempts = 0;
+        while (attempts < 100) {
+          sx = Phaser.Math.Between(2, this.gridCols - 3);
+          sy = Phaser.Math.Between(2, this.gridRows - 3);
+          if (!this.isTileOccupied(sx, sy)) {
+            found = true;
+            break;
+          }
+          attempts++;
+        }
+      }
+
       let enemyConfig: EnemyAsset | undefined = undefined;
       if (this.mapData?.enemies && this.mapData.enemies.length > 0) {
         const enemyId = Phaser.Utils.Array.GetRandom(this.mapData.enemies as string[]);
@@ -1130,6 +1163,7 @@ export class GridMovementScene extends Phaser.Scene {
     this.drawGrid();
     this.drawVisitedTrace();
     this.updateTeleportPortals(true);
+    this.updateMapItemSprites();
   }
 
   public toggleGridLines(show?: boolean) {
@@ -1216,10 +1250,23 @@ export class GridMovementScene extends Phaser.Scene {
 
     if (this.slimes.length < 5 && Math.random() < 0.1) {
       if (isInfinite || this.totalEnemiesSpawned < (maxEnemies as number)) {
-        const sx = Phaser.Math.Between(2, this.gridCols - 3);
-        const sy = Phaser.Math.Between(2, this.gridRows - 3);
-        // 空いているマスに湧く
-        if (!this.isTileOccupied(sx, sy)) {
+        let sx = 0;
+        let sy = 0;
+        let found = false;
+        let attempts = 0;
+
+        // Ensure they don't overlap with hero, items, events, or other slimes
+        while (attempts < 100) {
+          sx = Phaser.Math.Between(2, this.gridCols - 3);
+          sy = Phaser.Math.Between(2, this.gridRows - 3);
+          if (!this.isTileOccupiedByAnything(sx, sy)) {
+            found = true;
+            break;
+          }
+          attempts++;
+        }
+
+        if (found) {
           const { GRID_SIZE } = GridMovementScene;
           
           let enemyConfig: EnemyAsset | undefined = undefined;
@@ -1878,6 +1925,31 @@ export class GridMovementScene extends Phaser.Scene {
     return false;
   }
 
+  private isTileOccupiedByAnything(x: number, y: number): boolean {
+    // 1. 主人公との重複チェック
+    if (this.currentGridX === x && this.currentGridY === y) return true;
+    if (this.heroTargetGridX === x && this.heroTargetGridY === y) return true;
+
+    // 2. 敵との重複チェック
+    for (const s of this.slimes) {
+      if (s.gridX === x && s.gridY === y) return true;
+      if (s.targetGridX === x && s.targetGridY === y) return true;
+    }
+
+    // 3. マップ上のアイテムとの重複チェック
+    if (this.mapData && this.mapData.items) {
+      if (this.mapData.items.some((item: any) => item.x === x && item.y === y)) return true;
+    }
+    if (this.itemSprites && this.itemSprites.some((itemSprite: any) => itemSprite.gridX === x && itemSprite.gridY === y)) return true;
+
+    // 4. マップ上のイベントとの重複チェック
+    if (this.mapData && this.mapData.events) {
+      if (this.mapData.events.some((e: any) => e.x === x && e.y === y)) return true;
+    }
+
+    return false;
+  }
+
   private moveSlime(slime: SlimeData, dir: Direction) {
     if (slime.isMoving) return;
 
@@ -2109,12 +2181,46 @@ export class GridMovementScene extends Phaser.Scene {
         this.enqueueMessage('item', '宝を手に入れた！ ✨ (Exp +50)');
         this.heroExp += 50;
         this.checkLevelUp();
-      } else if (customItem) {
-        const typeLabel = customItem.type === 'equipment' ? '装備品' : customItem.type === 'magic' ? '魔法' : customItem.type === 'move_asset' ? 'ムーブアセット' : customItem.type === 'event' ? 'イベント' : customItem.type === 'drop' ? 'ドロップ' : 'アーティファクト';
-        const descText = customItem.description ? `\n${customItem.description}` : '';
-        const msg = `『${customItem.name}』(${typeLabel})を手に入れた！ ✨${descText}`;
-        this.sendLog(`『${customItem.name}』を手に入れた！ ✨`, 'info');
-        this.enqueueMessage('item', msg);
+            } else if (customItem) {
+        if (customItem.type === 'equipment') {
+          const currentEquipped = this.equippedEquipmentId ? this.customItems.find((it: any) => it.id === this.equippedEquipmentId) : null;
+          const currentAtk = currentEquipped?.attack || 0;
+          const currentDef = currentEquipped?.defense || 0;
+          const newAtk = customItem.attack || 0;
+          const newDef = customItem.defense || 0;
+          
+          const shouldEquip = !currentEquipped || (newAtk > currentAtk) || (newDef > currentDef);
+          if (shouldEquip) {
+            this.equippedEquipmentId = customItem.id;
+            this.recalculateStats();
+            
+            const elementInfo = [];
+            if (customItem.attackElement) {
+              const elMap: Record<string, string> = { fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' };
+              elementInfo.push(`攻撃属性: ${elMap[customItem.attackElement] || customItem.attackElement}`);
+            }
+            if (customItem.defenseElement) {
+              const elMap: Record<string, string> = { fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' };
+              elementInfo.push(`防御属性: ${elMap[customItem.defenseElement] || customItem.defenseElement}`);
+            }
+            const elementStr = elementInfo.length > 0 ? ` (${elementInfo.join(', ')})` : '';
+            
+            const equipMsg = `『${customItem.name}』を装備した！ ⚔️\n(攻撃力+${newAtk} 防御力+${newDef}${elementStr})\n${customItem.description || ''}`;
+            this.sendLog(`『${customItem.name}』を装備した！ ⚔️ (攻撃力+${newAtk} 防御力+${newDef})`, 'info');
+            this.enqueueMessage('item', equipMsg);
+          } else {
+            const descText = customItem.description ? `\n${customItem.description}` : '';
+            const msg = `『${customItem.name}』(装備品)を手に入れた！ ✨ (攻撃力+${newAtk} 防御力+${newDef})${descText}`;
+            this.sendLog(`『${customItem.name}』を手に入れた！ ✨`, 'info');
+            this.enqueueMessage('item', msg);
+          }
+        } else {
+          const typeLabel = customItem.type === 'magic' ? '魔法' : customItem.type === 'move_asset' ? 'ムーブアセット' : customItem.type === 'event' ? 'イベント' : customItem.type === 'drop' ? 'ドロップ' : 'アーティファクト';
+          const descText = customItem.description ? `\n${customItem.description}` : '';
+          const msg = `『${customItem.name}』(${typeLabel})を手に入れた！ ✨${descText}`;
+          this.sendLog(`『${customItem.name}』を手に入れた！ ✨`, 'info');
+          this.enqueueMessage('item', msg);
+        }
         this.heroExp += 30;
         this.checkLevelUp();
       } else {
@@ -2321,7 +2427,9 @@ export class GridMovementScene extends Phaser.Scene {
         defense: this.heroDefense,
         level: this.heroLevel,
         exp: this.heroExp,
-        requiredExp: statusAsset?.requiredExp || 10
+        requiredExp: statusAsset?.requiredExp || 10,
+        acquiredItems: Array.from(this.acquiredItems),
+        equippedEquipmentId: this.equippedEquipmentId
       });
     }
   }
@@ -2449,25 +2557,129 @@ export class GridMovementScene extends Phaser.Scene {
     const { GRID_SIZE } = GridMovementScene;
     
     this.mapData.items.forEach((item: any) => {
-      const isDefault = item.itemId === 'treasure_text';
-      const customItem = this.customItems.find((it: any) => it.id === item.itemId);
-      const graphic = isDefault ? '宝' : (customItem ? customItem.chestGraphic : '🎁');
+      // Check if item has already been collected
+      if (this.acquiredItems && this.acquiredItems.has(item.itemId)) {
+        return;
+      }
 
-      const text = this.add.text(
-        item.x * GRID_SIZE + GRID_SIZE / 2, 
-        item.y * GRID_SIZE + GRID_SIZE / 2, 
-        graphic, 
-        { fontFamily: 'serif', fontSize: '24px', color: '#fbbf24', fontStyle: 'bold' }
-      );
-      text.setOrigin(0.5, 0.5);
-      text.setDepth(5);
+      let spriteObj: Phaser.GameObjects.GameObject;
+
+      if (this.displayMode === 'text') {
+        // Text mode: display "宝" in white using the same "Inter", sans-serif bold font as "勇" and "敵"
+        const textObj = this.add.text(
+          item.x * GRID_SIZE + GRID_SIZE / 2, 
+          item.y * GRID_SIZE + GRID_SIZE / 2, 
+          '宝', 
+          { 
+            fontFamily: '"Inter", sans-serif', 
+            fontSize: '40px', 
+            color: '#ffffff', 
+            fontStyle: 'bold' 
+          }
+        );
+        textObj.setOrigin(0.5, 0.5);
+        textObj.setDepth(5);
+        spriteObj = textObj;
+      } else if (this.displayMode === 'grayscale') {
+        // Grayscale mode: display a black-and-white/grayscale treasure chest regardless of the item type
+        const graphic = '🎁';
+        const textureKey = `item_gray_chest`;
+        if (!this.textures.exists(textureKey)) {
+          const canvas = document.createElement('canvas');
+          canvas.width = 64;
+          canvas.height = 64;
+          const ctx = canvas.getContext('2d')!;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.font = '32px serif';
+          ctx.fillText(graphic, 32, 32);
+
+          // Convert canvas to grayscale
+          const imgData = ctx.getImageData(0, 0, 64, 64);
+          const data = imgData.data;
+          for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+            const avg = 0.299 * r + 0.587 * g + 0.114 * b;
+            data[i] = avg;     // R
+            data[i + 1] = avg; // G
+            data[i + 2] = avg; // B
+          }
+          ctx.putImageData(imgData, 0, 0);
+          
+          this.textures.addCanvas(textureKey, canvas);
+        }
+
+        const sprite = this.add.sprite(
+          item.x * GRID_SIZE + GRID_SIZE / 2, 
+          item.y * GRID_SIZE + GRID_SIZE / 2, 
+          textureKey
+        );
+        sprite.setDepth(5);
+        spriteObj = sprite;
+      } else {
+        // Normal mode
+        const isDefault = item.itemId === 'treasure_text';
+        const customItem = this.customItems.find((it: any) => it.id === item.itemId);
+        const graphic = isDefault ? '宝' : (customItem ? customItem.chestGraphic : '🎁');
+
+        const textObj = this.add.text(
+          item.x * GRID_SIZE + GRID_SIZE / 2, 
+          item.y * GRID_SIZE + GRID_SIZE / 2, 
+          graphic, 
+          { 
+            fontFamily: 'serif', 
+            fontSize: '24px', 
+            color: '#fbbf24', 
+            fontStyle: 'bold' 
+          }
+        );
+        textObj.setOrigin(0.5, 0.5);
+        textObj.setDepth(5);
+        spriteObj = textObj;
+      }
+
       this.itemSprites.push({
         gridX: item.x,
         gridY: item.y,
-        sprite: text,
+        sprite: spriteObj,
         itemId: item.itemId
       });
     });
+  }
+
+  public updateMapItemSprites() {
+    this.itemSprites.forEach(item => {
+      if (item.sprite && item.sprite.active) {
+        item.sprite.destroy();
+      }
+    });
+    this.itemSprites = [];
+    this.spawnMapItems();
+  }
+
+  public recalculateStats() {
+    const currentEquipped = this.customItems.find((it: any) => it.id === this.equippedEquipmentId);
+    const attackBonus = currentEquipped?.attack !== undefined ? currentEquipped.attack : 0;
+    const defenseBonus = currentEquipped?.defense !== undefined ? currentEquipped.defense : 0;
+    
+    this.heroAttack = this.baseHeroAttack + attackBonus;
+    this.heroDefense = this.baseHeroDefense + defenseBonus;
+  }
+
+  public equipItem(itemId: string | null) {
+    this.equippedEquipmentId = itemId;
+    this.recalculateStats();
+    this.notifyStateChange();
+    if (itemId) {
+      const item = this.customItems.find((it: any) => it.id === itemId);
+      if (item) {
+        this.sendLog(`『${item.name}』を装備しました。`, 'info');
+      }
+    } else {
+      this.sendLog(`装備を外しました。`, 'info');
+    }
   }
 
   private checkLevelUp() {
@@ -2480,15 +2692,16 @@ export class GridMovementScene extends Phaser.Scene {
       if (newStatus) {
         this.heroMaxHp = newStatus.maxHp;
         this.heroHp = this.heroMaxHp;
-        this.heroAttack = newStatus.attack;
-        this.heroDefense = newStatus.defense;
+        this.baseHeroAttack = newStatus.attack;
+        this.baseHeroDefense = newStatus.defense;
       } else {
         // Fallback or max level
         this.heroMaxHp += 5;
         this.heroHp = this.heroMaxHp;
-        this.heroAttack += 2;
-        this.heroDefense += 1;
+        this.baseHeroAttack += 2;
+        this.baseHeroDefense += 1;
       }
+      this.recalculateStats();
       this.sendLog(`レベルアップ！ レベル ${this.heroLevel} になりました！ 🎉`, 'system');
       this.enqueueMessage('levelup', `レベルアップ！ レベル ${this.heroLevel} になりました！ 🎉`);
       statusAsset = getHeroStatusByLevel(this.heroLevel);
@@ -2871,14 +3084,16 @@ export class GridMovementScene extends Phaser.Scene {
     if (initialStatus) {
       this.heroMaxHp = initialStatus.maxHp;
       this.heroHp = this.heroMaxHp;
-      this.heroAttack = initialStatus.attack;
-      this.heroDefense = initialStatus.defense;
+      this.baseHeroAttack = initialStatus.attack;
+      this.baseHeroDefense = initialStatus.defense;
     } else {
       this.heroMaxHp = 20;
       this.heroHp = 20;
-      this.heroAttack = 5;
-      this.heroDefense = 0;
+      this.baseHeroAttack = 5;
+      this.baseHeroDefense = 0;
     }
+    this.equippedEquipmentId = null;
+    this.recalculateStats();
     this.heroExp = 0;
     this.sendLog(`[デモ] ステータスがレベル 1 にリセットされました。 🔄`, 'system');
     this.notifyStateChange();
