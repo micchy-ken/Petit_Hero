@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { generateHeroSpritesheet } from './HeroSpritesheet';
 import { generateSlimeSpritesheet, generateBatSpritesheet, generateGoblinSpritesheet } from './MonsterSpritesheets';
-import { getEnemyAssetById, EnemyAsset } from '../data/EnemyAssets';
+import { getEnemyAssetById, EnemyAsset, getAvailableEnemies } from '../data/EnemyAssets';
 import { getHeroStatusByLevel, getAllHeroStatus } from '../data/HeroStatusAssets';
 // @ts-ignore
 import grassBgUrl from '../../public/grass_bg_1782776475818.jpg';
@@ -127,6 +127,10 @@ export class GridMovementScene extends Phaser.Scene {
   private monologueContainer?: Phaser.GameObjects.Container;
   private monologueTextElement?: Phaser.GameObjects.Text;
   public isShowingMonologue: boolean = false;
+  public messageWaitMode: string = 'event_only';
+  public messageAutoAdvanceSeconds: number = 2;
+  private messageQueue: { type: string, text: string, onComplete?: () => void }[] = [];
+  private monologueAutoAdvanceTimer: Phaser.Time.TimerEvent | null = null;
   private pendingTeleportAction: (() => void) | null = null;
 
   // 状態管理
@@ -198,6 +202,7 @@ export class GridMovementScene extends Phaser.Scene {
   }
 
   public onCustomEventCallback?: (eventId: string, onComplete: () => void) => void;
+  public onSystemMessageCallback?: (type: string, text: string, onComplete: () => void) => void;
 
   public setOnCustomEvent(callback: (eventId: string, onComplete: () => void) => void) {
     this.onCustomEventCallback = callback;
@@ -510,7 +515,12 @@ export class GridMovementScene extends Phaser.Scene {
         enemyConfig = getEnemyAssetById(enemyId);
       }
       if (!enemyConfig) {
-        enemyConfig = { id: 'default', name: 'スライム', hp: 10, attack: 2, defense: 0, exp: 2, speed: 1000, behavior: 'random' };
+        const available = getAvailableEnemies(this.mapData?.bgMode || 'image');
+        if (available.length > 0) {
+          enemyConfig = Phaser.Utils.Array.GetRandom(available);
+        } else {
+          enemyConfig = { id: 'default', name: 'スライム', hp: 10, attack: 2, defense: 0, exp: 2, speed: 1000, behavior: 'random' };
+        }
       }
 
       const slimeSprite = this.add.sprite(sx * GRID_SIZE + GRID_SIZE / 2, sy * GRID_SIZE + GRID_SIZE / 2, 'slime_spritesheet', 0);
@@ -527,7 +537,7 @@ export class GridMovementScene extends Phaser.Scene {
         maxHp: enemyConfig.hp,
         attack: enemyConfig.attack,
         defense: enemyConfig.defense !== undefined ? enemyConfig.defense : 0,
-        exp: enemyConfig.exp !== undefined ? enemyConfig.exp : 2,
+        exp: (enemyConfig.exp !== undefined && !isNaN(Number(enemyConfig.exp))) ? Number(enemyConfig.exp) : 2,
         speed: enemyConfig.speed,
         behavior: enemyConfig.behavior,
         enemyId: enemyConfig.id,
@@ -1211,7 +1221,12 @@ export class GridMovementScene extends Phaser.Scene {
             enemyConfig = getEnemyAssetById(enemyId);
           }
           if (!enemyConfig) {
-            enemyConfig = { id: 'default', name: 'スライム', hp: 10, attack: 2, defense: 0, exp: 2, speed: 1000, behavior: 'random' };
+            const available = getAvailableEnemies(this.mapData?.bgMode || 'image');
+            if (available.length > 0) {
+              enemyConfig = Phaser.Utils.Array.GetRandom(available);
+            } else {
+              enemyConfig = { id: 'default', name: 'スライム', hp: 10, attack: 2, defense: 0, exp: 2, speed: 1000, behavior: 'random' };
+            }
           }
 
           const slimeSprite = this.add.sprite(sx * GRID_SIZE + GRID_SIZE / 2, sy * GRID_SIZE + GRID_SIZE / 2, 'slime_spritesheet', 0);
@@ -1228,7 +1243,7 @@ export class GridMovementScene extends Phaser.Scene {
             maxHp: enemyConfig.hp,
             attack: enemyConfig.attack,
             defense: enemyConfig.defense !== undefined ? enemyConfig.defense : 0,
-            exp: enemyConfig.exp !== undefined ? enemyConfig.exp : 2,
+            exp: (enemyConfig.exp !== undefined && !isNaN(Number(enemyConfig.exp))) ? Number(enemyConfig.exp) : 2,
             speed: enemyConfig.speed,
             behavior: enemyConfig.behavior,
             enemyId: enemyConfig.id,
@@ -1763,7 +1778,7 @@ export class GridMovementScene extends Phaser.Scene {
           this.enemiesDefeated++;
           this.updateStats(this.currentGridX, this.currentGridY, this.currentCamGridX, this.currentCamGridY);
           
-          const gainedExp = slime.exp !== undefined ? slime.exp : 2;
+          const gainedExp = (slime.exp !== undefined && !isNaN(Number(slime.exp))) ? Number(slime.exp) : 2;
           this.sendLog(`${slime.name || 'スライム'}を倒した！ 経験値を ${gainedExp} 獲得。 🌟`, 'info');
           this.heroExp += gainedExp;
           this.checkLevelUp();
@@ -2065,10 +2080,12 @@ export class GridMovementScene extends Phaser.Scene {
       const item = this.itemSprites[itemIndex];
       if (item.itemId === 'treasure_text') {
         this.sendLog('宝を手に入れた！ ✨ (Exp +50)', 'info');
+        this.enqueueMessage('item', '宝を手に入れた！ ✨ (Exp +50)');
         this.heroExp += 50;
         this.checkLevelUp();
       } else {
         this.sendLog(`アイテムを手に入れた！ (${item.itemId})`, 'info');
+        this.enqueueMessage('item', `アイテムを手に入れた！ (${item.itemId})`);
       }
       if (item.sprite && item.sprite.active) {
         item.sprite.destroy();
@@ -2080,57 +2097,39 @@ export class GridMovementScene extends Phaser.Scene {
 
   
   public showMonologue(text: string, onComplete?: () => void) {
-    if (this.isShowingMonologue) return;
+    this.enqueueMessage('event', text, onComplete);
+  }
+
+  public enqueueMessage(type: string, text: string, onComplete?: () => void) {
+    this.messageQueue.push({ type, text, onComplete });
+    this.processMessageQueue();
+  }
+
+  private processMessageQueue() {
+    if (this.isShowingMonologue || this.messageQueue.length === 0) return;
+    const msg = this.messageQueue.shift();
+    if (!msg) return;
+
     this.isShowingMonologue = true;
-    this.pendingTeleportAction = onComplete || null;
 
-    if (!this.monologueContainer) {
-      const { width, height } = this.cameras.main;
-      this.monologueContainer = this.add.container(0, 0);
-      this.monologueContainer.setDepth(100);
-      this.monologueContainer.setScrollFactor(0);
-
-      const bg = this.add.rectangle(width / 2, height - (height / 3) / 2 - 10, width - 40, height / 3, 0x000000, 0.8);
-      bg.setStrokeStyle(4, 0x10b981);
-      
-      this.monologueTextElement = this.add.text(40, height - height / 3 + 10, '', {
-        fontFamily: '"Inter", sans-serif',
-        fontSize: '20px',
-        color: '#ffffff',
-        wordWrap: { width: width - 80, useAdvancedWrap: true }
-      });
-      
-      const promptText = this.add.text(width / 2, height - 30, '▼ クリックして進む', {
-        fontFamily: '"Inter", sans-serif',
-        fontSize: '14px',
-        color: '#a7f3d0'
-      }).setOrigin(0.5, 0.5);
-
-      this.monologueContainer.add([bg, this.monologueTextElement, promptText]);
-
-      // Click to dismiss
-      bg.setInteractive({ useHandCursor: true });
-      bg.on('pointerdown', () => {
-        this.dismissMonologue();
-      });
-    }
-
-    this.monologueTextElement?.setText(text);
-    this.monologueContainer.setVisible(true);
-  }
-
-  private dismissMonologue() {
-    if (!this.isShowingMonologue) return;
-    this.isShowingMonologue = false;
-    if (this.monologueContainer) {
-      this.monologueContainer.setVisible(false);
-    }
-    if (this.pendingTeleportAction) {
-      const action = this.pendingTeleportAction;
-      this.pendingTeleportAction = null;
-      action();
+    if (this.onSystemMessageCallback) {
+        this.onSystemMessageCallback(msg.type, msg.text, () => {
+            this.isShowingMonologue = false;
+            if (msg.onComplete) {
+              const action = msg.onComplete;
+              action();
+            }
+            this.processMessageQueue();
+        });
+    } else {
+        this.isShowingMonologue = false;
+        if (msg.onComplete) msg.onComplete();
+        this.processMessageQueue();
     }
   }
+
+  // Now handled by React callback
+  private dismissMonologue() {}
 
   private checkMapEvents() {
     if (!this.mapData || !this.mapData.events) return;
@@ -2443,6 +2442,7 @@ export class GridMovementScene extends Phaser.Scene {
         this.heroDefense += 1;
       }
       this.sendLog(`レベルアップ！ レベル ${this.heroLevel} になりました！ 🎉`, 'system');
+      this.enqueueMessage('levelup', `レベルアップ！ レベル ${this.heroLevel} になりました！ 🎉`);
       statusAsset = getHeroStatusByLevel(this.heroLevel);
     }
     this.notifyStateChange();
@@ -2570,7 +2570,7 @@ export class GridMovementScene extends Phaser.Scene {
           this.enemiesDefeated++;
           this.updateStats(this.currentGridX, this.currentGridY, this.currentCamGridX, this.currentCamGridY);
           
-          const gainedExp = targetSlime.exp !== undefined ? targetSlime.exp : 2;
+          const gainedExp = (targetSlime.exp !== undefined && !isNaN(Number(targetSlime.exp))) ? Number(targetSlime.exp) : 2;
           this.sendLog(`${targetSlime.name || 'スライム'}を焼き尽くした！ 経験値を ${gainedExp} 獲得。`, "info");
           this.heroExp += gainedExp;
           this.checkLevelUp();
@@ -2797,7 +2797,7 @@ export class GridMovementScene extends Phaser.Scene {
         this.enemiesDefeated++;
         this.updateStats(this.currentGridX, this.currentGridY, this.currentCamGridX, this.currentCamGridY);
         
-        const gainedExp = targetSlime.exp !== undefined ? targetSlime.exp : 2;
+        const gainedExp = (targetSlime.exp !== undefined && !isNaN(Number(targetSlime.exp))) ? Number(targetSlime.exp) : 2;
         this.sendLog(`${targetSlime.name || 'スライム'}を完全に凍りつかせて砕いた！ 経験値を ${gainedExp} 獲得。`, "info");
         this.heroExp += gainedExp;
         this.checkLevelUp();

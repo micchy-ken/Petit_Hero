@@ -47,6 +47,8 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
   useEffect(() => {
     customEventsRef.current = customEvents;
   }, [customEvents]);
+
+  const [activeMessageType, setActiveMessageType] = useState<string | null>(null);
   const [activeEvent, setActiveEvent] = useState<CustomEvent | null>(null);
   const [activeNodeIndex, setActiveNodeIndex] = useState(0);
   const [onEventComplete, setOnEventComplete] = useState<(() => void) | null>(null);
@@ -100,6 +102,30 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
   const [movementBehavior, setMovementBehavior] = useState<string>('unvisited');
   const [combatBehavior, setCombatBehavior] = useState<string>('closest_enemy');
   const [goalBehavior, setGoalBehavior] = useState<string>('seek_visible');
+  const [messageWaitMode, setMessageWaitMode] = useState<string>('item_and_event');
+  const [messageAutoAdvanceSeconds, setMessageAutoAdvanceSeconds] = useState<number>(2);
+
+  useEffect(() => {
+    let timerId: NodeJS.Timeout;
+    if (activeEvent) {
+      let waitClick = false;
+      if (messageWaitMode === 'all_messages_and_map_move') waitClick = true;
+      else if (messageWaitMode === 'all_messages' && activeMessageType !== 'map_move') waitClick = true;
+      else if (messageWaitMode === 'item_and_event' && (activeMessageType === 'item' || activeMessageType === 'event')) waitClick = true;
+      else if (messageWaitMode === 'event_only' && activeMessageType === 'event') waitClick = true;
+      else if (messageWaitMode === 'none') waitClick = false;
+
+      if (!waitClick) {
+        timerId = setTimeout(() => {
+          handleNextConversationNode();
+        }, messageAutoAdvanceSeconds * 1000);
+      }
+    }
+    return () => {
+      if (timerId) clearTimeout(timerId);
+    };
+  }, [activeEvent, activeNodeIndex, messageWaitMode, messageAutoAdvanceSeconds, activeMessageType]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const [tracerColor, setTracerColor] = useState<'green' | 'blue' | 'red' | 'gray' | 'none'>('green');
 
   const availableMovementBehaviors = [
@@ -164,6 +190,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
         scene.setOnCustomEvent((eventId, onComplete) => {
           const ev = customEventsRef.current.find(e => e.id === eventId);
           if (ev && ev.nodes.length > 0) {
+            setActiveMessageType('event');
             setActiveEvent(ev);
             setActiveNodeIndex(0);
             setOnEventComplete(() => onComplete);
@@ -171,6 +198,25 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
             onComplete();
           }
         });
+        
+        scene.onSystemMessageCallback = (type, text, onComplete) => {
+          setActiveMessageType(type);
+          setActiveNodeIndex(0);
+          setActiveEvent({
+            id: `sys-${Date.now()}`,
+            name: 'System',
+            type: 'conversation',
+            nodes: [
+              {
+                id: '1',
+                speakerName: 'システム',
+                message: text,
+                portraitId: 'none'
+              }
+            ]
+          });
+          setOnEventComplete(() => onComplete);
+        };
 
 
 
@@ -329,6 +375,18 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
 
   useEffect(() => {
     if (sceneRef.current) {
+      sceneRef.current.messageWaitMode = messageWaitMode;
+    }
+  }, [messageWaitMode]);
+
+  useEffect(() => {
+    if (sceneRef.current) {
+      sceneRef.current.messageAutoAdvanceSeconds = messageAutoAdvanceSeconds;
+    }
+  }, [messageAutoAdvanceSeconds]);
+
+  useEffect(() => {
+    if (sceneRef.current) {
       sceneRef.current.tracerColor = tracerColor;
       sceneRef.current.forceDrawVisitedTrace(); // We'll add this method or it will just draw next turn
     }
@@ -417,10 +475,11 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
               {/* 会話イベントオーバーレイ */}
               {activeEvent && activeEvent.nodes[activeNodeIndex] && (
                 <div 
-                  className="absolute inset-x-0 bottom-0 z-50 h-1/3 bg-black/80 border-t-4 border-indigo-500 p-4 flex gap-4 cursor-pointer"
+                  className="absolute inset-0 z-50 cursor-pointer"
                   onPointerDown={(e) => e.stopPropagation()}
                   onClick={(e) => { e.stopPropagation(); handleNextConversationNode(); }}
                 >
+                  <div className="absolute inset-x-0 bottom-0 h-1/3 bg-black/80 border-t-4 border-indigo-500 p-4 flex gap-4">
                   <div className="flex-shrink-0 w-24 h-24 bg-slate-800 border-2 border-indigo-400 rounded-lg overflow-hidden flex items-center justify-center">
                     {PORTRAITS[activeEvent.nodes[activeNodeIndex].portraitId || 'none'] ? (
                       <img 
@@ -441,8 +500,20 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                       {activeEvent.nodes[activeNodeIndex].message}
                     </div>
                     <div className="mt-auto self-end text-xs text-indigo-400 animate-pulse mt-2">
-                      ▼ クリックして進む
+                      {
+    (() => {
+      let waitClick = false;
+      if (messageWaitMode === 'all_messages_and_map_move') waitClick = true;
+      else if (messageWaitMode === 'all_messages' && activeMessageType !== 'map_move') waitClick = true;
+      else if (messageWaitMode === 'item_and_event' && (activeMessageType === 'item' || activeMessageType === 'event')) waitClick = true;
+      else if (messageWaitMode === 'event_only' && activeMessageType === 'event') waitClick = true;
+      else if (messageWaitMode === 'none') waitClick = false;
+      
+      return waitClick ? '▼ クリックして進む' : `( ${messageAutoAdvanceSeconds}秒で自動的に進みます )`;
+    })()
+}
                     </div>
+                  </div>
                   </div>
                 </div>
               )}
@@ -960,6 +1031,39 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                     <p className="text-xs text-slate-500 mt-1 pl-1">
                       {availableCombatBehaviors.find(b => b.id === combatBehavior)?.description}
                     </p>
+                  </div>
+                </div>
+
+                {/* メッセージ処理 */}
+                <div className="flex flex-col gap-2">
+                  <h4 className="font-bold text-slate-800 flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4 text-indigo-600" />
+                    メッセージ処理の行動指針
+                  </h4>
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-col gap-2">
+                    <label className="text-xs font-bold text-slate-600">クリック待ちの設定</label>
+                    <select
+                      value={messageWaitMode}
+                      onChange={(e) => setMessageWaitMode(e.target.value)}
+                      className="w-full bg-white border border-slate-300 text-slate-800 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2.5 outline-none font-bold shadow-sm"
+                    >
+                      <option value="all_messages_and_map_move">すべてのメッセージ、マップ移動後</option>
+                      <option value="all_messages">すべてのメッセージ（アイテムゲット、レベルアップ、イベント発生）</option>
+                      <option value="item_and_event">アイテムゲット、イベント発生</option>
+                      <option value="event_only">イベント発生のみ</option>
+                      <option value="none">クリック待ちなし</option>
+                    </select>
+                    
+                    <label className="text-xs font-bold text-slate-600 mt-2">自動で次に進むまでの秒数: {messageAutoAdvanceSeconds}秒</label>
+                    <input 
+                      type="range" 
+                      min="1" 
+                      max="10" 
+                      step="1"
+                      value={messageAutoAdvanceSeconds}
+                      onChange={(e) => setMessageAutoAdvanceSeconds(parseInt(e.target.value))}
+                      className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                    />
                   </div>
                 </div>
 
