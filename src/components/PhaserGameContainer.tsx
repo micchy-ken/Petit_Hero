@@ -18,6 +18,52 @@ export interface PhaserGameContainerProps {
   onTeleport?: (targetMapId: string) => void;
 }
 
+const HeroGraphic = ({ scene, displayMode }: { scene: any, displayMode?: string }) => {
+  const [dataUrl, setDataUrl] = useState<string>('');
+
+  useEffect(() => {
+    if (!scene || !scene.textures || !displayMode) return;
+    const textureKey = displayMode === 'text' ? 'hero_spritesheet_text' 
+      : displayMode === 'grayscale' ? 'hero_spritesheet_gray' 
+      : 'hero_spritesheet';
+    
+    // Some delay to ensure texture is generated
+    const timer = setTimeout(() => {
+      if (!scene || !scene.textures) return;
+      const tex = scene.textures.get(textureKey);
+      if (tex && tex.getSourceImage) {
+        const img = tex.getSourceImage();
+        if (img instanceof HTMLCanvasElement) {
+          setDataUrl(img.toDataURL());
+        } else if (img instanceof HTMLImageElement) {
+          setDataUrl(img.src);
+        }
+      }
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [scene, displayMode]);
+
+  if (!dataUrl) return <div className="w-[64px] h-[64px] bg-slate-200 rounded animate-pulse" />;
+
+  return (
+    <div 
+      className="w-[64px] h-[64px] overflow-hidden rounded bg-white shadow-sm flex-shrink-0"
+      style={{
+        backgroundImage: `url(${dataUrl})`,
+        backgroundSize: '256px 256px',
+        animation: 'hero-walk-front 1s steps(4) infinite',
+      }}
+    >
+      <style>{`
+        @keyframes hero-walk-front {
+          from { background-position: 0px 0px; }
+          to { background-position: -256px 0px; }
+        }
+      `}</style>
+    </div>
+  );
+};
+
 export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTestPlay, maps, initialMapId, onTestPlayClear, onTeleport }) => {
   const gameContainerRef = useRef<HTMLDivElement>(null);
   const gameInstanceRef = useRef<Phaser.Game | null>(null);
@@ -113,7 +159,12 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
     exp: 0,
     requiredExp: 10,
     acquiredItems: [],
-    equippedEquipmentId: null
+    equippedWeaponId: null,
+    equippedArmorId: null,
+    equippedAccessoryId: null,
+    baseAttack: 5,
+    baseDefense: 0,
+    displayMode: 'normal'
   });
 
   const [logs, setLogs] = useState<ActionLog[]>([]);
@@ -135,16 +186,14 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
   const [movementBehavior, setMovementBehavior] = useState<string>('unvisited');
   const [combatBehavior, setCombatBehavior] = useState<string>('closest_enemy');
   const [goalBehavior, setGoalBehavior] = useState<string>('seek_visible');
-  const [messageWaitMode, setMessageWaitMode] = useState<string>('item_and_event');
-  const [messageAutoAdvanceSeconds, setMessageAutoAdvanceSeconds] = useState<number>(2);
+  const [messageWaitMode, setMessageWaitMode] = useState<string>('none');
+  const [messageAutoAdvanceSeconds, setMessageAutoAdvanceSeconds] = useState<number>(3);
 
   useEffect(() => {
     let timerId: NodeJS.Timeout;
     if (activeEvent) {
       let waitClick = false;
-      if (messageWaitMode === 'all_messages_and_map_move') waitClick = true;
-      else if (messageWaitMode === 'all_messages' && activeMessageType !== 'map_move') waitClick = true;
-      else if (messageWaitMode === 'item_and_event' && (activeMessageType === 'item' || activeMessageType === 'event')) waitClick = true;
+      if (messageWaitMode === 'item_and_event' && (activeMessageType === 'item' || activeMessageType === 'event')) waitClick = true;
       else if (messageWaitMode === 'event_only' && activeMessageType === 'event') waitClick = true;
       else if (messageWaitMode === 'none') waitClick = false;
 
@@ -538,9 +587,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                       {
     (() => {
       let waitClick = false;
-      if (messageWaitMode === 'all_messages_and_map_move') waitClick = true;
-      else if (messageWaitMode === 'all_messages' && activeMessageType !== 'map_move') waitClick = true;
-      else if (messageWaitMode === 'item_and_event' && (activeMessageType === 'item' || activeMessageType === 'event')) waitClick = true;
+      if (messageWaitMode === 'item_and_event' && (activeMessageType === 'item' || activeMessageType === 'event')) waitClick = true;
       else if (messageWaitMode === 'event_only' && activeMessageType === 'event') waitClick = true;
       else if (messageWaitMode === 'none') waitClick = false;
       
@@ -903,26 +950,35 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                     <User className="w-4 h-4 text-emerald-600" />
                     基本ステータス
                   </h4>
-                  <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-sm">
-                    <div className="flex justify-between text-slate-600">
-                      <span>レベル</span>
-                      <span className="font-bold text-slate-900">{heroState.level}</span>
-                    </div>
-                    <div className="flex justify-between text-slate-600">
-                      <span>経験値</span>
-                      <span className="font-bold text-slate-900">{heroState.exp} / {heroState.requiredExp}</span>
-                    </div>
-                    <div className="flex justify-between text-slate-600">
-                      <span>HP</span>
-                      <span className="font-bold text-slate-900">{heroState.hp} / {heroState.maxHp}</span>
-                    </div>
-                    <div className="flex justify-between text-slate-600">
-                      <span>攻撃力</span>
-                      <span className="font-bold text-slate-900">{heroState.attack}</span>
-                    </div>
-                    <div className="flex justify-between text-slate-600">
-                      <span>防御力</span>
-                      <span className="font-bold text-slate-900">{heroState.defense}</span>
+                  <div className="flex gap-4 items-center">
+                    <HeroGraphic scene={sceneRef.current} displayMode={heroState.displayMode} />
+                    <div className="flex-1 grid grid-cols-2 gap-y-3 gap-x-4 text-sm">
+                      <div className="flex justify-between text-slate-600">
+                        <span>レベル</span>
+                        <span className="font-bold text-slate-900">{heroState.level}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-600">
+                        <span>経験値</span>
+                        <span className="font-bold text-slate-900">{heroState.exp} / {heroState.requiredExp}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-600">
+                        <span>HP</span>
+                        <span className="font-bold text-slate-900">{heroState.hp} / {heroState.maxHp}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-600">
+                        <span>攻撃力</span>
+                        <span className="font-bold text-slate-900">
+                          {heroState.baseAttack}
+                          {heroState.attack > (heroState.baseAttack || 0) && <span className="text-red-500 text-xs ml-1">+{heroState.attack - (heroState.baseAttack || 0)}</span>}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-slate-600">
+                        <span>防御力</span>
+                        <span className="font-bold text-slate-900">
+                          {heroState.baseDefense}
+                          {heroState.defense > (heroState.baseDefense || 0) && <span className="text-blue-500 text-xs ml-1">+{heroState.defense - (heroState.baseDefense || 0)}</span>}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -932,43 +988,57 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                     <Shield className="w-4 h-4 text-sky-600" />
                     現在の装備
                   </h4>
-                  {customItems.find(it => it.id === heroState.equippedEquipmentId) ? (() => {
-                    const eq = customItems.find(it => it.id === heroState.equippedEquipmentId)!;
-                    return (
-                      <div className="flex justify-between items-center bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm text-sm">
-                        <div className="flex items-center gap-2.5">
-                          <span className="text-xl">{eq.chestGraphic || '⚔️'}</span>
-                          <div>
-                            <div className="font-bold text-slate-800">{eq.name}</div>
-                            <div className="text-[10px] text-slate-500 flex gap-1.5 font-bold">
-                              {eq.attack !== undefined && eq.attack > 0 && <span className="text-red-500">攻+{eq.attack}</span>}
-                              {eq.defense !== undefined && eq.defense > 0 && <span className="text-blue-500">防+{eq.defense}</span>}
-                              {eq.attackElement && (
-                                <span className="text-[9px] px-1 bg-red-50 text-red-600 border border-red-200 rounded">
-                                  攻:{{ fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' }[eq.attackElement] || eq.attackElement}
-                                </span>
-                              )}
-                              {eq.defenseElement && (
-                                <span className="text-[9px] px-1 bg-blue-50 text-blue-600 border border-blue-200 rounded">
-                                  防:{{ fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' }[eq.defenseElement] || eq.defenseElement}
-                                </span>
-                              )}
+                  <div className="space-y-2">
+                    {[
+                      { id: 'weapon', label: '武器', icon: '⚔️', eqId: heroState.equippedWeaponId },
+                      { id: 'armor', label: '防具', icon: '🛡️', eqId: heroState.equippedArmorId },
+                      { id: 'accessory', label: '装飾', icon: '💍', eqId: heroState.equippedAccessoryId }
+                    ].map(slot => {
+                      const eq = customItems.find(it => it.id === slot.eqId);
+                      return (
+                        <div key={slot.id} className="flex flex-col gap-1">
+                          <span className="text-[10px] font-bold text-slate-500 ml-1">{slot.label}</span>
+                          {eq ? (
+                            <div className="flex justify-between items-center bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm text-sm">
+                              <div className="flex items-center gap-2.5">
+                                <span className="text-xl">{eq.chestGraphic || slot.icon}</span>
+                                <div>
+                                  <div className="font-bold text-slate-800">{eq.name}</div>
+                                  <div className="text-[10px] text-slate-500 flex flex-wrap gap-1 font-bold mt-0.5">
+                                    {eq.attack !== undefined && eq.attack > 0 && <span className="text-red-500">攻+{eq.attack}</span>}
+                                    {eq.defense !== undefined && eq.defense > 0 && <span className="text-blue-500">防+{eq.defense}</span>}
+                                    {eq.attackElement && (
+                                      <span className="text-[9px] px-1 bg-red-50 text-red-600 border border-red-200 rounded">
+                                        攻:{{ fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' }[eq.attackElement] || eq.attackElement}
+                                      </span>
+                                    )}
+                                    {eq.defenseElement && (
+                                      <span className="text-[9px] px-1 bg-blue-50 text-blue-600 border border-blue-200 rounded">
+                                        防:{{ fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' }[eq.defenseElement] || eq.defenseElement}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => {
+                                  if (sceneRef.current) sceneRef.current.equipItem(null, slot.id as any);
+                                }}
+                                className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1 rounded font-bold border border-slate-300 transition-colors"
+                              >
+                                外す
+                              </button>
                             </div>
-                          </div>
+                          ) : (
+                            <div className="flex items-center gap-2.5 bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm">
+                               <span className="text-xl opacity-30 grayscale">{slot.icon}</span>
+                               <span className="text-slate-400 italic text-xs">未装備</span>
+                            </div>
+                          )}
                         </div>
-                        <button
-                          onClick={() => {
-                            if (sceneRef.current) sceneRef.current.equipItem(null);
-                          }}
-                          className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1 rounded font-bold border border-slate-300 transition-colors"
-                        >
-                          外す
-                        </button>
-                      </div>
-                    );
-                  })() : (
-                    <span className="text-slate-400 italic text-xs block text-center py-2 bg-white rounded-lg border border-slate-200">未装備</span>
-                  )}
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
@@ -987,8 +1057,10 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                       {heroState.acquiredItems.map((itemId) => {
                         const item = customItems.find(it => it.id === itemId);
                         if (!item) return null;
-                        const isEquipped = heroState.equippedEquipmentId === itemId;
+                        const isEquipped = heroState.equippedWeaponId === itemId || heroState.equippedArmorId === itemId || heroState.equippedAccessoryId === itemId;
                         const isEquipment = item.type === 'equipment';
+                        const slot = item.equipmentType || 'weapon';
+                        const slotLabels = { weapon: '武器', armor: '防具', accessory: '装飾' };
 
                         return (
                           <div 
@@ -1011,6 +1083,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                               <div className="min-w-0 flex-1">
                                 <div className="font-bold text-slate-800 truncate flex items-center gap-1">
                                   {item.name}
+                                  {isEquipment && <span className="text-[9px] text-slate-500 font-normal">[{slotLabels[slot]}]</span>}
                                   {isEquipped && <span className="text-[9px] text-indigo-600 font-extrabold">[E]</span>}
                                 </div>
                                 <div className="text-[10px] text-slate-400 truncate">
@@ -1038,13 +1111,13 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                                 onClick={() => {
                                   if (sceneRef.current) {
                                     if (isEquipped) {
-                                      sceneRef.current.equipItem(null);
+                                      sceneRef.current.equipItem(null, slot);
                                     } else {
-                                      sceneRef.current.equipItem(itemId);
+                                      sceneRef.current.equipItem(itemId, slot);
                                     }
                                   }
                                 }}
-                                className={`text-[10px] font-bold px-2 py-1 rounded border transition-colors ${
+                                className={`text-[10px] font-bold px-2 py-1 rounded border transition-colors flex-shrink-0 ml-2 ${
                                   isEquipped
                                     ? 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100'
                                     : 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 shadow-sm'
@@ -1138,8 +1211,6 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                       onChange={(e) => setMessageWaitMode(e.target.value)}
                       className="w-full bg-white border border-slate-300 text-slate-800 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2.5 outline-none font-bold shadow-sm"
                     >
-                      <option value="all_messages_and_map_move">すべてのメッセージ、マップ移動後</option>
-                      <option value="all_messages">すべてのメッセージ（アイテムゲット、システムメッセージ、イベント発生）</option>
                       <option value="item_and_event">アイテムゲット、イベント発生</option>
                       <option value="event_only">イベント発生のみ</option>
                       <option value="none">クリック待ちなし</option>

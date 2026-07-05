@@ -25,7 +25,12 @@ export interface HeroState {
   exp: number;
   requiredExp: number;
   acquiredItems?: string[];
-  equippedEquipmentId?: string | null;
+  equippedWeaponId?: string | null;
+  equippedArmorId?: string | null;
+  equippedAccessoryId?: string | null;
+  baseAttack?: number;
+  baseDefense?: number;
+  displayMode?: 'normal' | 'text' | 'grayscale';
 }
 
 interface SlimeData {
@@ -166,7 +171,9 @@ export class GridMovementScene extends Phaser.Scene {
   private heroDefense: number = 0;
   private baseHeroAttack: number = 5;
   private baseHeroDefense: number = 0;
-  public equippedEquipmentId: string | null = null;
+  public equippedWeaponId: string | null = null;
+  public equippedArmorId: string | null = null;
+  public equippedAccessoryId: string | null = null;
   private heroLevel: number = 1;
   private heroExp: number = 0;
   private lastFireMagicTime: number = 0;
@@ -2066,7 +2073,7 @@ export class GridMovementScene extends Phaser.Scene {
     // 全てのキャラクターとの重なり防止
     if (this.isTileOccupied(targetGridX, targetGridY)) return false;
 
-    // カメラのデッドゾーン（中心5x5グリッド内はカメラ固定、それ以外はスクロール）計算
+    // カメラのデッドゾーン（中心3x3=9マスのグリッド内はカメラ固定、それ以外はスクロール）計算
     const maxCamGridX = this.gridCols - VIEWPORT_COLS; // 16 - 7 = 9
     const maxCamGridY = this.gridRows - VIEWPORT_ROWS; // 9
 
@@ -2076,22 +2083,22 @@ export class GridMovementScene extends Phaser.Scene {
     const nextViewX = targetGridX - this.currentCamGridX;
     const nextViewY = targetGridY - this.currentCamGridY;
 
-    // 7x7画面インデックス(0~6)。中心は3。中心±2(インデックス1~5)は固定、0または6に進む場合にスクロール
-    if (nextViewX > 5) {
+    // 7x7画面インデックス(0~6)。中心は3。中心±1(インデックス2~4)は固定、それ以外に進む場合にスクロール
+    if (nextViewX > 4) {
       if (this.currentCamGridX < maxCamGridX) {
         targetCamGridX = this.currentCamGridX + 1;
       }
-    } else if (nextViewX < 1) {
+    } else if (nextViewX < 2) {
       if (this.currentCamGridX > 0) {
         targetCamGridX = this.currentCamGridX - 1;
       }
     }
 
-    if (nextViewY > 5) {
+    if (nextViewY > 4) {
       if (this.currentCamGridY < maxCamGridY) {
         targetCamGridY = this.currentCamGridY + 1;
       }
-    } else if (nextViewY < 1) {
+    } else if (nextViewY < 2) {
       if (this.currentCamGridY > 0) {
         targetCamGridY = this.currentCamGridY - 1;
       }
@@ -2177,13 +2184,15 @@ export class GridMovementScene extends Phaser.Scene {
       const customItem = this.customItems.find((it: any) => it.id === item.itemId);
 
       if (isDefault) {
-        this.sendLog('宝を手に入れた！ ✨ (Exp +50)', 'info');
-        this.enqueueMessage('item', '宝を手に入れた！ ✨ (Exp +50)');
-        this.heroExp += 50;
+        this.sendLog('宝を手に入れた！ ✨ (Exp +5)', 'info');
+        this.enqueueMessage('item', '宝を手に入れた！ ✨ (Exp +5)');
+        this.heroExp += 5;
         this.checkLevelUp();
             } else if (customItem) {
         if (customItem.type === 'equipment') {
-          const currentEquipped = this.equippedEquipmentId ? this.customItems.find((it: any) => it.id === this.equippedEquipmentId) : null;
+          const slot = customItem.equipmentType || 'weapon';
+          const equippedId = slot === 'weapon' ? this.equippedWeaponId : (slot === 'armor' ? this.equippedArmorId : this.equippedAccessoryId);
+          const currentEquipped = equippedId ? this.customItems.find((it: any) => it.id === equippedId) : null;
           const currentAtk = currentEquipped?.attack || 0;
           const currentDef = currentEquipped?.defense || 0;
           const newAtk = customItem.attack || 0;
@@ -2191,7 +2200,9 @@ export class GridMovementScene extends Phaser.Scene {
           
           const shouldEquip = !currentEquipped || (newAtk > currentAtk) || (newDef > currentDef);
           if (shouldEquip) {
-            this.equippedEquipmentId = customItem.id;
+            if (slot === 'weapon') this.equippedWeaponId = customItem.id;
+            else if (slot === 'armor') this.equippedArmorId = customItem.id;
+            else this.equippedAccessoryId = customItem.id;
             this.recalculateStats();
             
             const elementInfo = [];
@@ -2210,18 +2221,18 @@ export class GridMovementScene extends Phaser.Scene {
             this.enqueueMessage('item', equipMsg);
           } else {
             const descText = customItem.description ? `\n${customItem.description}` : '';
-            const msg = `『${customItem.name}』(装備品)を手に入れた！ ✨ (攻撃力+${newAtk} 防御力+${newDef})${descText}`;
+            const msg = `『${customItem.name}』(装備品)を手に入れた！ ✨ (攻撃力+${newAtk} 防御力+${newDef}) (Exp +5)${descText}`;
             this.sendLog(`『${customItem.name}』を手に入れた！ ✨`, 'info');
             this.enqueueMessage('item', msg);
           }
         } else {
           const typeLabel = customItem.type === 'magic' ? '魔法' : customItem.type === 'move_asset' ? 'ムーブアセット' : customItem.type === 'event' ? 'イベント' : customItem.type === 'drop' ? 'ドロップ' : 'アーティファクト';
           const descText = customItem.description ? `\n${customItem.description}` : '';
-          const msg = `『${customItem.name}』(${typeLabel})を手に入れた！ ✨${descText}`;
+          const msg = `『${customItem.name}』(${typeLabel})を手に入れた！ ✨ (Exp +5)${descText}`;
           this.sendLog(`『${customItem.name}』を手に入れた！ ✨`, 'info');
           this.enqueueMessage('item', msg);
         }
-        this.heroExp += 30;
+        this.heroExp += 5;
         this.checkLevelUp();
       } else {
         this.sendLog(`アイテムを手に入れた！ (${item.itemId})`, 'info');
@@ -2429,7 +2440,12 @@ export class GridMovementScene extends Phaser.Scene {
         exp: this.heroExp,
         requiredExp: statusAsset?.requiredExp || 10,
         acquiredItems: Array.from(this.acquiredItems),
-        equippedEquipmentId: this.equippedEquipmentId
+        equippedWeaponId: this.equippedWeaponId,
+        equippedArmorId: this.equippedArmorId,
+        equippedAccessoryId: this.equippedAccessoryId,
+        baseAttack: this.baseHeroAttack,
+        baseDefense: this.baseHeroDefense,
+        displayMode: this.displayMode
       });
     }
   }
@@ -2581,33 +2597,33 @@ export class GridMovementScene extends Phaser.Scene {
         textObj.setDepth(5);
         spriteObj = textObj;
       } else if (this.displayMode === 'grayscale') {
-        // Grayscale mode: display a black-and-white/grayscale treasure chest regardless of the item type
-        const graphic = '🎁';
-        const textureKey = `item_gray_chest`;
+        // Grayscale mode: display a rough pixel art treasure chest
+        const textureKey = `item_gray_chest_pixel`;
         if (!this.textures.exists(textureKey)) {
           const canvas = document.createElement('canvas');
           canvas.width = 64;
           canvas.height = 64;
           const ctx = canvas.getContext('2d')!;
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.font = '32px serif';
-          ctx.fillText(graphic, 32, 32);
-
-          // Convert canvas to grayscale
-          const imgData = ctx.getImageData(0, 0, 64, 64);
-          const data = imgData.data;
-          for (let i = 0; i < data.length; i += 4) {
-            const r = data[i];
-            const g = data[i + 1];
-            const b = data[i + 2];
-            const avg = 0.299 * r + 0.587 * g + 0.114 * b;
-            data[i] = avg;     // R
-            data[i + 1] = avg; // G
-            data[i + 2] = avg; // B
-          }
-          ctx.putImageData(imgData, 0, 0);
           
+          // Helper to draw a pixel on a 16x16 grid
+          const gp = (x: number, y: number, w: number, h: number, color: string) => {
+            ctx.fillStyle = color;
+            ctx.fillRect(x * 4, y * 4, w * 4, h * 4);
+          };
+
+          // Outline
+          gp(2, 4, 12, 10, '#000000');
+          // Lid
+          gp(3, 5, 10, 3, '#888888');
+          // Lid highlight
+          gp(3, 4, 10, 1, '#bbbbbb');
+          // Line between lid and body
+          gp(3, 8, 10, 1, '#000000');
+          // Body
+          gp(3, 9, 10, 4, '#555555');
+          // Lock
+          gp(7, 7, 2, 3, '#dddddd');
+
           this.textures.addCanvas(textureKey, canvas);
         }
 
@@ -2660,26 +2676,55 @@ export class GridMovementScene extends Phaser.Scene {
   }
 
   public recalculateStats() {
-    const currentEquipped = this.customItems.find((it: any) => it.id === this.equippedEquipmentId);
-    const attackBonus = currentEquipped?.attack !== undefined ? currentEquipped.attack : 0;
-    const defenseBonus = currentEquipped?.defense !== undefined ? currentEquipped.defense : 0;
+    const equippedWeapon = this.customItems.find((it: any) => it.id === this.equippedWeaponId);
+    const equippedArmor = this.customItems.find((it: any) => it.id === this.equippedArmorId);
+    const equippedAccessory = this.customItems.find((it: any) => it.id === this.equippedAccessoryId);
+    
+    let attackBonus = 0;
+    let defenseBonus = 0;
+    
+    if (equippedWeapon) {
+      attackBonus += equippedWeapon.attack || 0;
+      defenseBonus += equippedWeapon.defense || 0;
+    }
+    if (equippedArmor) {
+      attackBonus += equippedArmor.attack || 0;
+      defenseBonus += equippedArmor.defense || 0;
+    }
+    if (equippedAccessory) {
+      attackBonus += equippedAccessory.attack || 0;
+      defenseBonus += equippedAccessory.defense || 0;
+    }
     
     this.heroAttack = this.baseHeroAttack + attackBonus;
     this.heroDefense = this.baseHeroDefense + defenseBonus;
   }
 
-  public equipItem(itemId: string | null) {
-    this.equippedEquipmentId = itemId;
-    this.recalculateStats();
-    this.notifyStateChange();
+  public equipItem(itemId: string | null, slot?: 'weapon' | 'armor' | 'accessory') {
     if (itemId) {
       const item = this.customItems.find((it: any) => it.id === itemId);
       if (item) {
+        const itemSlot = item.equipmentType || 'weapon';
+        if (itemSlot === 'weapon') this.equippedWeaponId = itemId;
+        else if (itemSlot === 'armor') this.equippedArmorId = itemId;
+        else this.equippedAccessoryId = itemId;
         this.sendLog(`『${item.name}』を装備しました。`, 'info');
       }
-    } else {
+    } else if (slot) {
+      if (slot === 'weapon') this.equippedWeaponId = null;
+      else if (slot === 'armor') this.equippedArmorId = null;
+      else this.equippedAccessoryId = null;
       this.sendLog(`装備を外しました。`, 'info');
+    } else {
+      // Clear all if no slot provided
+      this.equippedWeaponId = null;
+      this.equippedArmorId = null;
+      this.equippedAccessoryId = null;
+      this.sendLog(`装備を全て外しました。`, 'info');
     }
+    
+    this.recalculateStats();
+    this.notifyStateChange();
   }
 
   private checkLevelUp() {
@@ -3092,7 +3137,9 @@ export class GridMovementScene extends Phaser.Scene {
       this.baseHeroAttack = 5;
       this.baseHeroDefense = 0;
     }
-    this.equippedEquipmentId = null;
+    this.equippedWeaponId = null;
+    this.equippedArmorId = null;
+    this.equippedAccessoryId = null;
     this.recalculateStats();
     this.heroExp = 0;
     this.sendLog(`[デモ] ステータスがレベル 1 にリセットされました。 🔄`, 'system');

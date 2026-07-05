@@ -263,7 +263,19 @@ export default function ItemEditorPage() {
                     )}
 
                     {item.type === 'equipment' && (
-                      <div className="md:col-span-12 mt-2 bg-indigo-50 p-4 rounded-xl border border-indigo-100 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="md:col-span-12 mt-2 bg-indigo-50 p-4 rounded-xl border border-indigo-100 grid grid-cols-2 sm:grid-cols-5 gap-3">
+                        <div>
+                          <label className="block text-xs font-bold text-indigo-700 uppercase tracking-wider mb-1.5">種類 (Type)</label>
+                          <select
+                            value={item.equipmentType || 'weapon'}
+                            onChange={(e) => updateItem(index, 'equipmentType', e.target.value)}
+                            className="w-full bg-white border border-indigo-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                          >
+                            <option value="weapon">武器 (Weapon)</option>
+                            <option value="armor">防具 (Armor)</option>
+                            <option value="accessory">アクセサリー (Accessory)</option>
+                          </select>
+                        </div>
                         <div>
                           <label className="block text-xs font-bold text-indigo-700 uppercase tracking-wider mb-1.5">攻撃力 (Attack)</label>
                           <input

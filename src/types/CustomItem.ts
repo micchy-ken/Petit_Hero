@@ -5,6 +5,7 @@ export interface CustomItem {
   name: string;
   chestGraphic: string; // Predefined chest visual key, e.g., '🎁', '📦', '💎', '⭐', '💀', '🔔'
   type: ItemType;
+  equipmentType?: 'weapon' | 'armor' | 'accessory';
   description: string;
   targetMagicId?: string;
   attack?: number;
