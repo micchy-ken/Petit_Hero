@@ -1017,6 +1017,16 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                                         防:{{ fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' }[eq.defenseElement] || eq.defenseElement}
                                       </span>
                                     )}
+                                    {eq.attackElement && eq.attackElementEnchantValue !== undefined && eq.attackElementEnchantValue > 0 && (
+                                      <span className="text-[9px] px-1 bg-amber-50 text-amber-700 border border-amber-200 rounded font-extrabold" title={`敵が${{ fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' }[eq.attackElement] || eq.attackElement}属性の時に攻撃力+${eq.attackElementEnchantValue}`}>
+                                        付与攻:{{ fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' }[eq.attackElement] || eq.attackElement}+{eq.attackElementEnchantValue}
+                                      </span>
+                                    )}
+                                    {eq.defenseElement && eq.defenseElementEnchantValue !== undefined && eq.defenseElementEnchantValue > 0 && (
+                                      <span className="text-[9px] px-1 bg-cyan-50 text-cyan-700 border border-cyan-200 rounded font-extrabold" title={`敵が${{ fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' }[eq.defenseElement] || eq.defenseElement}属性の時に防御力+${eq.defenseElementEnchantValue}`}>
+                                        付与防:{{ fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' }[eq.defenseElement] || eq.defenseElement}+{eq.defenseElementEnchantValue}
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                               </div>
@@ -1100,6 +1110,16 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                                   {item.defenseElement && (
                                     <span className="text-[9px] px-1 bg-blue-50 text-blue-600 rounded border border-blue-100 font-extrabold">
                                       {{ fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' }[item.defenseElement] || item.defenseElement}防
+                                    </span>
+                                  )}
+                                  {item.attackElement && item.attackElementEnchantValue !== undefined && item.attackElementEnchantValue > 0 && (
+                                    <span className="text-[9px] px-1 bg-amber-50 text-amber-700 rounded border border-amber-100 font-extrabold" title={`敵が${{ fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' }[item.attackElement] || item.attackElement}属性の時に攻撃力+${item.attackElementEnchantValue}`}>
+                                      付与攻:{{ fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' }[item.attackElement] || item.attackElement}+{item.attackElementEnchantValue}
+                                    </span>
+                                  )}
+                                  {item.defenseElement && item.defenseElementEnchantValue !== undefined && item.defenseElementEnchantValue > 0 && (
+                                    <span className="text-[9px] px-1 bg-cyan-50 text-cyan-700 rounded border border-cyan-100 font-extrabold" title={`敵が${{ fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' }[item.defenseElement] || item.defenseElement}属性の時に防御力+${item.defenseElementEnchantValue}`}>
+                                      付与防:{{ fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' }[item.defenseElement] || item.defenseElement}+{item.defenseElementEnchantValue}
                                     </span>
                                   )}
                                 </div>

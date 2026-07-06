@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, Plus, Trash2, Loader2, Sparkles, Check, Flame, Snowflake } from 'lucide-react';
+import { ArrowLeft, Save, Plus, Trash2, Loader2, Sparkles, Check, Flame, Snowflake, Droplet, Wind, Mountain, Sun, Moon } from 'lucide-react';
 import { MagicData } from '../types/MagicData';
 import { fetchMagicDataFromFirestore, saveMagicDataToFirestore } from '../lib/dbService';
 
@@ -126,13 +126,38 @@ export default function MagicEditorPage() {
                     <div className="flex items-center gap-2">
                       <select
                         value={magic.attribute}
-                        onChange={(e) => updateMagic(magic.id, { attribute: e.target.value as 'fire' | 'ice' })}
+                        onChange={(e) => updateMagic(magic.id, { attribute: e.target.value as any })}
                         className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500"
                       >
+                        <option value="">無 (None)</option>
                         <option value="fire">火 (Fire)</option>
+                        <option value="water">水 (Water)</option>
+                        <option value="wind">風 (Wind)</option>
+                        <option value="earth">地 (Earth)</option>
+                        <option value="light">光 (Light)</option>
+                        <option value="dark">闇 (Dark)</option>
                         <option value="ice">氷 (Ice)</option>
                       </select>
-                      {magic.attribute === 'fire' ? <Flame className="text-red-500 w-5 h-5" /> : <Snowflake className="text-blue-500 w-5 h-5" />}
+                      {(() => {
+                        switch (magic.attribute) {
+                          case 'fire':
+                            return <Flame className="text-red-500 w-5 h-5" />;
+                          case 'water':
+                            return <Droplet className="text-blue-500 w-5 h-5" />;
+                          case 'wind':
+                            return <Wind className="text-emerald-500 w-5 h-5" />;
+                          case 'earth':
+                            return <Mountain className="text-amber-800 w-5 h-5" />;
+                          case 'light':
+                            return <Sun className="text-yellow-500 w-5 h-5" />;
+                          case 'dark':
+                            return <Moon className="text-violet-900 w-5 h-5" />;
+                          case 'ice':
+                            return <Snowflake className="text-cyan-500 w-5 h-5" />;
+                          default:
+                            return <Sparkles className="text-slate-400 w-5 h-5" />;
+                        }
+                      })()}
                     </div>
                   </div>
                   <div>

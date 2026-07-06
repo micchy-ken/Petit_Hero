@@ -481,6 +481,66 @@ export default function EnemyEditorPage() {
                   <option value="idle">待機 (動かない)</option>
                 </select>
               </div>
+
+              <div className="sm:col-span-2 mt-2 bg-indigo-50 p-3 rounded-xl border border-indigo-100 flex flex-wrap sm:flex-nowrap items-end gap-2">
+                <div className="flex-1 min-w-[80px]">
+                  <label className="block text-[11px] font-bold text-indigo-700 mb-1">攻撃属性</label>
+                  <select
+                    value={currentEnemy.attackElement || ''}
+                    onChange={e => handleUpdate({ attackElement: e.target.value })}
+                    className="w-full bg-white border border-indigo-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                  >
+                    <option value="">無 (None)</option>
+                    <option value="fire">火 (Fire)</option>
+                    <option value="water">水 (Water)</option>
+                    <option value="wind">風 (Wind)</option>
+                    <option value="earth">地 (Earth)</option>
+                    <option value="light">光 (Light)</option>
+                    <option value="dark">闇 (Dark)</option>
+                  </select>
+                </div>
+                
+                <div className="w-20 min-w-[60px]">
+                  <label className="block text-[11px] font-bold text-indigo-700 mb-1" title="攻撃属性付与ボーナス">付与攻</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={currentEnemy.attackElementEnchantValue !== undefined ? currentEnemy.attackElementEnchantValue : 0}
+                    onChange={e => handleUpdate({ attackElementEnchantValue: parseInt(e.target.value) || 0 })}
+                    className="w-full bg-white border border-indigo-200 rounded-lg px-2 py-1.5 text-xs text-center focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm disabled:bg-slate-100 disabled:text-slate-400"
+                    disabled={!currentEnemy.attackElement}
+                  />
+                </div>
+
+                <div className="flex-1 min-w-[80px]">
+                  <label className="block text-[11px] font-bold text-indigo-700 mb-1">防御属性</label>
+                  <select
+                    value={currentEnemy.defenseElement || ''}
+                    onChange={e => handleUpdate({ defenseElement: e.target.value })}
+                    className="w-full bg-white border border-indigo-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                  >
+                    <option value="">無 (None)</option>
+                    <option value="fire">火 (Fire)</option>
+                    <option value="water">水 (Water)</option>
+                    <option value="wind">風 (Wind)</option>
+                    <option value="earth">地 (Earth)</option>
+                    <option value="light">光 (Light)</option>
+                    <option value="dark">闇 (Dark)</option>
+                  </select>
+                </div>
+
+                <div className="w-20 min-w-[60px]">
+                  <label className="block text-[11px] font-bold text-indigo-700 mb-1" title="防御属性付与ボーナス">付与防</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={currentEnemy.defenseElementEnchantValue !== undefined ? currentEnemy.defenseElementEnchantValue : 0}
+                    onChange={e => handleUpdate({ defenseElementEnchantValue: parseInt(e.target.value) || 0 })}
+                    className="w-full bg-white border border-indigo-200 rounded-lg px-2 py-1.5 text-xs text-center focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm disabled:bg-slate-100 disabled:text-slate-400"
+                    disabled={!currentEnemy.defenseElement}
+                  />
+                </div>
+              </div>
             </div>
             </div>
           </div>

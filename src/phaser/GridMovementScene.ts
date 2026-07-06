@@ -53,6 +53,10 @@ interface SlimeData {
   lastMoveTime?: number;
   enemyId: string;
   direction: Direction;
+  attackElement?: string;
+  attackElementEnchantValue?: number;
+  defenseElement?: string;
+  defenseElementEnchantValue?: number;
 }
 
 export interface ActionLog {
@@ -171,6 +175,10 @@ export class GridMovementScene extends Phaser.Scene {
   private heroMaxHp: number = 20;
   private heroAttack: number = 5;
   private heroDefense: number = 0;
+  private heroAttackElement: string = '';
+  private heroAttackElementEnchantValue: number = 0;
+  private heroDefenseElement: string = '';
+  private heroDefenseElementEnchantValue: number = 0;
   private baseHeroAttack: number = 5;
   private baseHeroDefense: number = 0;
   public equippedWeaponId: string | null = null;
@@ -1295,6 +1303,10 @@ export class GridMovementScene extends Phaser.Scene {
             behavior: enemyConfig.behavior,
             enemyId: enemyConfig.id,
             direction: 'down',
+            attackElement: enemyConfig.attackElement,
+            attackElementEnchantValue: enemyConfig.attackElementEnchantValue,
+            defenseElement: enemyConfig.defenseElement,
+            defenseElementEnchantValue: enemyConfig.defenseElementEnchantValue,
           };
 
           this.slimes.push(newSlime);
@@ -1682,9 +1694,30 @@ export class GridMovementScene extends Phaser.Scene {
       return;
     }
 
-    const damage = Math.max(1, this.heroAttack - (slime.defense || 0));
+    const elMap: any = {
+      fire: '火',
+      water: '水',
+      wind: '風',
+      earth: '地',
+      light: '光',
+      dark: '闇',
+      ice: '氷'
+    };
+
+    let baseDamage = this.heroAttack - (slime.defense || 0);
+    let elementMsg = '';
+
+    if (this.heroAttackElement && slime.defenseElement && this.heroAttackElement === slime.defenseElement) {
+      const reduction = slime.defenseElementEnchantValue || 0;
+      if (reduction > 0) {
+        baseDamage -= reduction;
+        elementMsg = ` (属性:${elMap[this.heroAttackElement]}防御で-${reduction})`;
+      }
+    }
+
+    const damage = Math.max(1, baseDamage);
     slime.hp -= damage;
-    this.sendLog(`勇者の通常攻撃！ ${slime.name || 'スライム'}に ${damage} ダメージを与えた！ ⚔️`, 'combat');
+    this.sendLog(`勇者の通常攻撃！ ${slime.name || 'スライム'}に ${damage} ダメージを与えた！${elementMsg} ⚔️`, 'combat');
 
     // 攻撃エフェクト (本格的な円弧のダブルクロス・スラッシュ & スパーク)
     
@@ -1886,9 +1919,37 @@ export class GridMovementScene extends Phaser.Scene {
         }
         slime.isMoving = false;
         
-        const damage = Math.max(1, (slime.attack || 2) - this.heroDefense);
+        const elMap: any = {
+          fire: '火',
+          water: '水',
+          wind: '風',
+          earth: '地',
+          light: '光',
+          dark: '闇',
+          ice: '氷'
+        };
+
+        let baseEnemyAttack = slime.attack || 2;
+        let extraEnchant = 0;
+        let elementMsg = '';
+
+        if (slime.attackElement) {
+          extraEnchant = slime.attackElementEnchantValue || 0;
+          if (extraEnchant > 0) {
+            // 主人公の防御属性と一致する場合、主人公の防御属性付与ボーナスで低減する
+            if (this.heroDefenseElement && this.heroDefenseElement === slime.attackElement) {
+              const reduction = this.heroDefenseElementEnchantValue || 0;
+              extraEnchant = Math.max(0, extraEnchant - reduction);
+              if (reduction > 0) {
+                elementMsg = ` (属性:${elMap[slime.attackElement]}防御で付与攻-${reduction})`;
+              }
+            }
+          }
+        }
+
+        const damage = Math.max(1, (baseEnemyAttack + extraEnchant) - this.heroDefense);
         this.heroHp = Math.max(0, this.heroHp - damage);
-        this.sendLog(`${slime.name || 'スライム'}の攻撃！ 勇者は ${damage} ダメージを受けた！ 💥`, 'damage');
+        this.sendLog(`${slime.name || 'スライム'}の攻撃！ 勇者は ${damage} ダメージを受けた！${elementMsg} 💥`, 'damage');
         
         // 画面フラッシュ
         this.cameras.main.flash(200, 255, 0, 0);
@@ -2200,13 +2261,20 @@ export class GridMovementScene extends Phaser.Scene {
             this.recalculateStats();
             
             const elementInfo = [];
+            const elMap: Record<string, string> = { fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' };
             if (customItem.attackElement) {
-              const elMap: Record<string, string> = { fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' };
-              elementInfo.push(`攻撃属性: ${elMap[customItem.attackElement] || customItem.attackElement}`);
+              let msg = `攻撃属性: ${elMap[customItem.attackElement] || customItem.attackElement}`;
+              if (customItem.attackElementEnchantValue && customItem.attackElementEnchantValue > 0) {
+                msg += `(付与攻+${customItem.attackElementEnchantValue})`;
+              }
+              elementInfo.push(msg);
             }
             if (customItem.defenseElement) {
-              const elMap: Record<string, string> = { fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' };
-              elementInfo.push(`防御属性: ${elMap[customItem.defenseElement] || customItem.defenseElement}`);
+              let msg = `防御属性: ${elMap[customItem.defenseElement] || customItem.defenseElement}`;
+              if (customItem.defenseElementEnchantValue && customItem.defenseElementEnchantValue > 0) {
+                msg += `(付与防+${customItem.defenseElementEnchantValue})`;
+              }
+              elementInfo.push(msg);
             }
             const elementStr = elementInfo.length > 0 ? ` (${elementInfo.join(', ')})` : '';
             
@@ -2626,6 +2694,10 @@ export class GridMovementScene extends Phaser.Scene {
             behavior: bossConfig.behavior || 'seek',
             enemyId: bossConfig.id,
             direction: 'down',
+            attackElement: bossConfig.attackElement,
+            attackElementEnchantValue: bossConfig.attackElementEnchantValue,
+            defenseElement: bossConfig.defenseElement,
+            defenseElementEnchantValue: bossConfig.defenseElementEnchantValue,
           };
           this.slimes.push(newBoss);
           this.playMonsterAnim(newBoss, 'idle', 'down');
@@ -2698,6 +2770,10 @@ export class GridMovementScene extends Phaser.Scene {
         behavior: enemyConfig.behavior,
         enemyId: enemyConfig.id,
         direction: 'down',
+        attackElement: enemyConfig.attackElement,
+        attackElementEnchantValue: enemyConfig.attackElementEnchantValue,
+        defenseElement: enemyConfig.defenseElement,
+        defenseElementEnchantValue: enemyConfig.defenseElementEnchantValue,
       };
 
       this.slimes.push(newSlime);
@@ -2883,21 +2959,49 @@ export class GridMovementScene extends Phaser.Scene {
     let attackBonus = 0;
     let defenseBonus = 0;
     
+    let heroAttackElement = '';
+    let heroAttackElementEnchantValue = 0;
+    let heroDefenseElement = '';
+    let heroDefenseElementEnchantValue = 0;
+
+    const checkItemElements = (item: any) => {
+      if (!item) return;
+      if (item.attackElement) {
+        if (!heroAttackElement || (item.attackElementEnchantValue || 0) > heroAttackElementEnchantValue) {
+          heroAttackElement = item.attackElement;
+          heroAttackElementEnchantValue = item.attackElementEnchantValue || 0;
+        }
+      }
+      if (item.defenseElement) {
+        if (!heroDefenseElement || (item.defenseElementEnchantValue || 0) > heroDefenseElementEnchantValue) {
+          heroDefenseElement = item.defenseElement;
+          heroDefenseElementEnchantValue = item.defenseElementEnchantValue || 0;
+        }
+      }
+    };
+    
     if (equippedWeapon) {
       attackBonus += equippedWeapon.attack || 0;
       defenseBonus += equippedWeapon.defense || 0;
+      checkItemElements(equippedWeapon);
     }
     if (equippedArmor) {
       attackBonus += equippedArmor.attack || 0;
       defenseBonus += equippedArmor.defense || 0;
+      checkItemElements(equippedArmor);
     }
     if (equippedAccessory) {
       attackBonus += equippedAccessory.attack || 0;
       defenseBonus += equippedAccessory.defense || 0;
+      checkItemElements(equippedAccessory);
     }
     
     this.heroAttack = this.baseHeroAttack + attackBonus;
     this.heroDefense = this.baseHeroDefense + defenseBonus;
+    this.heroAttackElement = heroAttackElement;
+    this.heroAttackElementEnchantValue = heroAttackElementEnchantValue;
+    this.heroDefenseElement = heroDefenseElement;
+    this.heroDefenseElementEnchantValue = heroDefenseElementEnchantValue;
   }
 
   public equipItem(itemId: string | null, slot?: 'weapon' | 'armor' | 'accessory') {
@@ -2965,7 +3069,7 @@ export class GridMovementScene extends Phaser.Scene {
       return;
     }
 
-    if (magic.attribute === 'ice') {
+    if (magic.attribute === 'ice' || magic.attribute === 'water') {
       this.castIceMagicEffect(magic);
       return;
     }

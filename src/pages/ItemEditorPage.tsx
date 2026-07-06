@@ -243,90 +243,101 @@ export default function ItemEditorPage() {
                       />
                     </div>
 
-                    {item.type === 'magic' && (
-                      <div className="md:col-span-12 mt-2 bg-purple-50 p-3 rounded-lg border border-purple-100 flex items-center gap-3">
-                        <Sparkles className="text-purple-500 w-5 h-5 flex-shrink-0" />
-                        <div className="flex-1">
-                          <label className="block text-xs font-bold text-purple-700 uppercase tracking-wider mb-1.5">習得する魔法 (Magic to learn)</label>
-                          <select
-                            value={item.targetMagicId || ''}
-                            onChange={(e) => updateItem(index, 'targetMagicId', e.target.value)}
-                            className="w-full bg-white border border-purple-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-sm"
-                          >
-                            <option value="">-- 魔法を選択してください --</option>
-                            {magics.filter(m => m.acquisitionType === 'item').map(m => (
-                              <option key={m.id} value={m.id}>{m.name} ({m.id})</option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                    )}
-
                     {item.type === 'equipment' && (
-                      <div className="md:col-span-12 mt-2 bg-indigo-50 p-4 rounded-xl border border-indigo-100 grid grid-cols-2 sm:grid-cols-5 gap-3">
-                        <div>
-                          <label className="block text-xs font-bold text-indigo-700 uppercase tracking-wider mb-1.5">種類 (Type)</label>
+                      <div className="md:col-span-12 mt-2 bg-indigo-50 p-3 rounded-xl border border-indigo-100 flex flex-wrap lg:flex-nowrap items-end gap-2">
+                        <div className="w-24 min-w-[90px]">
+                          <label className="block text-[11px] font-bold text-indigo-700 mb-1">種類 (Type)</label>
                           <select
                             value={item.equipmentType || 'weapon'}
                             onChange={(e) => updateItem(index, 'equipmentType', e.target.value)}
-                            className="w-full bg-white border border-indigo-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                            className="w-full bg-white border border-indigo-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
                           >
                             <option value="weapon">武器 (Weapon)</option>
                             <option value="armor">防具 (Armor)</option>
                             <option value="accessory">アクセサリー (Accessory)</option>
                           </select>
                         </div>
-                        <div>
-                          <label className="block text-xs font-bold text-indigo-700 uppercase tracking-wider mb-1.5">攻撃力 (Attack)</label>
+                        
+                        <div className="w-14 min-w-[50px]">
+                          <label className="block text-[11px] font-bold text-indigo-700 mb-1">攻撃 (Atk)</label>
                           <input
                             type="number"
                             value={item.attack !== undefined ? item.attack : 0}
                             onChange={(e) => updateItem(index, 'attack', parseInt(e.target.value) || 0)}
-                            className="w-full bg-white border border-indigo-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                            className="w-full bg-white border border-indigo-200 rounded-lg px-2 py-1.5 text-xs text-center focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
                             min="0"
                           />
                         </div>
-                        <div>
-                          <label className="block text-xs font-bold text-indigo-700 uppercase tracking-wider mb-1.5">防御力 (Defense)</label>
+                        
+                        <div className="w-20 min-w-[80px]">
+                          <label className="block text-[11px] font-bold text-indigo-700 mb-1">攻撃属性</label>
+                          <select
+                            value={item.attackElement || ''}
+                            onChange={(e) => updateItem(index, 'attackElement', e.target.value)}
+                            className="w-full bg-white border border-indigo-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                          >
+                            <option value="">無 (None)</option>
+                            <option value="fire">火 (Fire)</option>
+                            <option value="water">水 (Water)</option>
+                            <option value="wind">風 (Wind)</option>
+                            <option value="earth">地 (Earth)</option>
+                            <option value="light">光 (Light)</option>
+                            <option value="dark">闇 (Dark)</option>
+                          </select>
+                        </div>
+                        
+                        <div className="w-16 min-w-[60px]">
+                          <label className="block text-[11px] font-bold text-indigo-700 mb-1" title="属性を持つ敵に対する攻撃ボーナス">攻ボーナス</label>
+                          <input
+                            type="number"
+                            value={item.attackElementEnchantValue !== undefined ? item.attackElementEnchantValue : 0}
+                            onChange={(e) => updateItem(index, 'attackElementEnchantValue', parseInt(e.target.value) || 0)}
+                            className="w-full bg-white border border-indigo-200 rounded-lg px-2 py-1.5 text-xs text-center focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm disabled:bg-slate-100 disabled:text-slate-400"
+                            min="0"
+                            disabled={!item.attackElement}
+                            placeholder="0"
+                          />
+                        </div>
+
+                        <div className="w-14 min-w-[50px]">
+                          <label className="block text-[11px] font-bold text-indigo-700 mb-1">防御 (Def)</label>
                           <input
                             type="number"
                             value={item.defense !== undefined ? item.defense : 0}
                             onChange={(e) => updateItem(index, 'defense', parseInt(e.target.value) || 0)}
-                            className="w-full bg-white border border-indigo-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                            className="w-full bg-white border border-indigo-200 rounded-lg px-2 py-1.5 text-xs text-center focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
                             min="0"
                           />
                         </div>
-                        <div>
-                          <label className="block text-xs font-bold text-indigo-700 uppercase tracking-wider mb-1.5">攻撃属性 (Atk Element)</label>
-                          <select
-                            value={item.attackElement || ''}
-                            onChange={(e) => updateItem(index, 'attackElement', e.target.value)}
-                            className="w-full bg-white border border-indigo-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
-                          >
-                            <option value="">無属性 (None)</option>
-                            <option value="fire">火属性 (Fire)</option>
-                            <option value="water">水属性 (Water)</option>
-                            <option value="wind">風属性 (Wind)</option>
-                            <option value="earth">地属性 (Earth)</option>
-                            <option value="light">光属性 (Light)</option>
-                            <option value="dark">闇属性 (Dark)</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-indigo-700 uppercase tracking-wider mb-1.5">防御属性 (Def Element)</label>
+
+                        <div className="w-20 min-w-[80px]">
+                          <label className="block text-[11px] font-bold text-indigo-700 mb-1">防御属性</label>
                           <select
                             value={item.defenseElement || ''}
                             onChange={(e) => updateItem(index, 'defenseElement', e.target.value)}
-                            className="w-full bg-white border border-indigo-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                            className="w-full bg-white border border-indigo-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
                           >
-                            <option value="">無属性 (None)</option>
-                            <option value="fire">火属性 (Fire)</option>
-                            <option value="water">水属性 (Water)</option>
-                            <option value="wind">風属性 (Wind)</option>
-                            <option value="earth">地属性 (Earth)</option>
-                            <option value="light">光属性 (Light)</option>
-                            <option value="dark">闇属性 (Dark)</option>
+                            <option value="">無 (None)</option>
+                            <option value="fire">火 (Fire)</option>
+                            <option value="water">水 (Water)</option>
+                            <option value="wind">風 (Wind)</option>
+                            <option value="earth">地 (Earth)</option>
+                            <option value="light">光 (Light)</option>
+                            <option value="dark">闇 (Dark)</option>
                           </select>
+                        </div>
+
+                        <div className="w-16 min-w-[60px]">
+                          <label className="block text-[11px] font-bold text-indigo-700 mb-1" title="属性を持つ敵に対する防御ボーナス">防ボーナス</label>
+                          <input
+                            type="number"
+                            value={item.defenseElementEnchantValue !== undefined ? item.defenseElementEnchantValue : 0}
+                            onChange={(e) => updateItem(index, 'defenseElementEnchantValue', parseInt(e.target.value) || 0)}
+                            className="w-full bg-white border border-indigo-200 rounded-lg px-2 py-1.5 text-xs text-center focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm disabled:bg-slate-100 disabled:text-slate-400"
+                            min="0"
+                            disabled={!item.defenseElement}
+                            placeholder="0"
+                          />
                         </div>
                       </div>
                     )}

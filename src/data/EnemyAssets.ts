@@ -8,6 +8,10 @@ export interface EnemyAsset {
   exp: number;
   speed: number;
   behavior: string;
+  attackElement?: string;
+  attackElementEnchantValue?: number;
+  defenseElement?: string;
+  defenseElementEnchantValue?: number;
 }
 
 export const EnemyAssets: Record<string, EnemyAsset[]> = {
@@ -19,8 +23,8 @@ export const EnemyAssets: Record<string, EnemyAsset[]> = {
   ],
   'color': [
     { id: 'color_slime_green', name: 'グリーンスライム', hp: 10, attack: 2, defense: 0, exp: 2, speed: 1000, behavior: 'random' },
-    { id: 'color_slime_red', name: 'レッドスライム', hp: 15, attack: 4, defense: 2, exp: 4, speed: 900, behavior: 'seek' },
-    { id: 'color_slime_blue', name: 'ブルースライム', hp: 12, attack: 3, defense: 1, exp: 3, speed: 800, behavior: 'seek' },
+    { id: 'color_slime_red', name: 'レッドスライム', hp: 15, attack: 4, defense: 2, exp: 4, speed: 900, behavior: 'seek', attackElement: 'fire', attackElementEnchantValue: 2, defenseElement: 'fire', defenseElementEnchantValue: 1 },
+    { id: 'color_slime_blue', name: 'ブルースライム', hp: 12, attack: 3, defense: 1, exp: 3, speed: 800, behavior: 'seek', attackElement: 'water', attackElementEnchantValue: 2, defenseElement: 'water', defenseElementEnchantValue: 1 },
     { id: 'color_goblin', name: 'ゴブリン', hp: 20, attack: 5, defense: 2, exp: 5, speed: 700, behavior: 'seek' },
     { id: 'color_bat', name: 'コウモリ', hp: 8, attack: 2, defense: 0, exp: 1, speed: 500, behavior: 'random' },
   ],
@@ -34,8 +38,8 @@ export const BossAssets: Record<string, EnemyAsset[]> = {
     { id: 'gray_boss', name: '白黒魔王', hp: 60, attack: 12, defense: 6, exp: 60, speed: 1000, behavior: 'seek' },
   ],
   'color': [
-    { id: 'color_dragon', name: 'ドラゴン', hp: 80, attack: 15, defense: 10, exp: 100, speed: 1500, behavior: 'seek' },
-    { id: 'color_demon_king', name: '魔王', hp: 100, attack: 20, defense: 15, exp: 200, speed: 800, behavior: 'seek' },
+    { id: 'color_dragon', name: 'ドラゴン', hp: 80, attack: 15, defense: 10, exp: 100, speed: 1500, behavior: 'seek', attackElement: 'fire', attackElementEnchantValue: 5, defenseElement: 'fire', defenseElementEnchantValue: 4 },
+    { id: 'color_demon_king', name: '魔王', hp: 100, attack: 20, defense: 15, exp: 200, speed: 800, behavior: 'seek', attackElement: 'dark', attackElementEnchantValue: 8, defenseElement: 'dark', defenseElementEnchantValue: 6 },
   ],
 };
 

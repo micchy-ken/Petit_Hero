@@ -12,4 +12,6 @@ export interface CustomItem {
   defense?: number;
   attackElement?: string;
   defenseElement?: string;
+  attackElementEnchantValue?: number;
+  defenseElementEnchantValue?: number;
 }
