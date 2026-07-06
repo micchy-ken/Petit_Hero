@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { generateHeroSpritesheet } from './HeroSpritesheet';
 import { generateSlimeSpritesheet, generateBatSpritesheet, generateGoblinSpritesheet } from './MonsterSpritesheets';
+import { generateObstacleTextures } from './ObstacleTextures';
 import { getEnemyAssetById, EnemyAsset, getAvailableEnemies } from '../data/EnemyAssets';
 import { getHeroStatusByLevel, getAllHeroStatus } from '../data/HeroStatusAssets';
 // @ts-ignore
@@ -91,6 +92,7 @@ export class GridMovementScene extends Phaser.Scene {
   private lastMagicCastTime: Record<string, number> = {};
   private slimes: SlimeData[] = [];
   private itemSprites: { gridX: number, gridY: number, sprite: Phaser.GameObjects.GameObject, itemId: string }[] = [];
+  private obstacleSprites: { gridX: number, gridY: number, sprite: Phaser.GameObjects.GameObject, type: string }[] = [];
   private teleportPortals: { x: number, y: number, container: Phaser.GameObjects.Container, met: boolean }[] = [];
 
   private playedMapEvents: Set<string> = new Set();
@@ -259,6 +261,7 @@ export class GridMovementScene extends Phaser.Scene {
     generateGoblinSpritesheet(this, 'normal');
     generateGoblinSpritesheet(this, 'text');
     generateGoblinSpritesheet(this, 'grayscale');
+    generateObstacleTextures(this);
   }
 
   create() {
@@ -1171,6 +1174,7 @@ export class GridMovementScene extends Phaser.Scene {
     this.drawVisitedTrace();
     this.updateTeleportPortals(true);
     this.updateMapItemSprites();
+    this.updateMapObstacleSprites();
   }
 
   public toggleGridLines(show?: boolean) {
@@ -1929,6 +1933,9 @@ export class GridMovementScene extends Phaser.Scene {
       if (s.gridX === x && s.gridY === y) return true;
       if (s.targetGridX === x && s.targetGridY === y) return true;
     }
+    if (this.mapData && this.mapData.obstacles) {
+      if (this.mapData.obstacles.some((obs: any) => obs.x === x && obs.y === y)) return true;
+    }
     return false;
   }
 
@@ -1952,6 +1959,11 @@ export class GridMovementScene extends Phaser.Scene {
     // 4. マップ上のイベントとの重複チェック
     if (this.mapData && this.mapData.events) {
       if (this.mapData.events.some((e: any) => e.x === x && e.y === y)) return true;
+    }
+
+    // 5. 障害物との重複チェック
+    if (this.mapData && this.mapData.obstacles) {
+      if (this.mapData.obstacles.some((obs: any) => obs.x === x && obs.y === y)) return true;
     }
 
     return false;
@@ -2483,6 +2495,11 @@ export class GridMovementScene extends Phaser.Scene {
     });
     this.itemSprites = [];
 
+    this.obstacleSprites.forEach(obs => {
+      if (obs.sprite && obs.sprite.active) obs.sprite.destroy();
+    });
+    this.obstacleSprites = [];
+
     this.teleportPortals.forEach(p => {
       if (p.container && p.container.active) p.container.destroy();
     });
@@ -2542,6 +2559,7 @@ export class GridMovementScene extends Phaser.Scene {
     }
     this.currentDirection = 'idle';
     this.spawnMapItems();
+    this.spawnMapObstacles();
     this.notifyStateChange(false);
 
     // Initial check (start_point, custom_event, monologue)
@@ -2663,6 +2681,68 @@ export class GridMovementScene extends Phaser.Scene {
         itemId: item.itemId
       });
     });
+  }
+
+  private spawnMapObstacles() {
+    if (!this.mapData || !this.mapData.obstacles) return;
+    const { GRID_SIZE } = GridMovementScene;
+
+    this.mapData.obstacles.forEach((obs: any) => {
+      if (obs.type === 'transparent') {
+        return;
+      }
+
+      let spriteObj: Phaser.GameObjects.GameObject;
+
+      if (this.displayMode === 'text') {
+        let label = '壁';
+        let color = '#ef4444';
+        if (obs.type === 'pillar') { label = '柱'; color = '#9ca3af'; }
+        else if (obs.type === 'rock') { label = '岩'; color = '#64748b'; }
+        else if (obs.type === 'peg') { label = '杭'; color = '#b45309'; }
+
+        const textObj = this.add.text(
+          obs.x * GRID_SIZE + GRID_SIZE / 2, 
+          obs.y * GRID_SIZE + GRID_SIZE / 2, 
+          label, 
+          { 
+            fontFamily: '"Inter", sans-serif', 
+            fontSize: '32px', 
+            color: color, 
+            fontStyle: 'bold' 
+          }
+        );
+        textObj.setOrigin(0.5, 0.5);
+        textObj.setDepth(4);
+        spriteObj = textObj;
+      } else {
+        const textureKey = this.displayMode === 'grayscale' ? `obstacle_${obs.type}_gray` : `obstacle_${obs.type}`;
+        const sprite = this.add.sprite(
+          obs.x * GRID_SIZE + GRID_SIZE / 2, 
+          obs.y * GRID_SIZE + GRID_SIZE / 2, 
+          textureKey
+        );
+        sprite.setDepth(4);
+        spriteObj = sprite;
+      }
+
+      this.obstacleSprites.push({
+        gridX: obs.x,
+        gridY: obs.y,
+        sprite: spriteObj,
+        type: obs.type
+      });
+    });
+  }
+
+  public updateMapObstacleSprites() {
+    this.obstacleSprites.forEach(obs => {
+      if (obs.sprite && obs.sprite.active) {
+        obs.sprite.destroy();
+      }
+    });
+    this.obstacleSprites = [];
+    this.spawnMapObstacles();
   }
 
   public updateMapItemSprites() {

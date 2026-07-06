@@ -11,6 +11,12 @@ export interface MapItem {
   itemId: string;
 }
 
+export interface MapObstacle {
+  x: number;
+  y: number;
+  type: 'transparent' | 'pillar' | 'rock' | 'peg' | 'wall';
+}
+
 export interface MapClearConditions {
   explorationRate?: number | null; // 踏破率
   searchRate?: number | null;      // 捜索率
@@ -27,6 +33,7 @@ export interface MapData {
   bgImage?: string;
   events: MapEvent[];
   items: MapItem[];
+  obstacles?: MapObstacle[];
   enemies: string[]; // 最大3種類
   maxEnemies?: number | 'infinite'; // 出現数
   boss?: string;     // 最大1種類

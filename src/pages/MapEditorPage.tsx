@@ -153,6 +153,8 @@ export default function MapEditorPage() {
   
   // アイテム配置用の状態
   const [itemType, setItemType] = useState<string>('treasure_text');
+  // 障害配置用の状態
+  const [obstacleType, setObstacleType] = useState<'transparent' | 'pillar' | 'rock' | 'peg' | 'wall'>('transparent');
   const [mobileTab, setMobileTab] = useState<'map' | 'canvas' | 'tools'>('canvas');
 
   const [showNewMapModal, setShowNewMapModal] = useState(false);
@@ -247,6 +249,22 @@ export default function MapEditorPage() {
       }
       
       handleUpdateCurrentMap({ items: newItems });
+    } else if (placeMode === 'obstacle') {
+      const existingIndex = (currentMap.obstacles || []).findIndex(obs => obs.x === x && obs.y === y);
+      const newObstacles = [...(currentMap.obstacles || [])];
+      
+      if (existingIndex >= 0) {
+        const existingObs = newObstacles[existingIndex];
+        if (existingObs.type === obstacleType) {
+          newObstacles.splice(existingIndex, 1);
+        } else {
+          newObstacles[existingIndex] = { x, y, type: obstacleType };
+        }
+      } else {
+        newObstacles.push({ x, y, type: obstacleType });
+      }
+      
+      handleUpdateCurrentMap({ obstacles: newObstacles });
     }
   };
 
@@ -405,6 +423,7 @@ export default function MapEditorPage() {
     if (updates.width !== undefined || updates.height !== undefined) {
       finalUpdates.events = targetMap.events.filter(e => e.x < nextWidth && e.y < nextHeight);
       finalUpdates.items = targetMap.items.filter(item => item.x < nextWidth && item.y < nextHeight);
+      finalUpdates.obstacles = (targetMap.obstacles || []).filter(obs => obs.x < nextWidth && obs.y < nextHeight);
     }
 
     setMaps(maps.map(m => m.id === currentMapId ? { ...m, ...finalUpdates } : m));
@@ -811,6 +830,43 @@ export default function MapEditorPage() {
             </div>
           )}
 
+          {/* 障害設定詳細 */}
+          {placeMode === 'obstacle' && (
+            <div className="flex flex-col gap-3 mt-2 border-t border-slate-600 pt-4">
+              <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider pb-1">
+                Obstacle Properties
+              </h2>
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-400 font-bold uppercase mb-1">障害物の種類</label>
+                  <div className="flex flex-col gap-2">
+                    {[
+                      { id: 'transparent', name: '透明の障害 (🫥)', desc: '視覚的には透明。エディタのみ表示。' },
+                      { id: 'pillar', name: '柱 (🏛️)', desc: '64x64の高精細なピクセルアート。' },
+                      { id: 'rock', name: '岩 (🪨)', desc: '64x64の高精細なピクセルアート。' },
+                      { id: 'peg', name: '杭 (🪵)', desc: '64x64の高精細なピクセルアート。' },
+                      { id: 'wall', name: '壁 (🧱)', desc: '64x64の高精細なピクセルアート。' }
+                    ].map((type) => (
+                      <button
+                        key={type.id}
+                        type="button"
+                        onClick={() => setObstacleType(type.id as any)}
+                        className={`flex flex-col items-start w-full px-3 py-2 rounded text-left transition-all border ${
+                          obstacleType === type.id 
+                            ? 'bg-slate-700/80 border-slate-400 text-white shadow' 
+                            : 'bg-slate-800/40 border-slate-700/60 text-slate-300 hover:bg-slate-800/80'
+                        }`}
+                      >
+                        <span className="font-bold text-xs">{type.name}</span>
+                        <span className="text-[10px] text-slate-400 mt-0.5">{type.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* イベント設定詳細 */}
           {placeMode === 'event' && (
             <div className="flex flex-col gap-3 mt-2 border-t border-slate-600 pt-4">
@@ -983,6 +1039,7 @@ export default function MapEditorPage() {
               {Array.from({ length: currentMap.width * currentMap.height }).map((_, i) => {
                 const x = i % currentMap.width;
                 const y = Math.floor(i / currentMap.width);
+                const hasObstacle = (currentMap.obstacles || []).find(obs => obs.x === x && obs.y === y);
                 const hasEvent = currentMap.events.find(e => e.x === x && e.y === y);
                 const hasItem = currentMap.items.find(i => i.x === x && i.y === y);
                 return (
@@ -991,30 +1048,55 @@ export default function MapEditorPage() {
                     className="border border-slate-500/30 hover:bg-slate-400/30 cursor-pointer flex items-center justify-center transition-colors"
                     onClick={() => handleGridClick(x, y)}
                   >
-                     {hasEvent && hasEvent.type === 'start_point' && (
-                        <div className="w-full h-full bg-yellow-500/50 flex items-center justify-center text-xs font-bold text-yellow-100" title={`初期値 ${hasEvent.data?.fromMap ? `(from: ${hasEvent.data.fromMap})` : ''}`}>
-                          S
+                     {hasObstacle ? (
+                        <div 
+                          className={`w-full h-full flex items-center justify-center text-xs font-bold ${
+                            hasObstacle.type === 'transparent' ? 'bg-red-500/15 border border-dashed border-red-500 text-red-500' :
+                            hasObstacle.type === 'pillar' ? 'bg-slate-300/60 border border-slate-500 text-slate-800' :
+                            hasObstacle.type === 'rock' ? 'bg-slate-400/60 border border-slate-600 text-slate-800' :
+                            hasObstacle.type === 'peg' ? 'bg-amber-600/30 border border-amber-800 text-amber-900' :
+                            'bg-red-800/40 border border-red-900 text-red-100'
+                          }`}
+                          title={`障害: ${
+                            hasObstacle.type === 'transparent' ? '透明の障害' :
+                            hasObstacle.type === 'pillar' ? '柱' :
+                            hasObstacle.type === 'rock' ? '岩' :
+                            hasObstacle.type === 'peg' ? '杭' : '壁'
+                          }`}
+                        >
+                          {hasObstacle.type === 'transparent' ? '🫥' :
+                           hasObstacle.type === 'pillar' ? '🏛️' :
+                           hasObstacle.type === 'rock' ? '🪨' :
+                           hasObstacle.type === 'peg' ? '🪵' : '🧱'}
                         </div>
-                     )}
-                     {hasEvent && hasEvent.type === 'teleport' && (
-                        <div className="w-full h-full bg-blue-500/50 flex items-center justify-center text-xs font-bold text-blue-100" title={`移動 (to: ${hasEvent.data?.targetMap})`}>
-                          T
-                        </div>
-                     )}
-                     {hasEvent && hasEvent.type === 'monologue' && (
-                        <div className="w-full h-full bg-emerald-500/50 flex items-center justify-center text-xs font-bold text-emerald-100" title={`モノローグ\n${hasEvent.data?.text || ''}`}>
-                          M
-                        </div>
-                     )}
-                     {hasEvent && hasEvent.type === 'custom_event' && (
-                        <div className="w-full h-full bg-indigo-500/50 flex items-center justify-center text-xs font-bold text-indigo-100" title={`カスタムイベント: ${hasEvent.data?.eventId || ''}`}>
-                          C
-                        </div>
-                     )}
-                     {hasItem && (
-                        <div className="w-full h-full bg-amber-500/50 flex items-center justify-center text-xs font-bold text-amber-100" title={`アイテム: ${hasItem.itemId}`}>
-                          {hasItem.itemId === 'treasure_text' ? '宝' : (customItems.find(it => it.id === hasItem.itemId)?.chestGraphic || '🎁')}
-                        </div>
+                     ) : (
+                        <>
+                          {hasEvent && hasEvent.type === 'start_point' && (
+                             <div className="w-full h-full bg-yellow-500/50 flex items-center justify-center text-xs font-bold text-yellow-100" title={`初期値 ${hasEvent.data?.fromMap ? `(from: ${hasEvent.data.fromMap})` : ''}`}>
+                               S
+                             </div>
+                          )}
+                          {hasEvent && hasEvent.type === 'teleport' && (
+                             <div className="w-full h-full bg-blue-500/50 flex items-center justify-center text-xs font-bold text-blue-100" title={`移動 (to: ${hasEvent.data?.targetMap})`}>
+                               T
+                             </div>
+                          )}
+                          {hasEvent && hasEvent.type === 'monologue' && (
+                             <div className="w-full h-full bg-emerald-500/50 flex items-center justify-center text-xs font-bold text-emerald-100" title={`モノローグ\n${hasEvent.data?.text || ''}`}>
+                               M
+                             </div>
+                          )}
+                          {hasEvent && hasEvent.type === 'custom_event' && (
+                             <div className="w-full h-full bg-indigo-500/50 flex items-center justify-center text-xs font-bold text-indigo-100" title={`カスタムイベント: ${hasEvent.data?.eventId || ''}`}>
+                               C
+                             </div>
+                          )}
+                          {hasItem && (
+                             <div className="w-full h-full bg-amber-500/50 flex items-center justify-center text-xs font-bold text-amber-100" title={`アイテム: ${hasItem.itemId}`}>
+                               {hasItem.itemId === 'treasure_text' ? '宝' : (customItems.find(it => it.id === hasItem.itemId)?.chestGraphic || '🎁')}
+                             </div>
+                          )}
+                        </>
                      )}
                   </div>
                 );
