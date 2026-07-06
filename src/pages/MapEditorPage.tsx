@@ -42,7 +42,7 @@ export default function MapEditorPage() {
       const loadedCustomItems = await fetchCustomItemsFromFirestore();
       setCustomItems(loadedCustomItems);
       if (loadedCustomItems.length > 0 && isInitial) {
-        setItemType(loadedCustomItems[0].id);
+        setNewItemParams(prev => ({ ...prev, itemId: loadedCustomItems[0].id }));
       }
 
       // Load maps
@@ -140,19 +140,23 @@ export default function MapEditorPage() {
   const [bgMode, setBgMode] = useState<MapData['bgMode']>(currentMap?.bgMode || 'text-black');
   const [placeMode, setPlaceMode] = useState<'obstacle' | 'item' | 'event'>('obstacle');
   
-  // イベント配置用の状態
-  const [eventType, setEventType] = useState<'start_point' | 'teleport' | 'monologue' | 'custom_event'>('start_point');
-  const [startPointFromMap, setStartPointFromMap] = useState<string>('');
-  const [teleportTargetMap, setTeleportTargetMap] = useState<string>('');
-  const [eventCondExpRate, setEventCondExpRate] = useState<number | null>(null);
-  const [eventCondSearchRate, setEventCondSearchRate] = useState<number | null>(null);
-  const [eventCondDefeatRate, setEventCondDefeatRate] = useState<number | null>(null);
-  const [monologueText, setMonologueText] = useState<string>('');
-  const [customEventId, setCustomEventId] = useState<string>('');
-  const [playMode, setPlayMode] = useState<'always' | 'once_per_map' | 'once_global'>('always');
+  // イベント配置用の状態（オブジェクト化）
+  const [newEventParams, setNewEventParams] = useState({
+    type: 'start_point' as 'start_point' | 'teleport' | 'monologue' | 'custom_event',
+    startPointFromMap: '',
+    teleportTargetMap: '',
+    eventCondExpRate: null as number | null,
+    eventCondSearchRate: null as number | null,
+    eventCondDefeatRate: null as number | null,
+    monologueText: '',
+    customEventId: '',
+    playMode: 'always' as 'always' | 'once_per_map' | 'once_global',
+  });
   
-  // アイテム配置用の状態
-  const [itemType, setItemType] = useState<string>('treasure_text');
+  // アイテム配置用の状態（オブジェクト化）
+  const [newItemParams, setNewItemParams] = useState({
+    itemId: 'treasure_text',
+  });
   // 障害配置用の状態
   const [obstacleType, setObstacleType] = useState<'transparent' | 'pillar' | 'rock' | 'peg' | 'wall'>('transparent');
   const [mobileTab, setMobileTab] = useState<'map' | 'canvas' | 'tools'>('canvas');
@@ -175,7 +179,80 @@ export default function MapEditorPage() {
     requiredExplorationRate: number | null;
     requiredSearchRate: number | null;
     requiredDefeatRate: number | null;
+    playMode: 'always' | 'once_per_map' | 'once_global';
   } | null>(null);
+
+  // アイテム個別編集状態
+  const [editingItem, setEditingItem] = useState<{
+    index: number;
+    x: number;
+    y: number;
+    itemId: string;
+  } | null>(null);
+
+  // ドラッグ＆ドロップ再配置用の状態
+  const [draggingSource, setDraggingSource] = useState<{
+    x: number;
+    y: number;
+    type: 'obstacle' | 'item' | 'event';
+  } | null>(null);
+
+  const handleGridDragStart = (e: React.DragEvent, x: number, y: number, type: 'obstacle' | 'item' | 'event') => {
+    setDraggingSource({ x, y, type });
+    e.dataTransfer.setData('text/plain', JSON.stringify({ x, y, type }));
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleGridDragEnd = () => {
+    setDraggingSource(null);
+  };
+
+  const handleGridDrop = (e: React.DragEvent, targetX: number, targetY: number) => {
+    e.preventDefault();
+    let source = draggingSource;
+    if (!source) {
+      try {
+        const rawData = e.dataTransfer.getData('text/plain');
+        if (rawData) {
+          source = JSON.parse(rawData);
+        }
+      } catch (err) {
+        // ignore
+      }
+    }
+    if (!source) return;
+
+    const { x: srcX, y: srcY, type } = source;
+    if (srcX === targetX && srcY === targetY) return;
+
+    if (type === 'obstacle' && placeMode === 'obstacle') {
+      const oldObstacles = currentMap.obstacles || [];
+      const srcObs = oldObstacles.find(obs => obs.x === srcX && obs.y === srcY);
+      if (!srcObs) return;
+
+      const newObstacles = oldObstacles.filter(obs => !(obs.x === srcX && obs.y === srcY) && !(obs.x === targetX && obs.y === targetY));
+      newObstacles.push({ x: targetX, y: targetY, type: srcObs.type });
+      handleUpdateCurrentMap({ obstacles: newObstacles });
+    } else if (type === 'item' && placeMode === 'item') {
+      const oldItems = currentMap.items || [];
+      const srcItem = oldItems.find(it => it.x === srcX && it.y === srcY);
+      if (!srcItem) return;
+
+      const newItems = oldItems.filter(it => !(it.x === srcX && it.y === srcY) && !(it.x === targetX && it.y === targetY));
+      newItems.push({ x: targetX, y: targetY, itemId: srcItem.itemId });
+      handleUpdateCurrentMap({ items: newItems });
+    } else if (type === 'event' && placeMode === 'event') {
+      const oldEvents = currentMap.events || [];
+      const srcEvent = oldEvents.find(ev => ev.x === srcX && ev.y === srcY);
+      if (!srcEvent) return;
+
+      const newEvents = oldEvents.filter(ev => !(ev.x === srcX && ev.y === srcY) && !(ev.x === targetX && ev.y === targetY));
+      newEvents.push({ x: targetX, y: targetY, type: srcEvent.type, data: srcEvent.data });
+      handleUpdateCurrentMap({ events: newEvents });
+    }
+
+    setDraggingSource(null);
+  };
 
   useEffect(() => {
     if (currentMap) {
@@ -184,10 +261,10 @@ export default function MapEditorPage() {
   }, [currentMapId, currentMap]);
 
   useEffect(() => {
-    if (!teleportTargetMap && maps.length > 0) {
-      setTeleportTargetMap(maps[0].id);
+    if (!newEventParams.teleportTargetMap && maps.length > 0) {
+      setNewEventParams(prev => ({ ...prev, teleportTargetMap: maps[0].id }));
     }
-  }, [maps, teleportTargetMap]);
+  }, [maps, newEventParams.teleportTargetMap]);
 
   const handleGridClick = (x: number, y: number) => {
     if (placeMode === 'event') {
@@ -208,11 +285,12 @@ export default function MapEditorPage() {
           requiredExplorationRate: ev.data?.requiredExplorationRate ?? null,
           requiredSearchRate: ev.data?.requiredSearchRate ?? null,
           requiredDefeatRate: ev.data?.requiredDefeatRate ?? null,
+          playMode: ev.data?.playMode || 'always',
         });
       } else {
         let data: any = {};
-        if (eventType === 'start_point') {
-          const targetFromMap = startPointFromMap || null;
+        if (newEventParams.type === 'start_point') {
+          const targetFromMap = newEventParams.startPointFromMap || null;
           // 元マップ(fromMap)ごとに初期値は1つしか置けないようにする
           const sameFromMapIndex = newEvents.findIndex(
             e => e.type === 'start_point' && (e.data?.fromMap || null) === targetFromMap
@@ -220,22 +298,22 @@ export default function MapEditorPage() {
           if (sameFromMapIndex >= 0) {
             newEvents.splice(sameFromMapIndex, 1);
           }
-          data = { fromMap: targetFromMap, eventId: customEventId || undefined };
-        } else if (eventType === 'teleport') {
-          if (!teleportTargetMap) return;
-          data = { targetMap: teleportTargetMap, eventId: customEventId || undefined };
-        } else if (eventType === 'monologue') {
-          data = { text: monologueText };
-        } else if (eventType === 'custom_event') {
-          data = { eventId: customEventId };
+          data = { fromMap: targetFromMap, eventId: newEventParams.customEventId || undefined };
+        } else if (newEventParams.type === 'teleport') {
+          if (!newEventParams.teleportTargetMap) return;
+          data = { targetMap: newEventParams.teleportTargetMap, eventId: newEventParams.customEventId || undefined };
+        } else if (newEventParams.type === 'monologue') {
+          data = { text: newEventParams.monologueText };
+        } else if (newEventParams.type === 'custom_event') {
+          data = { eventId: newEventParams.customEventId };
         }
         
-        if (eventCondExpRate !== null) data.requiredExplorationRate = eventCondExpRate;
-        if (eventCondSearchRate !== null) data.requiredSearchRate = eventCondSearchRate;
-        if (eventCondDefeatRate !== null) data.requiredDefeatRate = eventCondDefeatRate;
-        data.playMode = playMode;
+        if (newEventParams.eventCondExpRate !== null) data.requiredExplorationRate = newEventParams.eventCondExpRate;
+        if (newEventParams.eventCondSearchRate !== null) data.requiredSearchRate = newEventParams.eventCondSearchRate;
+        if (newEventParams.eventCondDefeatRate !== null) data.requiredDefeatRate = newEventParams.eventCondDefeatRate;
+        data.playMode = newEventParams.playMode;
         
-        newEvents.push({ x, y, type: eventType, data });
+        newEvents.push({ x, y, type: newEventParams.type, data });
         handleUpdateCurrentMap({ events: newEvents });
       }
     } else if (placeMode === 'item') {
@@ -243,12 +321,17 @@ export default function MapEditorPage() {
       const newItems = [...currentMap.items];
       
       if (existingIndex >= 0) {
-        newItems.splice(existingIndex, 1);
+        const item = currentMap.items[existingIndex];
+        setEditingItem({
+          index: existingIndex,
+          x: item.x,
+          y: item.y,
+          itemId: item.itemId,
+        });
       } else {
-        newItems.push({ x, y, itemId: itemType });
+        newItems.push({ x, y, itemId: newItemParams.itemId });
+        handleUpdateCurrentMap({ items: newItems });
       }
-      
-      handleUpdateCurrentMap({ items: newItems });
     } else if (placeMode === 'obstacle') {
       const existingIndex = (currentMap.obstacles || []).findIndex(obs => obs.x === x && obs.y === y);
       const newObstacles = [...(currentMap.obstacles || [])];
@@ -343,6 +426,38 @@ export default function MapEditorPage() {
     setEditingEvent(null);
   };
 
+  const handleUpdateItem = () => {
+    if (!editingItem) return;
+    const newItems = [...currentMap.items];
+    const targetIdx = newItems.findIndex(i => i.x === editingItem.x && i.y === editingItem.y);
+    if (targetIdx >= 0) {
+      newItems[targetIdx] = {
+        x: editingItem.x,
+        y: editingItem.y,
+        itemId: editingItem.itemId,
+      };
+    } else {
+      newItems.push({
+        x: editingItem.x,
+        y: editingItem.y,
+        itemId: editingItem.itemId,
+      });
+    }
+    handleUpdateCurrentMap({ items: newItems });
+    setEditingItem(null);
+  };
+
+  const handleDeleteItem = () => {
+    if (!editingItem) return;
+    const newItems = currentMap.items.filter((_, idx) => idx !== editingItem.index);
+    handleUpdateCurrentMap({ items: newItems });
+    setEditingItem(null);
+  };
+
+  const handleCancelEditItem = () => {
+    setEditingItem(null);
+  };
+
   const handleCreateNewMap = () => {
     if (!newMapName) return;
     const newId = `map_${Date.now()}`;
@@ -403,16 +518,26 @@ export default function MapEditorPage() {
     let finalUpdates = { ...updates };
     if (updates.bgMode) {
       setBgMode(updates.bgMode);
+      const currentEnemies = currentMap.enemies || [];
       if (updates.bgMode === 'text-black') {
-        finalUpdates.enemies = ['text_teki'];
-        finalUpdates.boss = undefined;
+        const hasTextEnemy = currentEnemies.some(id => id.startsWith('text_'));
+        if (!hasTextEnemy) {
+          finalUpdates.enemies = ['text_teki'];
+          finalUpdates.boss = undefined;
+        }
       } else if (updates.bgMode === 'stone-gray') {
-        finalUpdates.enemies = ['gray_slime'];
-        finalUpdates.boss = undefined;
-      } else if (currentMap.bgMode === 'text-black' || currentMap.bgMode === 'stone-gray') {
-        // If changing from text/gray to color, clear enemies since they are incompatible
-        finalUpdates.enemies = [];
-        finalUpdates.boss = undefined;
+        const hasGrayEnemy = currentEnemies.some(id => id.startsWith('gray_'));
+        if (!hasGrayEnemy) {
+          finalUpdates.enemies = ['gray_slime'];
+          finalUpdates.boss = undefined;
+        }
+      } else {
+        // If changing to color, check if we have any color enemies
+        const hasColorEnemy = currentEnemies.some(id => id.startsWith('color_'));
+        if (!hasColorEnemy) {
+          finalUpdates.enemies = ['color_slime_green'];
+          finalUpdates.boss = undefined;
+        }
       }
     }
 
@@ -814,8 +939,8 @@ export default function MapEditorPage() {
                 <div className="flex flex-col gap-1">
                   <label className="text-xs text-slate-400 font-bold uppercase">アイテムタイプ</label>
                   <select 
-                    value={itemType}
-                    onChange={(e) => setItemType(e.target.value)}
+                    value={newItemParams.itemId}
+                    onChange={(e) => setNewItemParams({ ...newItemParams, itemId: e.target.value })}
                     className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
                   >
                     {bgMode === 'text-black' && <option value="treasure_text">宝 (Text)</option>}
@@ -877,8 +1002,8 @@ export default function MapEditorPage() {
                 <div className="flex flex-col gap-1">
                   <label className="text-xs text-slate-400 font-bold uppercase">イベントタイプ</label>
                   <select 
-                    value={eventType}
-                    onChange={(e) => setEventType(e.target.value as any)}
+                    value={newEventParams.type}
+                    onChange={(e) => setNewEventParams({ ...newEventParams, type: e.target.value as any })}
                     className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
                   >
                     <option value="start_point">初期値 (Start Point)</option>
@@ -888,12 +1013,12 @@ export default function MapEditorPage() {
                   </select>
                 </div>
 
-                {(eventType === 'custom_event' || eventType === 'start_point' || eventType === 'teleport') && (
+                {(newEventParams.type === 'custom_event' || newEventParams.type === 'start_point' || newEventParams.type === 'teleport') && (
                   <div className="flex flex-col gap-1">
                     <label className="text-xs text-slate-400 font-bold uppercase">連動イベント (任意)</label>
                     <select 
-                      value={customEventId}
-                      onChange={(e) => setCustomEventId(e.target.value)}
+                      value={newEventParams.customEventId}
+                      onChange={(e) => setNewEventParams({ ...newEventParams, customEventId: e.target.value })}
                       className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
                     >
                       <option value="">設定なし</option>
@@ -904,12 +1029,12 @@ export default function MapEditorPage() {
                   </div>
                 )}
 
-                {eventType === 'start_point' && (
+                {newEventParams.type === 'start_point' && (
                   <div className="flex flex-col gap-1">
                     <label className="text-xs text-slate-400 font-bold uppercase">元マップ指定</label>
                     <select 
-                      value={startPointFromMap}
-                      onChange={(e) => setStartPointFromMap(e.target.value)}
+                      value={newEventParams.startPointFromMap}
+                      onChange={(e) => setNewEventParams({ ...newEventParams, startPointFromMap: e.target.value })}
                       className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
                     >
                       <option value="">設定なし (デフォルト開始位置)</option>
@@ -920,12 +1045,12 @@ export default function MapEditorPage() {
                   </div>
                 )}
 
-                {eventType === 'teleport' && (
+                {newEventParams.type === 'teleport' && (
                   <div className="flex flex-col gap-1">
                     <label className="text-xs text-slate-400 font-bold uppercase">移動先マップ</label>
                     <select 
-                      value={teleportTargetMap}
-                      onChange={(e) => setTeleportTargetMap(e.target.value)}
+                      value={newEventParams.teleportTargetMap}
+                      onChange={(e) => setNewEventParams({ ...newEventParams, teleportTargetMap: e.target.value })}
                       className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
                     >
                       <option value="" disabled>選択してください</option>
@@ -936,12 +1061,12 @@ export default function MapEditorPage() {
                   </div>
                 )}
 
-                {eventType === 'monologue' && (
+                {newEventParams.type === 'monologue' && (
                   <div className="flex flex-col gap-1">
                     <label className="text-xs text-slate-400 font-bold uppercase">モノローグテキスト</label>
                     <textarea 
-                      value={monologueText}
-                      onChange={(e) => setMonologueText(e.target.value)}
+                      value={newEventParams.monologueText}
+                      onChange={(e) => setNewEventParams({ ...newEventParams, monologueText: e.target.value })}
                       className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
                       rows={3}
                       placeholder="表示するテキストを入力"
@@ -949,12 +1074,12 @@ export default function MapEditorPage() {
                   </div>
                 )}
 
-                {(eventType === 'custom_event' || eventType === 'start_point' || eventType === 'teleport' || eventType === 'monologue') && (
+                {(newEventParams.type === 'custom_event' || newEventParams.type === 'start_point' || newEventParams.type === 'teleport' || newEventParams.type === 'monologue') && (
                   <div className="flex flex-col gap-1 mt-2">
                     <label className="text-xs text-slate-400 font-bold uppercase">再生頻度設定</label>
                     <select 
-                      value={playMode}
-                      onChange={(e) => setPlayMode(e.target.value as any)}
+                      value={newEventParams.playMode}
+                      onChange={(e) => setNewEventParams({ ...newEventParams, playMode: e.target.value as any })}
                       className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
                     >
                       <option value="always">何度でも表示する (Always)</option>
@@ -967,8 +1092,8 @@ export default function MapEditorPage() {
                 <div className="flex flex-col gap-1 mt-2 border-t border-slate-600 pt-2">
                   <label className="text-xs text-slate-400 font-bold uppercase">固有条件 (踏破率)</label>
                   <select 
-                    value={eventCondExpRate === null ? 'null' : String(eventCondExpRate)}
-                    onChange={(e) => setEventCondExpRate(e.target.value === 'null' ? null : Number(e.target.value))}
+                    value={newEventParams.eventCondExpRate === null ? 'null' : String(newEventParams.eventCondExpRate)}
+                    onChange={(e) => setNewEventParams({ ...newEventParams, eventCondExpRate: e.target.value === 'null' ? null : Number(e.target.value) })}
                     className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
                   >
                     <option value="null">なし (条件なし)</option>
@@ -981,8 +1106,8 @@ export default function MapEditorPage() {
                 <div className="flex flex-col gap-1">
                   <label className="text-xs text-slate-400 font-bold uppercase">固有条件 (捜索率)</label>
                   <select 
-                    value={eventCondSearchRate === null ? 'null' : String(eventCondSearchRate)}
-                    onChange={(e) => setEventCondSearchRate(e.target.value === 'null' ? null : Number(e.target.value))}
+                    value={newEventParams.eventCondSearchRate === null ? 'null' : String(newEventParams.eventCondSearchRate)}
+                    onChange={(e) => setNewEventParams({ ...newEventParams, eventCondSearchRate: e.target.value === 'null' ? null : Number(e.target.value) })}
                     className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
                   >
                     <option value="null">なし (条件なし)</option>
@@ -995,8 +1120,8 @@ export default function MapEditorPage() {
                 <div className="flex flex-col gap-1 mt-2 border-t border-slate-600 pt-2">
                   <label className="text-xs text-slate-400 font-bold uppercase">固有条件 (撃破率)</label>
                   <select 
-                    value={eventCondDefeatRate === null ? 'null' : String(eventCondDefeatRate)}
-                    onChange={(e) => setEventCondDefeatRate(e.target.value === 'null' ? null : Number(e.target.value))}
+                    value={newEventParams.eventCondDefeatRate === null ? 'null' : String(newEventParams.eventCondDefeatRate)}
+                    onChange={(e) => setNewEventParams({ ...newEventParams, eventCondDefeatRate: e.target.value === 'null' ? null : Number(e.target.value) })}
                     className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
                   >
                     <option value="null">なし (条件なし)</option>
@@ -1047,10 +1172,17 @@ export default function MapEditorPage() {
                     key={i} 
                     className="border border-slate-500/30 hover:bg-slate-400/30 cursor-pointer flex items-center justify-center transition-colors"
                     onClick={() => handleGridClick(x, y)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => handleGridDrop(e, x, y)}
                   >
                      {hasObstacle ? (
                         <div 
+                          draggable={placeMode === 'obstacle'}
+                          onDragStart={(e) => handleGridDragStart(e, x, y, 'obstacle')}
+                          onDragEnd={handleGridDragEnd}
                           className={`w-full h-full flex items-center justify-center text-xs font-bold ${
+                            placeMode === 'obstacle' ? 'cursor-grab hover:opacity-80 active:cursor-grabbing' : ''
+                          } ${
                             hasObstacle.type === 'transparent' ? 'bg-red-500/15 border border-dashed border-red-500 text-red-500' :
                             hasObstacle.type === 'pillar' ? 'bg-slate-300/60 border border-slate-500 text-slate-800' :
                             hasObstacle.type === 'rock' ? 'bg-slate-400/60 border border-slate-600 text-slate-800' :
@@ -1072,30 +1204,70 @@ export default function MapEditorPage() {
                      ) : (
                         <>
                           {hasEvent && hasEvent.type === 'start_point' && (
-                             <div className="w-full h-full bg-yellow-500/50 flex items-center justify-center text-xs font-bold text-yellow-100" title={`初期値 ${hasEvent.data?.fromMap ? `(from: ${hasEvent.data.fromMap})` : ''}`}>
-                               S
-                             </div>
-                          )}
+                              <div 
+                                draggable={placeMode === 'event'}
+                                onDragStart={(e) => handleGridDragStart(e, x, y, 'event')}
+                                onDragEnd={handleGridDragEnd}
+                                className={`w-full h-full bg-yellow-500/50 flex items-center justify-center text-xs font-bold text-yellow-100 ${
+                                  placeMode === 'event' ? 'cursor-grab hover:opacity-80 active:cursor-grabbing' : ''
+                                }`}
+                                title={`初期値 ${hasEvent.data?.fromMap ? `(from: ${hasEvent.data.fromMap})` : ''}`}
+                              >
+                                S
+                              </div>
+                           )}
                           {hasEvent && hasEvent.type === 'teleport' && (
-                             <div className="w-full h-full bg-blue-500/50 flex items-center justify-center text-xs font-bold text-blue-100" title={`移動 (to: ${hasEvent.data?.targetMap})`}>
-                               T
-                             </div>
-                          )}
+                              <div 
+                                draggable={placeMode === 'event'}
+                                onDragStart={(e) => handleGridDragStart(e, x, y, 'event')}
+                                onDragEnd={handleGridDragEnd}
+                                className={`w-full h-full bg-blue-500/50 flex items-center justify-center text-xs font-bold text-blue-100 ${
+                                  placeMode === 'event' ? 'cursor-grab hover:opacity-80 active:cursor-grabbing' : ''
+                                }`}
+                                title={`移動 (to: ${hasEvent.data?.targetMap})`}
+                              >
+                                T
+                              </div>
+                           )}
                           {hasEvent && hasEvent.type === 'monologue' && (
-                             <div className="w-full h-full bg-emerald-500/50 flex items-center justify-center text-xs font-bold text-emerald-100" title={`モノローグ\n${hasEvent.data?.text || ''}`}>
-                               M
-                             </div>
-                          )}
+                              <div 
+                                draggable={placeMode === 'event'}
+                                onDragStart={(e) => handleGridDragStart(e, x, y, 'event')}
+                                onDragEnd={handleGridDragEnd}
+                                className={`w-full h-full bg-emerald-500/50 flex items-center justify-center text-xs font-bold text-emerald-100 ${
+                                  placeMode === 'event' ? 'cursor-grab hover:opacity-80 active:cursor-grabbing' : ''
+                                }`}
+                                title={`モノローグ\n${hasEvent.data?.text || ''}`}
+                              >
+                                M
+                              </div>
+                           )}
                           {hasEvent && hasEvent.type === 'custom_event' && (
-                             <div className="w-full h-full bg-indigo-500/50 flex items-center justify-center text-xs font-bold text-indigo-100" title={`カスタムイベント: ${hasEvent.data?.eventId || ''}`}>
-                               C
-                             </div>
-                          )}
+                              <div 
+                                draggable={placeMode === 'event'}
+                                onDragStart={(e) => handleGridDragStart(e, x, y, 'event')}
+                                onDragEnd={handleGridDragEnd}
+                                className={`w-full h-full bg-indigo-500/50 flex items-center justify-center text-xs font-bold text-indigo-100 ${
+                                  placeMode === 'event' ? 'cursor-grab hover:opacity-80 active:cursor-grabbing' : ''
+                                }`}
+                                title={`カスタムイベント: ${hasEvent.data?.eventId || ''}`}
+                              >
+                                C
+                              </div>
+                           )}
                           {hasItem && (
-                             <div className="w-full h-full bg-amber-500/50 flex items-center justify-center text-xs font-bold text-amber-100" title={`アイテム: ${hasItem.itemId}`}>
-                               {hasItem.itemId === 'treasure_text' ? '宝' : (customItems.find(it => it.id === hasItem.itemId)?.chestGraphic || '🎁')}
-                             </div>
-                          )}
+                              <div 
+                                draggable={placeMode === 'item'}
+                                onDragStart={(e) => handleGridDragStart(e, x, y, 'item')}
+                                onDragEnd={handleGridDragEnd}
+                                className={`w-full h-full bg-amber-500/50 flex items-center justify-center text-xs font-bold text-amber-100 ${
+                                  placeMode === 'item' ? 'cursor-grab hover:opacity-80 active:cursor-grabbing' : ''
+                                }`}
+                                title={`アイテム: ${hasItem.itemId}`}
+                              >
+                                {hasItem.itemId === 'treasure_text' ? '宝' : (customItems.find(it => it.id === hasItem.itemId)?.chestGraphic || '🎁')}
+                              </div>
+                           )}
                         </>
                      )}
                   </div>
@@ -1175,8 +1347,7 @@ export default function MapEditorPage() {
                       newEnemies[index] = e.target.value;
                       handleUpdateCurrentMap({ enemies: newEnemies.filter(v => v !== undefined && v !== '') });
                     }}
-                    disabled={bgMode === 'text-black' || bgMode === 'stone-gray'} // 自動設定されるため無効化
-                    className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400 disabled:opacity-50"
+                    className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
                   >
                     <option value="">なし</option>
                     {getAvailableEnemies(bgMode).map(enemy => (
@@ -1190,8 +1361,7 @@ export default function MapEditorPage() {
                 <select
                   value={currentMap.boss || ''}
                   onChange={(e) => handleUpdateCurrentMap({ boss: e.target.value || undefined })}
-                  disabled={bgMode === 'text-black' || bgMode === 'stone-gray'} // 自動設定されるかテキスト黒/グレイには現在ボスがいないかもしれないが無効化する
-                  className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-500 disabled:opacity-50"
+                  className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-500"
                 >
                   <option value="">なし</option>
                   {getAvailableBosses(bgMode).map(boss => (
@@ -1449,6 +1619,63 @@ export default function MapEditorPage() {
                 </button>
                 <button 
                   onClick={handleUpdateEvent}
+                  className="px-4 py-2 rounded text-sm bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-colors shadow-inner"
+                >
+                  更新
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* アイテム編集モーダル */}
+      {editingItem && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-700 rounded-xl border border-slate-500 shadow-2xl p-6 w-full max-w-md flex flex-col gap-4 animate-in fade-in zoom-in-95">
+            <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2 border-b border-slate-600 pb-2">
+              <Gem className="w-5 h-5 text-amber-400" />
+              アイテム編集 ({editingItem.x}, {editingItem.y})
+            </h3>
+
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-slate-300 font-bold uppercase">アイテムタイプ</label>
+                <select 
+                  value={editingItem.itemId}
+                  onChange={(e) => setEditingItem({ 
+                    ...editingItem, 
+                    itemId: e.target.value
+                  })}
+                  className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                >
+                  {bgMode === 'text-black' && <option value="treasure_text">宝 (Text)</option>}
+                  {customItems.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.chestGraphic || '📦'} {item.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center mt-4 pt-4 border-t border-slate-600 gap-2">
+              <button 
+                onClick={handleDeleteItem}
+                className="px-4 py-2 rounded text-sm bg-red-600 hover:bg-red-500 text-white font-bold transition-colors shadow"
+              >
+                削除
+              </button>
+              
+              <div className="flex gap-2">
+                <button 
+                  onClick={handleCancelEditItem}
+                  className="px-4 py-2 rounded text-sm text-slate-300 hover:bg-slate-600 transition-colors"
+                >
+                  キャンセル
+                </button>
+                <button 
+                  onClick={handleUpdateItem}
                   className="px-4 py-2 rounded text-sm bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-colors shadow-inner"
                 >
                   更新

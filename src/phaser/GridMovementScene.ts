@@ -520,81 +520,7 @@ export class GridMovementScene extends Phaser.Scene {
     this.hero.play(this.getAnimKey('idle-down'));
 
     // 5.5. スライムの配置
-    this.slimes = [];
-    const maxEnemies = this.mapData?.maxEnemies;
-    const isInfinite = maxEnemies === undefined || maxEnemies === 'infinite';
-    const initialSpawnCount = isInfinite ? 5 : Math.min(5, maxEnemies as number);
-
-    for (let i = 0; i < initialSpawnCount; i++) {
-      let sx = 0;
-      let sy = 0;
-      let found = false;
-      let attempts = 0;
-
-      // Ensure they don't overlap with hero, items, events, or other slimes
-      while (attempts < 500) {
-        sx = Phaser.Math.Between(2, this.gridCols - 3);
-        sy = Phaser.Math.Between(2, this.gridRows - 3);
-        if (!this.isTileOccupiedByAnything(sx, sy)) {
-          found = true;
-          break;
-        }
-        attempts++;
-      }
-
-      if (!found) {
-        // Fallback: at least avoid overlap with hero and other slimes if map is too crowded
-        attempts = 0;
-        while (attempts < 100) {
-          sx = Phaser.Math.Between(2, this.gridCols - 3);
-          sy = Phaser.Math.Between(2, this.gridRows - 3);
-          if (!this.isTileOccupied(sx, sy)) {
-            found = true;
-            break;
-          }
-          attempts++;
-        }
-      }
-
-      let enemyConfig: EnemyAsset | undefined = undefined;
-      if (this.mapData?.enemies && this.mapData.enemies.length > 0) {
-        const enemyId = Phaser.Utils.Array.GetRandom(this.mapData.enemies as string[]);
-        enemyConfig = getEnemyAssetById(enemyId);
-      }
-      if (!enemyConfig) {
-        const available = getAvailableEnemies(this.mapData?.bgMode || 'image');
-        if (available.length > 0) {
-          enemyConfig = Phaser.Utils.Array.GetRandom(available);
-        } else {
-          enemyConfig = { id: 'default', name: 'スライム', hp: 10, attack: 2, defense: 0, exp: 2, speed: 1000, behavior: 'random' };
-        }
-      }
-
-      const slimeSprite = this.add.sprite(sx * GRID_SIZE + GRID_SIZE / 2, sy * GRID_SIZE + GRID_SIZE / 2, 'slime_spritesheet', 0);
-      slimeSprite.setDepth(9); // 勇者より少し奥
-      
-      const newSlime: SlimeData = {
-        id: `slime-${Math.random().toString(36).substring(2, 9)}`,
-        name: enemyConfig.name,
-        sprite: slimeSprite,
-        gridX: sx,
-        gridY: sy,
-        isMoving: false,
-        hp: enemyConfig.hp,
-        maxHp: enemyConfig.hp,
-        attack: enemyConfig.attack,
-        defense: enemyConfig.defense !== undefined ? enemyConfig.defense : 0,
-        exp: (enemyConfig.exp !== undefined && !isNaN(Number(enemyConfig.exp))) ? Number(enemyConfig.exp) : 2,
-        speed: enemyConfig.speed,
-        behavior: enemyConfig.behavior,
-        enemyId: enemyConfig.id,
-        direction: 'down',
-      };
-
-      this.slimes.push(newSlime);
-      this.playMonsterAnim(newSlime, 'idle', 'down');
-      this.totalEnemiesSpawned++;
-    }
+    this.spawnInitialEnemies();
 
     // 6. HD-2D マナ粒子（ホタル風パーティクル）の生成（カメラ固定領域内で生成）
     this.particleMotes = [];
@@ -1027,16 +953,72 @@ export class GridMovementScene extends Phaser.Scene {
     return baseKey;
   }
 
+  private ensureEnemyTextureAndAnims(enemyId: string) {
+    const isText = this.displayMode === 'text';
+
+    if (isText) {
+      let char = '敵';
+      if (enemyId.includes('boss') || enemyId === 'text_boss') {
+        char = '魔';
+      } else if (enemyId === 'color_bat') {
+        char = '蝙';
+      } else if (enemyId === 'color_goblin') {
+        char = 'ゴ';
+      } else {
+        const asset = getEnemyAssetById(enemyId);
+        if (asset && asset.name) {
+          // If the name starts with crown emoji, strip it for the character render
+          const cleanName = asset.name.replace(/^👑/, '');
+          char = cleanName.charAt(0);
+        }
+      }
+
+      const textureKey = `text_spritesheet_${enemyId}`;
+      if (!this.textures.exists(textureKey)) {
+        const frameWidth = 64;
+        const frameHeight = 64;
+        const frames = 4;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = frameWidth * frames;
+        canvas.height = frameHeight;
+        const ctx = canvas.getContext('2d')!;
+        ctx.imageSmoothingEnabled = false;
+
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = 'bold 40px "Inter", sans-serif';
+
+        for (let frame = 0; frame < frames; frame++) {
+          const ox = frame * frameWidth + frameWidth / 2;
+          const oy = frameHeight / 2;
+          ctx.fillText(char, ox, oy);
+        }
+
+        this.textures.addSpriteSheet(textureKey, canvas as unknown as HTMLImageElement, {
+          frameWidth,
+          frameHeight
+        });
+      }
+
+      const animKey = `idle-${enemyId}-text`;
+      if (!this.anims.exists(animKey)) {
+        this.anims.create({
+          key: animKey,
+          frames: [{ key: textureKey, frame: 0 }],
+          frameRate: 1
+        });
+      }
+    }
+  }
+
   private getMonsterTextureAndAnim(enemyId: string, action: 'idle' | 'walk' | 'shake' | 'jump', dir: Direction = 'down'): { texture: string, anim: string } {
     const mode = this.displayMode; // 'text' | 'grayscale' | 'normal'
     
     if (mode === 'text') {
-      if (enemyId === 'color_bat') {
-        return { texture: 'bat_spritesheet_text', anim: 'bat-idle-text' };
-      } else if (enemyId === 'color_goblin') {
-        return { texture: 'goblin_spritesheet_text', anim: `goblin-idle-down-text` };
-      }
-      return { texture: 'slime_spritesheet_text', anim: 'slime-idle-text' };
+      this.ensureEnemyTextureAndAnims(enemyId);
+      return { texture: `text_spritesheet_${enemyId}`, anim: `idle-${enemyId}-text` };
     }
 
     const suffix = mode === 'grayscale' ? '-gray' : '';
@@ -2560,6 +2542,7 @@ export class GridMovementScene extends Phaser.Scene {
     this.currentDirection = 'idle';
     this.spawnMapItems();
     this.spawnMapObstacles();
+    this.spawnInitialEnemies();
     this.notifyStateChange(false);
 
     // Initial check (start_point, custom_event, monologue)
@@ -2583,6 +2566,143 @@ export class GridMovementScene extends Phaser.Scene {
         this.markEventPlayed(monologueEvent);
         this.showMonologue(monologueEvent.data?.text || '');
       }
+    }
+  }
+
+  private spawnInitialEnemies() {
+    // Clean up any existing slimes
+    this.slimes.forEach(s => {
+      if (s.sprite && s.sprite.active) s.sprite.destroy();
+    });
+    this.slimes = [];
+
+    if (!this.mapData) return;
+
+    const { GRID_SIZE } = GridMovementScene;
+    const maxEnemies = this.mapData.maxEnemies;
+    const isInfinite = maxEnemies === undefined || maxEnemies === 'infinite';
+    const initialSpawnCount = isInfinite ? 5 : Math.min(5, maxEnemies as number);
+
+    // Determine initial texture based on bgMode
+    const mode = this.displayMode; // 'text' | 'grayscale' | 'normal'
+    const defaultTex = mode === 'grayscale' ? 'slime_spritesheet_gray' : 'slime_spritesheet';
+
+    // 1. Spawn Boss if configured
+    if (this.mapData.boss) {
+      const bossConfig = getEnemyAssetById(this.mapData.boss);
+      if (bossConfig) {
+        let sx = 0;
+        let sy = 0;
+        let found = false;
+        let attempts = 0;
+        while (attempts < 500) {
+          sx = Phaser.Math.Between(2, this.gridCols - 3);
+          sy = Phaser.Math.Between(2, this.gridRows - 3);
+          if (!this.isTileOccupiedByAnything(sx, sy)) {
+            found = true;
+            break;
+          }
+          attempts++;
+        }
+        if (found) {
+          // Use a default texture first, playMonsterAnim will instantly load and resolve the custom textures
+          const bossSprite = this.add.sprite(sx * GRID_SIZE + GRID_SIZE / 2, sy * GRID_SIZE + GRID_SIZE / 2, defaultTex, 0);
+          bossSprite.setDepth(9);
+          bossSprite.setScale(1.4);
+
+          const newBoss: SlimeData = {
+            id: `boss-${Math.random().toString(36).substring(2, 9)}`,
+            name: `👑${bossConfig.name}`,
+            sprite: bossSprite,
+            gridX: sx,
+            gridY: sy,
+            isMoving: false,
+            hp: bossConfig.hp,
+            maxHp: bossConfig.hp,
+            attack: bossConfig.attack,
+            defense: bossConfig.defense !== undefined ? bossConfig.defense : 0,
+            exp: (bossConfig.exp !== undefined && !isNaN(Number(bossConfig.exp))) ? Number(bossConfig.exp) : 50,
+            speed: bossConfig.speed,
+            behavior: bossConfig.behavior || 'seek',
+            enemyId: bossConfig.id,
+            direction: 'down',
+          };
+          this.slimes.push(newBoss);
+          this.playMonsterAnim(newBoss, 'idle', 'down');
+          this.totalEnemiesSpawned++;
+          this.sendLog(`エリアボス【${bossConfig.name}】が現れた！ 👑`, 'system');
+        }
+      }
+    }
+
+    // 2. Spawn Regular Enemies
+    for (let i = 0; i < initialSpawnCount; i++) {
+      let sx = 0;
+      let sy = 0;
+      let found = false;
+      let attempts = 0;
+
+      while (attempts < 500) {
+        sx = Phaser.Math.Between(2, this.gridCols - 3);
+        sy = Phaser.Math.Between(2, this.gridRows - 3);
+        if (!this.isTileOccupiedByAnything(sx, sy)) {
+          found = true;
+          break;
+        }
+        attempts++;
+      }
+
+      if (!found) {
+        attempts = 0;
+        while (attempts < 100) {
+          sx = Phaser.Math.Between(2, this.gridCols - 3);
+          sy = Phaser.Math.Between(2, this.gridRows - 3);
+          if (!this.isTileOccupied(sx, sy)) {
+            found = true;
+            break;
+          }
+          attempts++;
+        }
+      }
+
+      let enemyConfig: EnemyAsset | undefined = undefined;
+      if (this.mapData.enemies && this.mapData.enemies.length > 0) {
+        const enemyId = Phaser.Utils.Array.GetRandom(this.mapData.enemies as string[]);
+        enemyConfig = getEnemyAssetById(enemyId);
+      }
+      if (!enemyConfig) {
+        const available = getAvailableEnemies(this.mapData.bgMode || 'image');
+        if (available.length > 0) {
+          enemyConfig = Phaser.Utils.Array.GetRandom(available);
+        } else {
+          enemyConfig = { id: 'default', name: 'スライム', hp: 10, attack: 2, defense: 0, exp: 2, speed: 1000, behavior: 'random' };
+        }
+      }
+
+      const slimeSprite = this.add.sprite(sx * GRID_SIZE + GRID_SIZE / 2, sy * GRID_SIZE + GRID_SIZE / 2, defaultTex, 0);
+      slimeSprite.setDepth(9);
+
+      const newSlime: SlimeData = {
+        id: `slime-${Math.random().toString(36).substring(2, 9)}`,
+        name: enemyConfig.name,
+        sprite: slimeSprite,
+        gridX: sx,
+        gridY: sy,
+        isMoving: false,
+        hp: enemyConfig.hp,
+        maxHp: enemyConfig.hp,
+        attack: enemyConfig.attack,
+        defense: enemyConfig.defense !== undefined ? enemyConfig.defense : 0,
+        exp: (enemyConfig.exp !== undefined && !isNaN(Number(enemyConfig.exp))) ? Number(enemyConfig.exp) : 2,
+        speed: enemyConfig.speed,
+        behavior: enemyConfig.behavior,
+        enemyId: enemyConfig.id,
+        direction: 'down',
+      };
+
+      this.slimes.push(newSlime);
+      this.playMonsterAnim(newSlime, 'idle', 'down');
+      this.totalEnemiesSpawned++;
     }
   }
 
