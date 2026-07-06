@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import Phaser from 'phaser';
 import { GridMovementScene, HeroState, Direction, ActionLog } from '../phaser/GridMovementScene';
-import { Play, Pause, RotateCcw, Eye, EyeOff, Sparkles, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Gauge, Grid, Image as ImageIcon, Heart, Sword, Star, Settings, X, Move, Flame, Zap, Map, Menu, User, Brain, Shield, Ghost, MessageSquare, Package } from 'lucide-react';
+import { Play, Pause, RotateCcw, Eye, EyeOff, Sparkles, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Gauge, Grid, Image as ImageIcon, Heart, Sword, Star, Settings, X, Move, Flame, Zap, Map, Menu, User, Brain, Shield, Ghost, MessageSquare, Package, Scroll, Download } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 import { MapData } from '../types/MapData';
@@ -168,6 +168,82 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
   });
 
   const [logs, setLogs] = useState<ActionLog[]>([]);
+  const [cumulativeLogs, setCumulativeLogs] = useState<{ id: string; timestamp: string; type: string; message: string }[]>(() => {
+    try {
+      const saved = localStorage.getItem('cumulativeGameLogs');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const cumulativeLogsContainerRef = useRef<HTMLDivElement>(null);
+
+  // オートスクロール：最新ログが一番下なので、追加時や設定タブを開いた時に最下部までスクロールする
+  useEffect(() => {
+    if (cumulativeLogsContainerRef.current) {
+      // 少し遅らせることで、レンダリングが完了した後に確実に最下部へスクロールさせます
+      setTimeout(() => {
+        if (cumulativeLogsContainerRef.current) {
+          cumulativeLogsContainerRef.current.scrollTop = cumulativeLogsContainerRef.current.scrollHeight;
+        }
+      }, 50);
+    }
+  }, [cumulativeLogs, showSettings]);
+
+  const clearCumulativeLogs = () => {
+    setCumulativeLogs([]);
+    try {
+      localStorage.removeItem('cumulativeGameLogs');
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const exportCumulativeLogs = () => {
+    try {
+      const jsonStr = JSON.stringify(cumulativeLogs, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `game_adventure_logs_${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    if (activeEvent && activeEvent.nodes && activeEvent.nodes[activeNodeIndex]) {
+      const node = activeEvent.nodes[activeNodeIndex];
+      const speaker = node.speakerName || 'システム';
+      const msg = node.message || '';
+      
+      const logMsg = `【会話】${speaker}: 「${msg}」`;
+      const logId = `dial-${activeEvent.id}-${activeNodeIndex}`;
+      
+      setCumulativeLogs(prev => {
+        if (prev.some(l => l.id === logId)) return prev;
+        const updated = [...prev, {
+          id: logId,
+          timestamp: new Date().toLocaleTimeString(),
+          type: 'event',
+          message: logMsg
+        }];
+        try {
+          localStorage.setItem('cumulativeGameLogs', JSON.stringify(updated));
+        } catch (e) {
+          console.error(e);
+        }
+        return updated;
+      });
+    }
+  }, [activeEvent, activeNodeIndex]);
+
   const [autoMode, setAutoMode] = useState<'none' | 'random' | 'seek'>('seek');
 
   const [explorationRate, setExplorationRate] = useState(0);
@@ -259,6 +335,10 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
         scene.magics = magicsRef.current;
         lastLevelRef.current = 1;
         
+        scene.setOnCustomItemsChange?.((updatedItems) => {
+          setCustomItems(updatedItems);
+          customItemsRef.current = updatedItems;
+        });
 
         scene.setOnStateChange((newState: HeroState) => {
           setHeroState(newState);
@@ -269,6 +349,20 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
         
         scene.setOnLog((newLog) => {
           setLogs(prev => [...prev.slice(-49), newLog]);
+          setCumulativeLogs(prev => {
+            const updated = [...prev, {
+              id: newLog.id || Math.random().toString(36).substring(2, 9),
+              timestamp: new Date().toLocaleTimeString(),
+              type: newLog.type,
+              message: newLog.message
+            }];
+            try {
+              localStorage.setItem('cumulativeGameLogs', JSON.stringify(updated));
+            } catch (e) {
+              console.error(e);
+            }
+            return updated;
+          });
         });
 
         scene.setOnCustomEvent((eventId, onComplete) => {
@@ -938,6 +1032,59 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                         <EyeOff className="w-4 h-4 text-slate-400" />
                       </button>
                     </div>
+                  </div>
+                </div>
+
+                {/* 「今のところのログ」 (Current Game Logs) */}
+                <div className="flex flex-col gap-2.5 bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5 animate-pulse">
+                      <Scroll className="w-4 h-4 text-emerald-600" />
+                      今のところのログ (累積履歴)
+                    </span>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={exportCumulativeLogs}
+                        className="px-2.5 py-1 bg-emerald-600 text-white hover:bg-emerald-700 rounded text-[11px] font-medium transition-colors flex items-center gap-1 shadow-sm"
+                        title="ログをJSONとしてダウンロードします"
+                      >
+                        <Download className="w-3 h-3" />
+                        書き出し
+                      </button>
+                      <button
+                        onClick={clearCumulativeLogs}
+                        className="px-2.5 py-1 bg-slate-200 text-slate-600 hover:bg-rose-50 hover:text-rose-600 hover:bg-rose-200 rounded text-[11px] font-medium transition-colors shadow-sm"
+                      >
+                        クリア
+                      </button>
+                    </div>
+                  </div>
+                  <div 
+                    ref={cumulativeLogsContainerRef}
+                    className="w-full max-h-48 overflow-y-auto border border-slate-200 rounded-lg bg-slate-900 p-2.5 font-mono text-[11px] text-slate-300 leading-relaxed flex flex-col gap-1 shadow-inner scrollbar-thin"
+                  >
+                    {cumulativeLogs.length === 0 ? (
+                      <div className="text-slate-500 text-center py-4 italic">戦闘やイベントのログはありません</div>
+                    ) : (
+                      cumulativeLogs.map((log) => {
+                        let typeColor = 'text-slate-400';
+                        if (log.type === 'combat') typeColor = 'text-amber-400';
+                        else if (log.type === 'damage') typeColor = 'text-rose-400';
+                        else if (log.type === 'event') typeColor = 'text-cyan-400';
+                        else if (log.type === 'system') typeColor = 'text-emerald-400';
+                        
+                        return (
+                          <div key={log.id} className="border-b border-slate-800/60 pb-1 last:border-0 text-left">
+                            <span className="text-[9px] text-slate-500 mr-1.5">[{log.timestamp}]</span>
+                            <span className={`${typeColor} font-semibold mr-1.5`}>[{log.type.toUpperCase()}]</span>
+                            <span className="text-slate-200">{log.message}</span>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                  <div className="text-[10px] text-slate-400 text-left">
+                    ※ゲーム中の全ての戦闘・イベント・会話等の累積ログが自動で保存されます。エンディング到達時などにこのログを書き出して利用できます。
                   </div>
                 </div>
               </div>

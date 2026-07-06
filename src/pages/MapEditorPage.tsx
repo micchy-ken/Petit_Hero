@@ -944,12 +944,76 @@ export default function MapEditorPage() {
                     className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
                   >
                     {bgMode === 'text-black' && <option value="treasure_text">宝 (Text)</option>}
-                    {customItems.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.chestGraphic || '📦'} {item.name}
-                      </option>
-                    ))}
+                    
+                    <optgroup label="🏺 アーティファクト (ランダム生成)">
+                      <option value="artifact_weapon_lvl1_3">🏺 武器: 大剣 [Lv1-3]</option>
+                      <option value="artifact_armor_lvl1_3">🏺 防具: 全身鎧 [Lv1-3]</option>
+                      <option value="artifact_accessory_lvl1_3">🏺 装飾: 指輪 [Lv1-3]</option>
+                      
+                      <option value="artifact_weapon_lvl4_6">🏺 武器: 勇者の剣 [Lv4-6]</option>
+                      <option value="artifact_armor_lvl4_6">🏺 防具: 勇者の鎧 [Lv4-6]</option>
+                      <option value="artifact_accessory_lvl4_6">🏺 装飾: 勇者のネックレス [Lv4-6]</option>
+                      
+                      <option value="artifact_weapon_lvl7_9">🏺 武器: 伝説の剣 [Lv7-9]</option>
+                      <option value="artifact_armor_lvl7_9">🏺 防具: 伝説の鎧 [Lv7-9]</option>
+                      <option value="artifact_accessory_lvl7_9">🏺 装飾: 伝説のアンクレット [Lv7-9]</option>
+                      
+                      <option value="artifact_weapon_lvl10">🏺 武器: オリハルコンソード [Lv10]</option>
+                      <option value="artifact_armor_lvl10">🏺 防具: オリハルコンアーマー [Lv10]</option>
+                      <option value="artifact_accessory_lvl10">🏺 装飾: ゴッドオーブ [Lv10]</option>
+                    </optgroup>
+
+                    <optgroup label="📦 通常登録アイテム">
+                      {customItems.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.chestGraphic || '📦'} {item.name}
+                        </option>
+                      ))}
+                    </optgroup>
                   </select>
+                </div>
+
+                {/* アーティファクト仕様表 */}
+                <div className="mt-3 bg-slate-800/90 p-3 rounded border border-slate-600 text-[11px] text-slate-300 shadow-inner">
+                  <div className="font-bold text-slate-200 mb-2 flex items-center gap-1.5 border-b border-slate-700 pb-1">
+                    <span className="text-amber-400">🏺</span> アーティファクト仕様一覧
+                  </div>
+                  <table className="w-full border-collapse text-left text-slate-300">
+                    <thead>
+                      <tr className="border-b border-slate-700 text-slate-400 font-semibold">
+                        <th className="pb-1 text-[10px]">レベル</th>
+                        <th className="pb-1 text-[10px]">武器 / 防具 / 装飾</th>
+                        <th className="pb-1 text-[10px]">属性付与 (10%で強化)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-700/50">
+                      <tr>
+                        <td className="py-1 font-bold text-cyan-400">1〜3</td>
+                        <td className="py-1">大剣 / 全身鎧 / 指輪</td>
+                        <td className="py-1 text-emerald-400">2〜5 (10%で 10)</td>
+                      </tr>
+                      <tr>
+                        <td className="py-1 font-bold text-cyan-400">4〜6</td>
+                        <td className="py-1 text-[10px]">勇者の剣/鎧/ネックレス</td>
+                        <td className="py-1 text-emerald-400">4〜8 (10%で 15)</td>
+                      </tr>
+                      <tr>
+                        <td className="py-1 font-bold text-cyan-400">7〜9</td>
+                        <td className="py-1 text-[10px]">伝説の剣/鎧/アンクレット</td>
+                        <td className="py-1 text-emerald-400">7〜15 (10%で 20)</td>
+                      </tr>
+                      <tr>
+                        <td className="py-1 font-bold text-cyan-400">10</td>
+                        <td className="py-1 text-[10px]">オリハルコン剣/鎧/ゴッドオーブ</td>
+                        <td className="py-1 text-emerald-400">16〜20 (10%で 30)</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div className="text-[10px] text-slate-400 mt-2 leading-relaxed border-t border-slate-700/60 pt-1.5">
+                    ※ <span className="font-semibold text-slate-300">属性対象:</span> 地・水・火・風・光・闇の中からランダムで1つ。
+                    <br />
+                    ※ <span className="font-semibold text-slate-300">付与方法:</span> 武器なら攻撃属性、防具なら防御属性、装飾なら両方に1/2ずつ付与されます。
+                  </div>
                 </div>
               </div>
             </div>
@@ -1265,7 +1329,11 @@ export default function MapEditorPage() {
                                 }`}
                                 title={`アイテム: ${hasItem.itemId}`}
                               >
-                                {hasItem.itemId === 'treasure_text' ? '宝' : (customItems.find(it => it.id === hasItem.itemId)?.chestGraphic || '🎁')}
+                                {hasItem.itemId === 'treasure_text' 
+                                  ? '宝' 
+                                  : hasItem.itemId.startsWith('artifact_')
+                                    ? '🏺'
+                                    : (customItems.find(it => it.id === hasItem.itemId)?.chestGraphic || '🎁')}
                               </div>
                            )}
                         </>
@@ -1650,11 +1718,32 @@ export default function MapEditorPage() {
                   className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 outline-none focus:border-emerald-500"
                 >
                   {bgMode === 'text-black' && <option value="treasure_text">宝 (Text)</option>}
-                  {customItems.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.chestGraphic || '📦'} {item.name}
-                    </option>
-                  ))}
+                  
+                  <optgroup label="🏺 アーティファクト (ランダム生成)">
+                    <option value="artifact_weapon_lvl1_3">🏺 武器: 大剣 [Lv1-3]</option>
+                    <option value="artifact_armor_lvl1_3">🏺 防具: 全身鎧 [Lv1-3]</option>
+                    <option value="artifact_accessory_lvl1_3">🏺 装飾: 指輪 [Lv1-3]</option>
+                    
+                    <option value="artifact_weapon_lvl4_6">🏺 武器: 勇者の剣 [Lv4-6]</option>
+                    <option value="artifact_armor_lvl4_6">🏺 防具: 勇者の鎧 [Lv4-6]</option>
+                    <option value="artifact_accessory_lvl4_6">🏺 装飾: 勇者のネックレス [Lv4-6]</option>
+                    
+                    <option value="artifact_weapon_lvl7_9">🏺 武器: 伝説の剣 [Lv7-9]</option>
+                    <option value="artifact_armor_lvl7_9">🏺 防具: 伝説の鎧 [Lv7-9]</option>
+                    <option value="artifact_accessory_lvl7_9">🏺 装飾: 伝説のアンクレット [Lv7-9]</option>
+                    
+                    <option value="artifact_weapon_lvl10">🏺 武器: オリハルコンソード [Lv10]</option>
+                    <option value="artifact_armor_lvl10">🏺 防具: オリハルコンアーマー [Lv10]</option>
+                    <option value="artifact_accessory_lvl10">🏺 装飾: ゴッドオーブ [Lv10]</option>
+                  </optgroup>
+
+                  <optgroup label="📦 通常登録アイテム">
+                    {customItems.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.chestGraphic || '📦'} {item.name}
+                      </option>
+                    ))}
+                  </optgroup>
                 </select>
               </div>
             </div>

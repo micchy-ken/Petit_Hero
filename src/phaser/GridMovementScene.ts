@@ -229,6 +229,11 @@ export class GridMovementScene extends Phaser.Scene {
 
   public onCustomEventCallback?: (eventId: string, onComplete: () => void) => void;
   public onSystemMessageCallback?: (type: string, text: string, onComplete: () => void) => void;
+  public onCustomItemsChangeCallback?: (items: any[]) => void;
+
+  public setOnCustomItemsChange(callback: (items: any[]) => void) {
+    this.onCustomItemsChangeCallback = callback;
+  }
 
   public setOnCustomEvent(callback: (eventId: string, onComplete: () => void) => void) {
     this.onCustomEventCallback = callback;
@@ -2234,6 +2239,207 @@ export class GridMovementScene extends Phaser.Scene {
     const itemIndex = this.itemSprites.findIndex(i => i.gridX === this.currentGridX && i.gridY === this.currentGridY);
     if (itemIndex >= 0) {
       const item = this.itemSprites[itemIndex];
+
+      // --- アーティファクトの特殊生成ロジック ---
+      if (item.itemId.startsWith('artifact_')) {
+        const parts = item.itemId.split('_'); // e.g. ['artifact', 'weapon', 'lvl1', '3']
+        const cat = parts[1]; // 'weapon' | 'armor' | 'accessory'
+        const tier = parts[2]; // 'lvl1' | 'lvl4' | 'lvl7' | 'lvl10'
+        
+        let nameBase = '';
+        let baseAtk = 0;
+        let baseDef = 0;
+        let enchantMin = 2;
+        let enchantMax = 5;
+        let luckyVal = 10;
+        let levelRangeStr = '';
+        
+        if (tier === 'lvl1') {
+          levelRangeStr = 'Lv1-3';
+          enchantMin = 2;
+          enchantMax = 5;
+          luckyVal = 10;
+          if (cat === 'weapon') {
+            nameBase = '大剣';
+            baseAtk = 15;
+          } else if (cat === 'armor') {
+            nameBase = '全身鎧';
+            baseDef = 12;
+          } else {
+            nameBase = '指輪';
+            baseAtk = 6;
+            baseDef = 6;
+          }
+        } else if (tier === 'lvl4') {
+          levelRangeStr = 'Lv4-6';
+          enchantMin = 4;
+          enchantMax = 8;
+          luckyVal = 15;
+          if (cat === 'weapon') {
+            nameBase = '勇者の剣';
+            baseAtk = 30;
+          } else if (cat === 'armor') {
+            nameBase = '勇者の鎧';
+            baseDef = 25;
+          } else {
+            nameBase = '勇者のネックレス';
+            baseAtk = 12;
+            baseDef = 12;
+          }
+        } else if (tier === 'lvl7') {
+          levelRangeStr = 'Lv7-9';
+          enchantMin = 7;
+          enchantMax = 15;
+          luckyVal = 20;
+          if (cat === 'weapon') {
+            nameBase = '伝説の剣';
+            baseAtk = 60;
+          } else if (cat === 'armor') {
+            nameBase = '伝説の鎧';
+            baseDef = 50;
+          } else {
+            nameBase = '伝説のアンクレット';
+            baseAtk = 25;
+            baseDef = 25;
+          }
+        } else if (tier === 'lvl10') {
+          levelRangeStr = 'Lv10';
+          enchantMin = 16;
+          enchantMax = 20;
+          luckyVal = 30;
+          if (cat === 'weapon') {
+            nameBase = 'オリハルコンソード';
+            baseAtk = 100;
+          } else if (cat === 'armor') {
+            nameBase = 'オリハルコンアーマー';
+            baseDef = 80;
+          } else {
+            nameBase = 'ゴッドオーブ';
+            baseAtk = 40;
+            baseDef = 40;
+          }
+        }
+        
+        // 属性のランダム決定
+        const elements = ['fire', 'water', 'wind', 'earth', 'light', 'dark'];
+        const elementMap: Record<string, string> = {
+          fire: '火',
+          water: '水',
+          wind: '風',
+          earth: '地',
+          light: '光',
+          dark: '闇'
+        };
+        const randomElement = elements[Math.floor(Math.random() * elements.length)];
+        const elementLabel = elementMap[randomElement];
+        
+        // 付与数値の決定
+        let enchantValue = Math.floor(Math.random() * (enchantMax - enchantMin + 1)) + enchantMin;
+        // 10%の確率で極限値
+        const isLucky = Math.random() < 0.10;
+        if (isLucky) {
+          enchantValue = luckyVal;
+        }
+        
+        // アイテム表示名の構築
+        const luckySuffix = isLucky ? ' ★極限★' : '';
+        const displayName = `${nameBase} (${elementLabel}+${enchantValue})${luckySuffix}`;
+        
+        // ユニークIDの生成
+        const genItemId = `artifact_gen_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+        
+        // カスタムアイテムの生成
+        const generatedItem: any = {
+          id: genItemId,
+          name: displayName,
+          type: 'equipment',
+          equipmentType: cat === 'weapon' ? 'weapon' : (cat === 'armor' ? 'armor' : 'accessory'),
+          chestGraphic: '🏺',
+          description: `秘境から発掘されたアーティファクト (${levelRangeStr})。${isLucky ? '限界突破した魔力を宿している。' : ''}`,
+          attack: baseAtk,
+          defense: baseDef
+        };
+        
+        if (cat === 'weapon') {
+          generatedItem.attackElement = randomElement;
+          generatedItem.attackElementEnchantValue = enchantValue;
+        } else if (cat === 'armor') {
+          generatedItem.defenseElement = randomElement;
+          generatedItem.defenseElementEnchantValue = enchantValue;
+        } else {
+          // 指輪 (Accessory) は両方に1/2ずつ
+          const halfAtk = Math.floor(enchantValue / 2);
+          const halfDef = Math.ceil(enchantValue / 2);
+          if (halfAtk > 0) {
+            generatedItem.attackElement = randomElement;
+            generatedItem.attackElementEnchantValue = halfAtk;
+          }
+          if (halfDef > 0) {
+            generatedItem.defenseElement = randomElement;
+            generatedItem.defenseElementEnchantValue = halfDef;
+          }
+        }
+        
+        // リストに追加してReact側に同期
+        this.customItems.push(generatedItem);
+        if (this.onCustomItemsChangeCallback) {
+          this.onCustomItemsChangeCallback([...this.customItems]);
+        }
+        
+        // マップ上の設置アーティファクトとしての取得フラグを設定
+        this.acquiredItems.add(item.itemId);
+        // 生成されたユニークアイテム自体も所持アイテムボックスに追加
+        this.acquiredItems.add(genItemId);
+        
+        // 自動装備の比較（より強い場合は自動的に装備する）
+        const slot = generatedItem.equipmentType;
+        const equippedId = slot === 'weapon' ? this.equippedWeaponId : (slot === 'armor' ? this.equippedArmorId : this.equippedAccessoryId);
+        const currentEquipped = equippedId ? this.customItems.find((it: any) => it.id === equippedId) : null;
+        
+        // 総合力（基礎値＋属性付与値）で比較
+        const currentPower = (currentEquipped?.attack || 0) + (currentEquipped?.defense || 0) + (currentEquipped?.attackElementEnchantValue || 0) + (currentEquipped?.defenseElementEnchantValue || 0);
+        const newPower = (generatedItem.attack || 0) + (generatedItem.defense || 0) + (generatedItem.attackElementEnchantValue || 0) + (generatedItem.defenseElementEnchantValue || 0);
+        
+        const shouldEquip = !currentEquipped || (newPower > currentPower);
+        if (shouldEquip) {
+          if (slot === 'weapon') this.equippedWeaponId = genItemId;
+          else if (slot === 'armor') this.equippedArmorId = genItemId;
+          else this.equippedAccessoryId = genItemId;
+          
+          this.recalculateStats();
+          
+          const elementInfo = [];
+          if (generatedItem.attackElement) {
+            elementInfo.push(`攻撃属性: ${elementMap[generatedItem.attackElement]}(+${generatedItem.attackElementEnchantValue})`);
+          }
+          if (generatedItem.defenseElement) {
+            elementInfo.push(`防御属性: ${elementMap[generatedItem.defenseElement]}(+${generatedItem.defenseElementEnchantValue})`);
+          }
+          const elementStr = elementInfo.length > 0 ? ` (${elementInfo.join(', ')})` : '';
+          
+          const luckyMsg = isLucky ? '\n🌟 超ラッキー！極限魔力(10%確率)が発現しました！' : '';
+          const equipMsg = `『${displayName}』を鑑定し、装備した！ 🏺${luckyMsg}\n(攻撃力+${generatedItem.attack} 防御力+${generatedItem.defense}${elementStr})`;
+          this.sendLog(`『${displayName}』を装備した！ 🏺 (攻撃力+${generatedItem.attack} 防御力+${generatedItem.defense})`, 'info');
+          this.enqueueMessage('item', equipMsg);
+        } else {
+          const luckyMsg = isLucky ? '\n🌟 超ラッキー！極限魔力(10%確率)が発現しました！' : '';
+          const msg = `『${displayName}』を獲得した！ 🏺${luckyMsg}\n(攻撃力+${generatedItem.attack} 防御力+${generatedItem.defense}) (Exp +5)`;
+          this.sendLog(`『${displayName}』を手に入れた！ 🏺`, 'info');
+          this.enqueueMessage('item', msg);
+        }
+        
+        this.heroExp += 5;
+        this.checkLevelUp();
+        
+        if (item.sprite && item.sprite.active) {
+          item.sprite.destroy();
+        }
+        this.itemSprites.splice(itemIndex, 1);
+        this.notifyStateChange(false);
+        return;
+      }
+      // --- アーティファクトの特殊生成ロジック終了 ---
+
       this.acquiredItems.add(item.itemId);
       const isDefault = item.itemId === 'treasure_text';
       const customItem = this.customItems.find((it: any) => it.id === item.itemId);
