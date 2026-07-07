@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Save, Ghost, Loader2 } from 'lucide-react';
 import { EnemyAssets as initialEnemyAssets, BossAssets as initialBossAssets, EnemyAsset } from '../data/EnemyAssets';
 import { fetchEnemyAssetsFromFirestore, saveEnemyAssetsToFirestore } from '../lib/dbService';
+import { usePopup } from '../components/CustomPopupProvider';
 
 type BgMode = 'text-black' | 'stone-gray' | 'color';
 
@@ -219,6 +220,7 @@ function EnemyGraphicPreview({ bgMode, enemyId }: { bgMode: BgMode, enemyId: str
 export default function EnemyEditorPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { showAlert, showConfirm } = usePopup();
   const queryParams = new URLSearchParams(location.search);
   const currentScenarioId = queryParams.get('scenarioId') || 'scenario_test';
   const returnTo = queryParams.get('returnTo');
@@ -296,7 +298,7 @@ export default function EnemyEditorPage() {
       setTimeout(() => setSaveMessage(''), 3000);
     } catch (e: any) {
       console.error(e);
-      alert('保存に失敗しました: ' + e.message);
+      await showAlert('保存に失敗しました: ' + e.message, '保存エラー');
     }
     setIsSaving(false);
   };

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Box, Gem, Zap, Plus, Map as MapIcon, Save, Settings, Play, Loader2, RefreshCw, Check, AlertCircle, Trash2, MessageSquare } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { usePopup } from '../components/CustomPopupProvider';
 import { MapData } from '../types/MapData';
 import { getAvailableEnemies, getAvailableBosses } from '../data/EnemyAssets';
 import { PhaserGameContainer } from '../components/PhaserGameContainer';
@@ -49,6 +50,7 @@ const getEquipmentIcon = (item: any) => {
 export default function MapEditorPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { showAlert, showConfirm } = usePopup();
   const queryParams = new URLSearchParams(location.search);
   const initialScenarioId = queryParams.get('scenarioId') || 'scenario_test';
   const returnTo = queryParams.get('returnTo');
@@ -150,7 +152,8 @@ export default function MapEditorPage() {
       return !original ? true : JSON.stringify(m) !== JSON.stringify(original);
     });
     if (anyDirty) {
-      if (!confirm('マップデータに未反映の変更があります。破棄してシナリオを切り替えますか？')) {
+      const confirmed = await showConfirm('マップデータに未反映の変更があります。破棄してシナリオを切り替えますか？', '変更の破棄確認');
+      if (!confirmed) {
         return;
       }
     }
@@ -158,7 +161,7 @@ export default function MapEditorPage() {
     try {
       await loadMapsFromFirestoreDB(false, targetScenarioId);
     } catch (e: any) {
-      alert('シナリオ切り替えエラー: ' + e.message);
+      await showAlert('シナリオ切り替えエラー: ' + e.message, '切り替えエラー');
     } finally {
       setIsLoading(false);
     }
@@ -186,9 +189,9 @@ export default function MapEditorPage() {
       setShowNewScenarioForm(false);
 
       await loadMapsFromFirestoreDB(false, newId);
-      alert(`シナリオ「${newSc.name}」を作成しました。`);
+      await showAlert(`シナリオ「${newSc.name}」を作成しました。`, '作成完了');
     } catch (err: any) {
-      alert('シナリオ作成エラー: ' + err.message);
+      await showAlert('シナリオ作成エラー: ' + err.message, '作成エラー');
     } finally {
       setIsLoading(false);
     }
@@ -214,9 +217,9 @@ export default function MapEditorPage() {
       setScenarios(updated);
       await saveScenariosToFirestore(updated);
       setShowEditScenarioForm(false);
-      alert('シナリオ設定を更新しました。');
+      await showAlert('シナリオ設定を更新しました。', '設定更新完了');
     } catch (err: any) {
-      alert('更新エラー: ' + err.message);
+      await showAlert('更新エラー: ' + err.message, '更新エラー');
     } finally {
       setIsLoading(false);
     }
@@ -615,7 +618,7 @@ export default function MapEditorPage() {
     }
   };
 
-  const handleUpdateEvent = () => {
+  const handleUpdateEvent = async () => {
     if (!editingEvent) return;
     const newEvents = [...currentMap.events];
     
@@ -636,7 +639,7 @@ export default function MapEditorPage() {
       data.eventId = editingEvent.eventId || undefined;
     } else if (editingEvent.type === 'teleport') {
       if (!editingEvent.targetMap) {
-        alert('移動先マップを選択してください');
+        await showAlert('移動先マップを選択してください', '入力エラー');
         return;
       }
       data.targetMap = editingEvent.targetMap;
@@ -749,11 +752,12 @@ export default function MapEditorPage() {
     if (!currentMap) return;
     
     if (currentMapId === 'map_beginning') {
-      alert('始まりのマップは削除できません。');
+      await showAlert('始まりのマップは削除できません。', '削除不可');
       return;
     }
     
-    if (!window.confirm(`本当にマップ「${currentMap.name}」を削除しますか？\nこの操作は取り消せません。`)) {
+    const confirmed = await showConfirm(`本当にマップ「${currentMap.name}」を削除しますか？\nこの操作は取り消せません。`, 'マップの削除');
+    if (!confirmed) {
       return;
     }
 
@@ -769,10 +773,10 @@ export default function MapEditorPage() {
         ? 'map_beginning'
         : (newMaps[0]?.id || '');
       setCurrentMapId(defaultId);
-      alert('マップを削除しました。');
+      await showAlert('マップを削除しました。', '削除完了');
     } catch (err: any) {
       console.error('Error deleting map:', err);
-      alert('削除エラー: ' + err.message);
+      await showAlert('削除エラー: ' + err.message, '削除エラー');
     } finally {
       setIsLoading(false);
     }
@@ -850,7 +854,7 @@ export default function MapEditorPage() {
           setSaveStatus('idle');
         }, 3500);
       }
-      alert('保存エラー: ' + e.message);
+      await showAlert('保存エラー: ' + e.message, '保存失敗');
       return false;
     }
   };

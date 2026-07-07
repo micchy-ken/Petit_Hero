@@ -13,10 +13,12 @@ import {
 } from '../lib/dbService';
 import { Scenario } from '../types/Scenario';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { usePopup } from '../components/CustomPopupProvider';
 
 export default function GamePage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { showAlert, showConfirm } = usePopup();
   const [currentMapId, setCurrentMapId] = useState('map_beginning');
   const [allMaps, setAllMaps] = useState<MapData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -164,10 +166,11 @@ export default function GamePage() {
   const handleDeleteScenario = async (scenarioId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (scenarioId === 'scenario_test') {
-      alert('デフォルトのテストシナリオは削除できません。');
+      await showAlert('デフォルトのテストシナリオは削除できません。', '削除不可');
       return;
     }
-    if (!confirm('このシナリオを削除しますか？（マップデータや進行状況は復元できません）')) {
+    const confirmed = await showConfirm('このシナリオを削除しますか？（マップデータや進行状況は復元できません）', 'シナリオの削除');
+    if (!confirmed) {
       return;
     }
 
@@ -388,9 +391,10 @@ export default function GamePage() {
                     
                     <div className="flex gap-2.5 justify-end">
                       <button
-                        onClick={() => {
-                          if (hasSave && !confirm('進行中のセーブデータが上書きされます。よろしいですか？')) {
-                            return;
+                        onClick={async () => {
+                          if (hasSave) {
+                            const confirmed = await showConfirm('進行中のセーブデータが上書きされます。よろしいですか？', '最初から始める');
+                            if (!confirmed) return;
                           }
                           launchGame(sc, false);
                         }}

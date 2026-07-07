@@ -4,6 +4,7 @@ import { ArrowLeft, Save, Plus, Trash2, Loader2, Package, Sparkles, Check, HelpC
 import { CustomItem, ItemType } from '../types/CustomItem';
 import { fetchCustomItemsFromFirestore, saveCustomItemsToFirestore, fetchMagicDataFromFirestore } from '../lib/dbService';
 import { MagicData } from '../types/MagicData';
+import { usePopup } from '../components/CustomPopupProvider';
 
 const CHEST_GRAPHICS = [
   { key: '📦', label: 'ノーマル木箱 (📦)' },
@@ -45,6 +46,7 @@ const ITEM_TYPES: { value: ItemType; label: string; color: string; description: 
 export default function ItemEditorPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { showAlert, showConfirm } = usePopup();
   const queryParams = new URLSearchParams(location.search);
   const currentScenarioId = queryParams.get('scenarioId') || 'scenario_test';
   const returnTo = queryParams.get('returnTo');
@@ -145,8 +147,9 @@ export default function ItemEditorPage() {
     setItems(newItems);
   };
 
-  const removeItem = (index: number) => {
-    if (window.confirm('このアイテムを削除してもよろしいですか？')) {
+  const removeItem = async (index: number) => {
+    const confirmed = await showConfirm('このアイテムを削除してもよろしいですか？', 'アイテム削除');
+    if (confirmed) {
       const newItems = [...items];
       newItems.splice(index, 1);
       setItems(newItems);
