@@ -215,6 +215,7 @@ export default function GamePage() {
 
         <main className="flex-1 flex items-center justify-center p-4">
           <PhaserGameContainer 
+            key={`${activeScenario.id}_${loadedPosition ? 'resume' : 'new'}`}
             isTestPlay={false}
             initialShowSettings={initialShowSettings} 
             maps={allMaps} 

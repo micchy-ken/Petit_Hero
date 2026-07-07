@@ -190,29 +190,56 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
   // UIステータス
   const [showSettings, setShowSettings] = useState(showSettingsOnInit);
   const [isTurbo, setIsTurbo] = useState(false);
-  const [heroState, setHeroState] = useState<HeroState>({
-    gridX: 7,
-    gridY: 7,
-    camGridX: 4,
-    camGridY: 4,
-    direction: 'idle',
-    isMoving: false,
-    isScrolling: false,
-    speedMs: 450,
-    hp: 20,
-    maxHp: 20,
-    attack: 5,
-    defense: 0,
-    level: 1,
-    exp: 0,
-    requiredExp: 10,
-    acquiredItems: [],
-    equippedWeaponId: null,
-    equippedArmorId: null,
-    equippedAccessoryId: null,
-    baseAttack: 5,
-    baseDefense: 0,
-    displayMode: 'normal'
+  const [heroState, setHeroState] = useState<HeroState>(() => {
+    const defaultState: HeroState = {
+      gridX: 7,
+      gridY: 7,
+      camGridX: 4,
+      camGridY: 4,
+      direction: 'idle',
+      isMoving: false,
+      isScrolling: false,
+      speedMs: 450,
+      hp: 20,
+      maxHp: 20,
+      attack: 5,
+      defense: 0,
+      level: 1,
+      exp: 0,
+      requiredExp: 10,
+      acquiredItems: [],
+      equippedWeaponId: null,
+      equippedArmorId: null,
+      equippedAccessoryId: null,
+      baseAttack: 5,
+      baseDefense: 0,
+      displayMode: 'normal'
+    };
+
+    if (initialPosition) {
+      if (initialPosition.gridX !== undefined) defaultState.gridX = initialPosition.gridX;
+      if (initialPosition.gridY !== undefined) defaultState.gridY = initialPosition.gridY;
+      if (initialPosition.camGridX !== undefined) defaultState.camGridX = initialPosition.camGridX;
+      if (initialPosition.camGridY !== undefined) defaultState.camGridY = initialPosition.camGridY;
+    }
+
+    if (initialHeroState) {
+      if (initialHeroState.hp !== undefined) defaultState.hp = initialHeroState.hp;
+      if (initialHeroState.maxHp !== undefined) defaultState.maxHp = initialHeroState.maxHp;
+      if (initialHeroState.attack !== undefined) defaultState.attack = initialHeroState.attack;
+      if (initialHeroState.defense !== undefined) defaultState.defense = initialHeroState.defense;
+      if (initialHeroState.level !== undefined) defaultState.level = initialHeroState.level;
+      if (initialHeroState.exp !== undefined) defaultState.exp = initialHeroState.exp;
+      if (initialHeroState.requiredExp !== undefined) defaultState.requiredExp = initialHeroState.requiredExp;
+      if (initialHeroState.acquiredItems !== undefined) defaultState.acquiredItems = initialHeroState.acquiredItems;
+      if (initialHeroState.equippedWeaponId !== undefined) defaultState.equippedWeaponId = initialHeroState.equippedWeaponId;
+      if (initialHeroState.equippedArmorId !== undefined) defaultState.equippedArmorId = initialHeroState.equippedArmorId;
+      if (initialHeroState.equippedAccessoryId !== undefined) defaultState.equippedAccessoryId = initialHeroState.equippedAccessoryId;
+      if (initialHeroState.baseAttack !== undefined) defaultState.baseAttack = initialHeroState.baseAttack;
+      if (initialHeroState.baseDefense !== undefined) defaultState.baseDefense = initialHeroState.baseDefense;
+    }
+
+    return defaultState;
   });
 
   const [logs, setLogs] = useState<ActionLog[]>([]);

@@ -3158,7 +3158,11 @@ export class GridMovementScene extends Phaser.Scene {
     // 2. Spawn Regular Enemies
     const spawnedSoFar = this.totalEnemiesSpawned;
     const remainingToSpawn = isInfinite ? initialSpawnCount : Math.max(0, (maxEnemies as number) - spawnedSoFar);
-    const loopCount = isInfinite ? initialSpawnCount : Math.min(initialSpawnCount, remainingToSpawn);
+    
+    // ボスを含め合計で最大5体までに制限する
+    const maxActiveEnemies = 5;
+    const slimesToSpawn = Math.max(0, maxActiveEnemies - this.slimes.length);
+    const loopCount = Math.min(slimesToSpawn, remainingToSpawn);
     
     for (let i = 0; i < loopCount; i++) {
       const pos = this.findScatteredSpawnPosition(4, 3);
