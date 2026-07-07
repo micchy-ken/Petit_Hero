@@ -216,6 +216,8 @@ export class GridMovementScene extends Phaser.Scene {
   
   private totalEnemiesSpawned: number = 0;
   private enemiesDefeated: number = 0;
+  private bossSpawned: boolean = false;
+  private bossDefeated: boolean = false;
   
   public gridCols: number = 16;
   public gridRows: number = 16;
@@ -1447,11 +1449,7 @@ export class GridMovementScene extends Phaser.Scene {
           } else if (this.mapData && this.mapData.events) {
             const expRate = (this.visitedGrids.size / this.totalGrids) * 100;
             const sRate = (this.viewedGrids.size / this.totalGrids) * 100;
-            const maxEnemies = this.mapData?.maxEnemies;
-            let dRate = 0;
-            if (maxEnemies !== undefined && maxEnemies !== 'infinite' && (maxEnemies as number) > 0) {
-              dRate = (this.enemiesDefeated / (maxEnemies as number)) * 100;
-            }
+            const dRate = this.getDefeatRate();
 
             const activeGoals = this.mapData.events.filter((event: any) => {
               if (event.type !== 'teleport') return false;
@@ -1986,6 +1984,9 @@ export class GridMovementScene extends Phaser.Scene {
         this.isMoving = false;
 
         if (slime.hp <= 0) {
+          if (slime.id.startsWith('boss-')) {
+            this.bossDefeated = true;
+          }
           this.enemiesDefeated++;
           this.updateStats(this.currentGridX, this.currentGridY, this.currentCamGridX, this.currentCamGridY);
           
@@ -2741,11 +2742,7 @@ export class GridMovementScene extends Phaser.Scene {
       let met = true;
       const expRate = (this.visitedGrids.size / this.totalGrids) * 100;
       const sRate = (this.viewedGrids.size / this.totalGrids) * 100;
-      const maxEnemies = this.mapData?.maxEnemies;
-      let dRate = 0;
-      if (maxEnemies !== undefined && maxEnemies !== 'infinite' && (maxEnemies as number) > 0) {
-        dRate = (this.enemiesDefeated / (maxEnemies as number)) * 100;
-      }
+      const dRate = this.getDefeatRate();
       
       if (eventData.requiredExplorationRate && expRate < eventData.requiredExplorationRate) met = false;
       if (eventData.requiredSearchRate && sRate < eventData.requiredSearchRate) met = false;
@@ -2801,6 +2798,34 @@ export class GridMovementScene extends Phaser.Scene {
     });
   }
 
+  private getDefeatRate(): number {
+    const maxEnemies = this.mapData?.maxEnemies;
+    const isInfinite = maxEnemies === undefined || maxEnemies === 'infinite';
+    
+    if (isInfinite) {
+      if (this.bossSpawned) {
+        return this.bossDefeated ? 100 : 0;
+      }
+      return 0; // for math comparisons, treat infinite as 0 if no boss
+    } else {
+      const targetCount = Math.max(maxEnemies as number, this.bossSpawned ? 1 : 0);
+      if (targetCount > 0) {
+        return Math.min(100, (this.enemiesDefeated / targetCount) * 100);
+      }
+    }
+    return 0;
+  }
+
+  private getDisplayDefeatRate(): number | null {
+    const maxEnemies = this.mapData?.maxEnemies;
+    const isInfinite = maxEnemies === undefined || maxEnemies === 'infinite';
+    
+    if (isInfinite && !this.bossSpawned) {
+      return null;
+    }
+    return this.getDefeatRate();
+  }
+
   private updateStats(currentX: number, currentY: number, camX: number, camY: number) {
     this.visitedGrids.add(`${currentX},${currentY}`);
 
@@ -2817,11 +2842,8 @@ export class GridMovementScene extends Phaser.Scene {
     if (this.setOnStatsChange) {
       const expRate = (this.visitedGrids.size / this.totalGrids) * 100;
       const searchRate = (this.viewedGrids.size / this.totalGrids) * 100;
-      const maxEnemies = this.mapData?.maxEnemies;
-      let dRate = null;
-      if (maxEnemies !== undefined && maxEnemies !== 'infinite' && (maxEnemies as number) > 0) {
-        dRate = (this.enemiesDefeated / (maxEnemies as number)) * 100;
-      }
+      const dRate = this.getDisplayDefeatRate();
+      
       this.setOnStatsChange(expRate, searchRate, dRate);
     }
     this.updateTeleportPortals();
@@ -2869,6 +2891,8 @@ export class GridMovementScene extends Phaser.Scene {
 
     this.totalEnemiesSpawned = 0;
     this.enemiesDefeated = 0;
+    this.bossSpawned = false;
+    this.bossDefeated = false;
     
     // マップ切り替え時の処理
     if (fromMapId !== undefined && fromMapId !== this.mapData?.id) {
@@ -3055,6 +3079,7 @@ export class GridMovementScene extends Phaser.Scene {
             defenseElementEnchantValue: bossConfig.defenseElementEnchantValue,
           };
           this.slimes.push(newBoss);
+          this.bossSpawned = true;
           this.playMonsterAnim(newBoss, 'idle', 'down');
           this.totalEnemiesSpawned++;
           this.sendLog(`エリアボス【${bossConfig.name}】が現れた！ 👑`, 'system');
@@ -3063,7 +3088,11 @@ export class GridMovementScene extends Phaser.Scene {
     }
 
     // 2. Spawn Regular Enemies
-    for (let i = 0; i < initialSpawnCount; i++) {
+    const spawnedSoFar = this.totalEnemiesSpawned;
+    const remainingToSpawn = isInfinite ? initialSpawnCount : Math.max(0, (maxEnemies as number) - spawnedSoFar);
+    const loopCount = isInfinite ? initialSpawnCount : Math.min(initialSpawnCount, remainingToSpawn);
+    
+    for (let i = 0; i < loopCount; i++) {
       let sx = 0;
       let sy = 0;
       let found = false;
@@ -3531,6 +3560,9 @@ export class GridMovementScene extends Phaser.Scene {
 
         // スライムの撃破処理
         if (targetSlime.hp <= 0) {
+          if (targetSlime.id.startsWith('boss-')) {
+            this.bossDefeated = true;
+          }
           this.enemiesDefeated++;
           this.updateStats(this.currentGridX, this.currentGridY, this.currentCamGridX, this.currentCamGridY);
           
@@ -3753,6 +3785,9 @@ export class GridMovementScene extends Phaser.Scene {
 
       // 敵が力尽きたかチェック
       if (targetSlime.hp <= 0) {
+        if (targetSlime.id.startsWith('boss-')) {
+          this.bossDefeated = true;
+        }
         this.enemiesDefeated++;
         this.updateStats(this.currentGridX, this.currentGridY, this.currentCamGridX, this.currentCamGridY);
         
@@ -3820,11 +3855,7 @@ export class GridMovementScene extends Phaser.Scene {
 
     const expRate = (this.visitedGrids.size / this.totalGrids) * 100;
     const sRate = (this.viewedGrids.size / this.totalGrids) * 100;
-    const maxEnemies = this.mapData?.maxEnemies;
-    let dRate = 0;
-    if (maxEnemies !== undefined && maxEnemies !== 'infinite' && (maxEnemies as number) > 0) {
-      dRate = (this.enemiesDefeated / (maxEnemies as number)) * 100;
-    }
+    const dRate = this.getDefeatRate();
 
     teleportEvents.forEach((event: any) => {
       const eventData = event.data || {};
