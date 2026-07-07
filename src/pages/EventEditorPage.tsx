@@ -99,12 +99,21 @@ export default function EventEditorPage() {
     
     // 顔グラフィック変更時にデフォルト名前を自動設定
     if (field === 'portraitId') {
-      if (value === 'hero') {
-        updatedNode.speakerName = '主人公';
-      } else if (value === 'villager') {
-        updatedNode.speakerName = '村人';
-      } else if (value === 'none') {
-        updatedNode.speakerName = '';
+      const defaultNames: Record<string, string> = {
+        hero: '主人公',
+        villager: '村人',
+        soldier: '兵士',
+        demon_king: '魔王',
+        villager_male: '村人（男）',
+        princess: '姫',
+        monster_slime: 'スライム',
+        monster_goblin: 'ゴブリン',
+        monster_dragon: 'ドラゴン',
+        monster_golem: 'ゴーレム',
+        none: ''
+      };
+      if (value in defaultNames) {
+        updatedNode.speakerName = defaultNames[value];
       }
     }
     
@@ -227,11 +236,23 @@ export default function EventEditorPage() {
                           <select
                             value={node.portraitId || 'none'}
                             onChange={(e) => updateNode(eventIndex, nodeIndex, 'portraitId', e.target.value)}
-                            className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
                           >
                             <option value="none">なし</option>
-                            <option value="hero">主人公</option>
-                            <option value="villager">村人</option>
+                            <optgroup label="キャラクター">
+                              <option value="hero">主人公</option>
+                              <option value="villager">村人 (中性/女性)</option>
+                              <option value="villager_male">村人 (男)</option>
+                              <option value="soldier">兵士</option>
+                              <option value="princess">姫</option>
+                              <option value="demon_king">魔王</option>
+                            </optgroup>
+                            <optgroup label="モンスター">
+                              <option value="monster_slime">スライム</option>
+                              <option value="monster_goblin">ゴブリン</option>
+                              <option value="monster_golem">ゴーレム</option>
+                              <option value="monster_dragon">ドラゴン</option>
+                            </optgroup>
                           </select>
                         </div>
                       </div>

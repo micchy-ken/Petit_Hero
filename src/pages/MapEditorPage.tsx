@@ -377,12 +377,21 @@ export default function MapEditorPage() {
         
         // 顔グラフィック変更時にデフォルト名前を自動設定
         if (field === 'portraitId') {
-          if (value === 'hero') {
-            updatedNode.speakerName = '主人公';
-          } else if (value === 'villager') {
-            updatedNode.speakerName = '村人';
-          } else if (value === 'none') {
-            updatedNode.speakerName = '';
+          const defaultNames: Record<string, string> = {
+            hero: '主人公',
+            villager: '村人',
+            soldier: '兵士',
+            demon_king: '魔王',
+            villager_male: '村人（男）',
+            princess: '姫',
+            monster_slime: 'スライム',
+            monster_goblin: 'ゴブリン',
+            monster_dragon: 'ドラゴン',
+            monster_golem: 'ゴーレム',
+            none: ''
+          };
+          if (value in defaultNames) {
+            updatedNode.speakerName = defaultNames[value];
           }
         }
         
@@ -1209,33 +1218,6 @@ export default function MapEditorPage() {
                   </select>
                   
                   <button 
-                    onClick={async () => {
-                      const anyDirty = maps.some(m => {
-                        const original = initialMaps.find(o => o.id === m.id);
-                        return !original ? true : JSON.stringify(m) !== JSON.stringify(original);
-                      });
-                      if (anyDirty) {
-                        if (!confirm('未保存の変更があります。変更を破棄してFirestoreの最新データと同期しますか？')) {
-                          return;
-                        }
-                      }
-                      setIsLoading(true);
-                      try {
-                        await loadMapsFromFirestoreDB(false);
-                        alert('Firestoreの最新状態を同期しました。🔄');
-                      } catch (err: any) {
-                        alert('同期エラー: ' + err.message);
-                      } finally {
-                        setIsLoading(false);
-                      }
-                    }}
-                    className="flex items-center justify-center gap-2 w-full px-3 py-2 bg-blue-700 hover:bg-blue-600 rounded text-sm transition-colors border border-blue-500 shadow-inner"
-                    title="Firestoreのマップデータを再読込して同期します"
-                  >
-                    <RefreshCw className="w-4 h-4" /> Firestore同期 (更新)
-                  </button>
-                  
-                  <button 
                     onClick={() => setShowNewMapModal(true)}
                     className="flex items-center justify-center gap-2 w-full px-3 py-2 bg-emerald-700 hover:bg-emerald-600 rounded text-sm transition-colors border border-emerald-500 shadow-inner"
                   >
@@ -1794,11 +1776,23 @@ export default function MapEditorPage() {
                                       <select
                                         value={node.portraitId}
                                         onChange={(e) => updateNode(ev.id, nodeIdx, 'portraitId', e.target.value)}
-                                        className="bg-slate-800 border border-slate-700 rounded px-1.5 py-1 text-[10px] text-slate-200 outline-none flex-1"
+                                        className="bg-slate-800 border border-slate-700 rounded px-1.5 py-1 text-[10px] text-slate-200 outline-none flex-1 font-medium"
                                       >
                                         <option value="none">グラフィックなし</option>
-                                        <option value="hero">主人公</option>
-                                        <option value="villager">村人</option>
+                                        <optgroup label="キャラクター">
+                                          <option value="hero">主人公</option>
+                                          <option value="villager">村人 (中性/女性)</option>
+                                          <option value="villager_male">村人 (男)</option>
+                                          <option value="soldier">兵士</option>
+                                          <option value="princess">姫</option>
+                                          <option value="demon_king">魔王</option>
+                                        </optgroup>
+                                        <optgroup label="モンスター">
+                                          <option value="monster_slime">スライム</option>
+                                          <option value="monster_goblin">ゴブリン</option>
+                                          <option value="monster_golem">ゴーレム</option>
+                                          <option value="monster_dragon">ドラゴン</option>
+                                        </optgroup>
                                       </select>
                                     </div>
                                   </div>

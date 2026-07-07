@@ -1,7 +1,7 @@
 export interface ConversationNode {
   id: string;
   speakerName: string;
-  portraitId?: 'hero' | 'villager' | 'none';
+  portraitId?: string;
   message: string;
 }
 
