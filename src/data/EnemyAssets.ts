@@ -35,11 +35,11 @@ export const BossAssets: Record<string, EnemyAsset[]> = {
     { id: 'text_boss', name: 'ボス', hp: 50, attack: 10, defense: 5, exp: 50, speed: 1200, behavior: 'seek' },
   ],
   'stone-gray': [
-    { id: 'gray_boss', name: '白黒魔王', hp: 60, attack: 12, defense: 6, exp: 60, speed: 1000, behavior: 'seek' },
+    { id: 'gray_boss', name: '白黒魔王', hp: 75, attack: 14, defense: 8, exp: 80, speed: 1000, behavior: 'rarely' },
   ],
   'color': [
-    { id: 'color_dragon', name: 'ドラゴン', hp: 80, attack: 15, defense: 10, exp: 100, speed: 1500, behavior: 'seek', attackElement: 'fire', attackElementEnchantValue: 5, defenseElement: 'fire', defenseElementEnchantValue: 4 },
-    { id: 'color_demon_king', name: '魔王', hp: 100, attack: 20, defense: 15, exp: 200, speed: 800, behavior: 'seek', attackElement: 'dark', attackElementEnchantValue: 8, defenseElement: 'dark', defenseElementEnchantValue: 6 },
+    { id: 'color_dragon', name: 'ドラゴン', hp: 120, attack: 18, defense: 12, exp: 120, speed: 1000, behavior: 'rarely', attackElement: 'fire', attackElementEnchantValue: 5, defenseElement: 'fire', defenseElementEnchantValue: 4 },
+    { id: 'color_demon_king', name: '魔王', hp: 180, attack: 25, defense: 15, exp: 250, speed: 1000, behavior: 'rarely', attackElement: 'dark', attackElementEnchantValue: 8, defenseElement: 'dark', defenseElementEnchantValue: 6 },
   ],
 };
 

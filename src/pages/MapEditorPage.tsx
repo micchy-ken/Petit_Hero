@@ -2342,7 +2342,34 @@ export default function MapEditorPage() {
         </div>
       )}
 
-
+      {/* 会話イベントプレビューオーバーレイ */}
+      {previewEvent && previewEvent.nodes[previewNodeIndex] && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60" onClick={nextPreviewNode}>
+          <div className="w-full max-w-2xl bg-slate-900/95 border border-slate-700/80 p-6 flex gap-6 cursor-pointer shadow-2xl rounded-2xl animate-in zoom-in-95">
+            {PORTRAITS[previewEvent.nodes[previewNodeIndex].portraitId || 'none'] && (
+              <div className="flex-shrink-0 w-24 h-24 bg-slate-850 border-2 border-indigo-500 rounded-xl overflow-hidden flex items-center justify-center">
+                <img 
+                  src={PORTRAITS[previewEvent.nodes[previewNodeIndex].portraitId || 'none']} 
+                  alt="portrait" 
+                  className="w-full h-full object-cover"
+                  style={{ imageRendering: 'auto' }}
+                />
+              </div>
+            )}
+            <div className="flex-1 flex flex-col min-w-0">
+              <div className="font-bold text-indigo-400 text-lg mb-2 truncate">
+                {previewEvent.nodes[previewNodeIndex].speakerName}
+              </div>
+              <div className="text-slate-100 text-xl leading-relaxed break-words overflow-y-auto">
+                {previewEvent.nodes[previewNodeIndex].message}
+              </div>
+              <div className="mt-auto self-end text-sm text-indigo-400 animate-pulse mt-4">
+                ▼ クリックして進む
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

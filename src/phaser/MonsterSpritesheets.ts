@@ -548,3 +548,368 @@ export function generateGoblinSpritesheet(scene: Phaser.Scene, mode: 'normal' | 
 
   return textureKey;
 }
+
+export function generateDemonKingSpritesheet(scene: Phaser.Scene, mode: 'normal' | 'grayscale' = 'normal'): string {
+  const isGray = mode === 'grayscale';
+  const textureKey = isGray ? 'demon_king_spritesheet_gray' : 'demon_king_spritesheet';
+
+  if (scene.textures.exists(textureKey)) {
+    return textureKey;
+  }
+
+  const frameWidth = 128;
+  const frameHeight = 128;
+  const cols = 4;
+  const rows = 4;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = frameWidth * cols;
+  canvas.height = frameHeight * rows;
+  const ctx = canvas.getContext('2d')!;
+  ctx.imageSmoothingEnabled = false;
+
+  const tempCanvas = document.createElement('canvas');
+  tempCanvas.width = 64;
+  tempCanvas.height = 64;
+  const tCtx = tempCanvas.getContext('2d')!;
+  tCtx.imageSmoothingEnabled = false;
+
+  const gp = (x: number, y: number, w: number, h: number, color: string) => {
+    tCtx.fillStyle = color;
+    tCtx.fillRect(x, y, w, h);
+  };
+
+  // Colors
+  const cBody = isGray ? '#555555' : '#1e1b4b'; // 深い紺
+  const cCape = isGray ? '#333333' : '#4c1d95'; // 紫マント
+  const cCapeDark = isGray ? '#222222' : '#2e1065';
+  const cSkin = isGray ? '#999999' : '#e0e7ff'; // 青白い肌
+  const cSkinDark = isGray ? '#666666' : '#818cf8';
+  const cCrown = isGray ? '#cccccc' : '#fbbf24'; // 金の王冠
+  const cCrownDark = isGray ? '#777777' : '#d97706';
+  const cEye = isGray ? '#ffffff' : '#ef4444'; // 赤目
+
+  for (let dir = 0; dir < rows; dir++) {
+    for (let frame = 0; frame < cols; frame++) {
+      const ox = frame * frameWidth;
+      const oy = dir * frameHeight;
+
+      tCtx.clearRect(0, 0, 64, 64);
+      tCtx.save();
+
+      const isStep1 = frame === 1;
+      const isStep2 = frame === 3;
+      const bobY = (isStep1 || isStep2) ? -2 : 0;
+      const legOffset = isStep1 ? 2 : (isStep2 ? -2 : 0);
+
+      tCtx.translate(0, bobY);
+
+      // 床の影 (巨大)
+      tCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+      tCtx.beginPath();
+      tCtx.ellipse(32, 56, 18, 5, 0, 0, Math.PI * 2);
+      tCtx.fill();
+
+      if (dir === 0) { // DOWN (Front)
+        // ツノ
+        gp(18, 12, 4, 8, cCrownDark);
+        gp(14, 8, 4, 6, cCrownDark);
+        gp(42, 12, 4, 8, cCrownDark);
+        gp(46, 8, 4, 6, cCrownDark);
+
+        // マント (後ろ)
+        gp(14, 26, 36, 26, cCape);
+        gp(12, 32, 40, 18, cCapeDark);
+
+        // 体
+        gp(20, 24, 24, 26, cBody);
+
+        // 肩当
+        gp(16, 24, 6, 6, cCrown);
+        gp(42, 24, 6, 6, cCrown);
+
+        // 頭/顔
+        gp(22, 14, 20, 12, cSkin);
+        gp(20, 18, 2, 6, cSkinDark);
+        gp(42, 18, 2, 6, cSkinDark);
+
+        // 髪の毛
+        gp(22, 12, 20, 3, isGray ? '#222222' : '#0f172a');
+
+        // 王冠
+        gp(24, 8, 16, 4, cCrown);
+        gp(24, 5, 2, 3, cCrown);
+        gp(31, 3, 2, 5, cCrown);
+        gp(38, 5, 2, 3, cCrown);
+        gp(31, 4, 2, 2, cEye); // 宝石
+
+        // 目
+        gp(26, 19, 3, 2, cEye);
+        gp(35, 19, 3, 2, cEye);
+        gp(27, 19, 1, 1, '#ffffff');
+        gp(36, 19, 1, 1, '#ffffff');
+
+        // 口
+        gp(30, 23, 4, 1, '#000000');
+
+        // 足
+        gp(24, 50 + legOffset, 5, 6, isGray ? '#444444' : '#1e293b');
+        gp(35, 50 - legOffset, 5, 6, isGray ? '#444444' : '#1e293b');
+
+        // 巨大な杖
+        const staffY = 16 + (isStep2 ? -2 : 0);
+        gp(48, staffY, 3, 34, isGray ? '#777777' : '#78350f');
+        gp(46, staffY - 4, 7, 5, cCrown);
+        gp(48, staffY - 7, 3, 3, cEye);
+
+        // 手
+        gp(46, staffY + 18, 4, 4, cSkin);
+
+      } else if (dir === 1) { // UP (Back)
+        gp(18, 12, 4, 8, cCrownDark);
+        gp(14, 8, 4, 6, cCrownDark);
+        gp(42, 12, 4, 8, cCrownDark);
+        gp(46, 8, 4, 6, cCrownDark);
+
+        gp(12, 24, 40, 28, cCape);
+        gp(10, 28, 44, 22, cCapeDark);
+
+        gp(22, 14, 20, 11, isGray ? '#222222' : '#0f172a'); // 後ろ髪
+        gp(24, 8, 16, 4, cCrownDark);
+
+        gp(24, 51 - legOffset, 5, 5, isGray ? '#333333' : '#0f172a');
+        gp(35, 51 + legOffset, 5, 5, isGray ? '#333333' : '#0f172a');
+
+      } else if (dir === 2) { // LEFT
+        gp(22, 12, 4, 8, cCrownDark);
+        gp(18, 8, 4, 6, cCrownDark);
+
+        gp(26, 24, 22, 28, cCape);
+        gp(22, 24, 18, 26, cBody);
+
+        gp(20, 14, 18, 12, cSkin);
+        gp(36, 14, 4, 12, isGray ? '#222222' : '#0f172a');
+
+        gp(22, 19, 3, 2, cEye);
+        gp(23, 19, 1, 1, '#ffffff');
+
+        gp(22, 8, 12, 4, cCrown);
+        gp(25, 4, 2, 4, cCrown);
+
+        gp(24, 50 + legOffset, 5, 6, isGray ? '#444444' : '#1e293b');
+        gp(31, 50 - legOffset, 5, 6, isGray ? '#333333' : '#0f172a');
+
+        const staffY = 16 + (isStep1 ? -2 : 0);
+        gp(12, staffY, 3, 34, isGray ? '#777777' : '#78350f');
+        gp(10, staffY - 4, 7, 5, cCrown);
+        gp(12, staffY - 7, 3, 3, cEye);
+
+        gp(14, staffY + 18, 4, 4, cSkin);
+
+      } else if (dir === 3) { // RIGHT
+        gp(38, 12, 4, 8, cCrownDark);
+        gp(42, 8, 4, 6, cCrownDark);
+
+        gp(16, 24, 22, 28, cCape);
+        gp(24, 24, 18, 26, cBody);
+
+        gp(26, 14, 18, 12, cSkin);
+        gp(24, 14, 4, 12, isGray ? '#222222' : '#0f172a');
+
+        gp(39, 19, 3, 2, cEye);
+        gp(40, 19, 1, 1, '#ffffff');
+
+        gp(30, 8, 12, 4, cCrown);
+        gp(37, 4, 2, 4, cCrown);
+
+        gp(28, 50 - legOffset, 5, 6, isGray ? '#333333' : '#0f172a');
+        gp(35, 50 + legOffset, 5, 6, isGray ? '#444444' : '#1e293b');
+
+        const staffY = 16 + (isStep2 ? -2 : 0);
+        gp(49, staffY, 3, 34, isGray ? '#777777' : '#78350f');
+        gp(47, staffY - 4, 7, 5, cCrown);
+        gp(49, staffY - 7, 3, 3, cEye);
+
+        gp(46, staffY + 18, 4, 4, cSkin);
+      }
+
+      tCtx.restore();
+
+      // Upscale 2x
+      ctx.drawImage(tempCanvas, 0, 0, 64, 64, ox, oy, 128, 128);
+    }
+  }
+
+  scene.textures.addSpriteSheet(textureKey, canvas as unknown as HTMLImageElement, {
+    frameWidth,
+    frameHeight
+  });
+
+  return textureKey;
+}
+
+export function generateDragonSpritesheet(scene: Phaser.Scene): string {
+  const textureKey = 'dragon_spritesheet';
+
+  if (scene.textures.exists(textureKey)) {
+    return textureKey;
+  }
+
+  const frameWidth = 128;
+  const frameHeight = 128;
+  const cols = 4;
+  const rows = 4;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = frameWidth * cols;
+  canvas.height = frameHeight * rows;
+  const ctx = canvas.getContext('2d')!;
+  ctx.imageSmoothingEnabled = false;
+
+  const tempCanvas = document.createElement('canvas');
+  tempCanvas.width = 64;
+  tempCanvas.height = 64;
+  const tCtx = tempCanvas.getContext('2d')!;
+  tCtx.imageSmoothingEnabled = false;
+
+  const gp = (x: number, y: number, w: number, h: number, color: string) => {
+    tCtx.fillStyle = color;
+    tCtx.fillRect(x, y, w, h);
+  };
+
+  // Colors
+  const cBody = '#dc2626'; // 赤
+  const cBodyDark = '#991b1b'; // 深い赤
+  const cChest = '#fbbf24'; // 金色のお腹
+  const cWing = '#7f1d1d'; // 暗い赤の翼
+  const cWingHi = '#b91c1c'; // 翼の骨格
+  const cHorn = '#f3f4f6'; // 白い角
+  const cEye = '#10b981'; // 緑目
+
+  for (let dir = 0; dir < rows; dir++) {
+    for (let frame = 0; frame < cols; frame++) {
+      const ox = frame * frameWidth;
+      const oy = dir * frameHeight;
+
+      tCtx.clearRect(0, 0, 64, 64);
+      tCtx.save();
+
+      const isStep1 = frame === 1;
+      const isStep2 = frame === 3;
+      const bobY = (isStep1 || isStep2) ? -2 : 0;
+      const wingFlap = (isStep1 || isStep2) ? -4 : 0; // 羽ばたき
+      const legOffset = isStep1 ? 2 : (isStep2 ? -2 : 0);
+
+      tCtx.translate(0, bobY);
+
+      // 床の影 (巨大)
+      tCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+      tCtx.beginPath();
+      tCtx.ellipse(32, 56, 20, 6, 0, 0, Math.PI * 2);
+      tCtx.fill();
+
+      if (dir === 0) { // DOWN (Front)
+        // 翼
+        gp(6, 16 + wingFlap, 14, 18, cWing);
+        gp(4, 14 + wingFlap, 18, 4, cWingHi);
+        gp(44, 16 + wingFlap, 14, 18, cWing);
+        gp(42, 14 + wingFlap, 18, 4, cWingHi);
+
+        gp(14, 46, 6, 8, cBodyDark);
+
+        gp(20, 26, 24, 24, cBody);
+        gp(24, 30, 16, 16, cChest);
+
+        gp(26, 20, 12, 8, cBody);
+        gp(20, 10, 24, 14, cBody);
+        gp(24, 20, 16, 6, cBodyDark);
+
+        gp(16, 4, 4, 8, cHorn);
+        gp(12, 2, 4, 4, cHorn);
+        gp(44, 4, 4, 8, cHorn);
+        gp(48, 2, 4, 4, cHorn);
+
+        gp(24, 14, 3, 2, cEye);
+        gp(37, 14, 3, 2, cEye);
+        gp(25, 14, 1, 1, '#ffffff');
+        gp(38, 14, 1, 1, '#ffffff');
+
+        gp(26, 25, 2, 2, '#ffffff');
+        gp(36, 25, 2, 2, '#ffffff');
+
+        gp(16, 44 + legOffset, 6, 8, cBodyDark);
+        gp(42, 44 - legOffset, 6, 8, cBodyDark);
+
+      } else if (dir === 1) { // UP (Back)
+        gp(6, 16 + wingFlap, 14, 18, cWing);
+        gp(4, 14 + wingFlap, 18, 4, cWingHi);
+        gp(44, 16 + wingFlap, 14, 18, cWing);
+        gp(42, 14 + wingFlap, 18, 4, cWingHi);
+
+        gp(28, 48, 8, 10, cBodyDark);
+        gp(20, 24, 24, 26, cBodyDark);
+
+        gp(20, 10, 24, 15, cBodyDark);
+        gp(16, 4, 4, 8, cHorn);
+        gp(44, 4, 4, 8, cHorn);
+
+        gp(16, 46 - legOffset, 6, 7, cBodyDark);
+        gp(42, 46 + legOffset, 6, 7, cBodyDark);
+
+      } else if (dir === 2) { // LEFT
+        gp(40, 14 + wingFlap, 14, 18, cWing);
+        gp(38, 12 + wingFlap, 16, 4, cWingHi);
+
+        gp(42, 42, 12, 8, cBodyDark);
+        gp(22, 26, 22, 24, cBody);
+        gp(22, 30, 6, 14, cChest);
+
+        gp(18, 20, 10, 8, cBody);
+        gp(12, 10, 20, 14, cBody);
+        gp(8, 16, 10, 8, cBodyDark);
+
+        gp(28, 4, 4, 8, cHorn);
+        gp(32, 2, 4, 4, cHorn);
+
+        gp(16, 14, 3, 2, cEye);
+        gp(17, 14, 1, 1, '#ffffff');
+
+        gp(20, 44 + legOffset, 6, 8, cBodyDark);
+        gp(34, 44 - legOffset, 6, 8, cBodyDark);
+
+      } else if (dir === 3) { // RIGHT
+        gp(10, 14 + wingFlap, 14, 18, cWing);
+        gp(10, 12 + wingFlap, 16, 4, cWingHi);
+
+        gp(10, 42, 12, 8, cBodyDark);
+        gp(20, 26, 22, 24, cBody);
+        gp(36, 30, 6, 14, cChest);
+
+        gp(36, 20, 10, 8, cBody);
+        gp(32, 10, 20, 14, cBody);
+        gp(46, 16, 10, 8, cBodyDark);
+
+        gp(32, 4, 4, 8, cHorn);
+        gp(28, 2, 4, 4, cHorn);
+
+        gp(45, 14, 3, 2, cEye);
+        gp(46, 14, 1, 1, '#ffffff');
+
+        gp(24, 44 - legOffset, 6, 8, cBodyDark);
+        gp(38, 44 + legOffset, 6, 8, cBodyDark);
+      }
+
+      tCtx.restore();
+
+      // Upscale 2x
+      ctx.drawImage(tempCanvas, 0, 0, 64, 64, ox, oy, 128, 128);
+    }
+  }
+
+  scene.textures.addSpriteSheet(textureKey, canvas as unknown as HTMLImageElement, {
+    frameWidth,
+    frameHeight
+  });
+
+  return textureKey;
+}

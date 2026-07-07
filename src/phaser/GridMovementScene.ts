@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { generateHeroSpritesheet } from './HeroSpritesheet';
-import { generateSlimeSpritesheet, generateBatSpritesheet, generateGoblinSpritesheet } from './MonsterSpritesheets';
+import { generateSlimeSpritesheet, generateBatSpritesheet, generateGoblinSpritesheet, generateDemonKingSpritesheet, generateDragonSpritesheet } from './MonsterSpritesheets';
 import { generateObstacleTextures } from './ObstacleTextures';
 import { getEnemyAssetById, EnemyAsset, getAvailableEnemies } from '../data/EnemyAssets';
 import { getHeroStatusByLevel, getAllHeroStatus } from '../data/HeroStatusAssets';
@@ -274,6 +274,9 @@ export class GridMovementScene extends Phaser.Scene {
     generateGoblinSpritesheet(this, 'normal');
     generateGoblinSpritesheet(this, 'text');
     generateGoblinSpritesheet(this, 'grayscale');
+    generateDemonKingSpritesheet(this, 'normal');
+    generateDemonKingSpritesheet(this, 'grayscale');
+    generateDragonSpritesheet(this);
     generateObstacleTextures(this);
   }
 
@@ -520,6 +523,81 @@ export class GridMovementScene extends Phaser.Scene {
       this.anims.create({
         key: `goblin-idle-${key}-gray`,
         frames: [{ key: 'goblin_spritesheet_gray', frame: startFrame }],
+        frameRate: 1
+      });
+    });
+
+    // 魔王 & ドラゴンのアニメーション
+    const bossDirs: { key: Direction; row: number }[] = [
+      { key: 'down', row: 0 },
+      { key: 'up', row: 1 },
+      { key: 'left', row: 2 },
+      { key: 'right', row: 3 }
+    ];
+    bossDirs.forEach(({ key, row }) => {
+      const startFrame = row * 4;
+      
+      // 魔王カラー
+      this.anims.create({
+        key: `demon_king-walk-${key}`,
+        frames: this.anims.generateFrameNumbers('demon_king_spritesheet', {
+          start: startFrame,
+          end: startFrame + 3
+        }),
+        frameRate: 6,
+        repeat: -1
+      });
+      this.anims.create({
+        key: `demon_king-idle-${key}`,
+        frames: [{ key: 'demon_king_spritesheet', frame: startFrame }],
+        frameRate: 1
+      });
+
+      // 魔王白黒
+      this.anims.create({
+        key: `demon_king-walk-${key}-gray`,
+        frames: this.anims.generateFrameNumbers('demon_king_spritesheet_gray', {
+          start: startFrame,
+          end: startFrame + 3
+        }),
+        frameRate: 6,
+        repeat: -1
+      });
+      this.anims.create({
+        key: `demon_king-idle-${key}-gray`,
+        frames: [{ key: 'demon_king_spritesheet_gray', frame: startFrame }],
+        frameRate: 1
+      });
+
+      // ドラゴンカラー
+      this.anims.create({
+        key: `dragon-walk-${key}`,
+        frames: this.anims.generateFrameNumbers('dragon_spritesheet', {
+          start: startFrame,
+          end: startFrame + 3
+        }),
+        frameRate: 6,
+        repeat: -1
+      });
+      this.anims.create({
+        key: `dragon-idle-${key}`,
+        frames: [{ key: 'dragon_spritesheet', frame: startFrame }],
+        frameRate: 1
+      });
+
+      // ドラゴン白黒
+      this.anims.create({
+        key: `dragon-walk-${key}-gray`,
+        frames: this.anims.generateFrameNumbers('dragon_spritesheet', {
+          start: startFrame,
+          end: startFrame + 3
+        }),
+        frameRate: 6,
+        repeat: -1
+      });
+      this.anims.create({
+        key: `dragon-idle-${key}-gray`,
+        frames: [{ key: 'dragon_spritesheet', frame: startFrame }],
         frameRate: 1
       });
     });
@@ -1043,6 +1121,30 @@ export class GridMovementScene extends Phaser.Scene {
       return { texture: tex, anim: `bat-idle${suffix}` };
     }
 
+    // 魔王 (白黒/カラー)
+    if (enemyId === 'color_demon_king' || enemyId === 'gray_boss') {
+      const forceGray = enemyId === 'gray_boss' || isGray;
+      const tex = forceGray ? 'demon_king_spritesheet_gray' : 'demon_king_spritesheet';
+      const actualSuffix = forceGray ? '-gray' : '';
+      const animPrefix = action === 'walk' ? 'demon_king-walk' : 'demon_king-idle';
+      const cleanDir = (dir === 'up-left' || dir === 'up-right') ? 'up' : 
+                      (dir === 'down-left' || dir === 'down-right') ? 'down' : dir;
+      const finalDir = (cleanDir === 'idle' || cleanDir === 'up' || cleanDir === 'down' || cleanDir === 'left' || cleanDir === 'right') ? cleanDir : 'down';
+      return { texture: tex, anim: `${animPrefix}-${finalDir}${actualSuffix}` };
+    }
+
+    // ドラゴン
+    if (enemyId === 'color_dragon') {
+      const forceGray = isGray;
+      const tex = 'dragon_spritesheet';
+      const actualSuffix = forceGray ? '-gray' : '';
+      const animPrefix = action === 'walk' ? 'dragon-walk' : 'dragon-idle';
+      const cleanDir = (dir === 'up-left' || dir === 'up-right') ? 'up' : 
+                      (dir === 'down-left' || dir === 'down-right') ? 'down' : dir;
+      const finalDir = (cleanDir === 'idle' || cleanDir === 'up' || cleanDir === 'down' || cleanDir === 'left' || cleanDir === 'right') ? cleanDir : 'down';
+      return { texture: tex, anim: `${animPrefix}-${finalDir}${actualSuffix}` };
+    }
+
     // ゴブリン
     if (enemyId === 'color_goblin') {
       const tex = isGray ? 'goblin_spritesheet_gray' : 'goblin_spritesheet';
@@ -1523,6 +1625,15 @@ export class GridMovementScene extends Phaser.Scene {
       const lastMove = slime.lastMoveTime || 0;
       if (currentTime - lastMove < slime.speed) return;
 
+      if (slime.behavior === 'rarely') {
+        if (Math.random() < 0.8) {
+          // 80% chance to skip moving on this tick
+          // Still update lastMoveTime so they don't spam check every frame
+          slime.lastMoveTime = currentTime;
+          return;
+        }
+      }
+
       slime.lastMoveTime = currentTime;
 
       let nextDir: Direction | null = null;
@@ -1539,7 +1650,7 @@ export class GridMovementScene extends Phaser.Scene {
         }
       }
 
-      if (!nextDir || slime.behavior === 'random') {
+      if (!nextDir || slime.behavior === 'random' || slime.behavior === 'rarely') {
         const slimeDirs: Direction[] = [];
         if (slime.gridY > 0) slimeDirs.push('up');
         if (slime.gridY < this.gridRows - 1) slimeDirs.push('down');
@@ -2913,7 +3024,14 @@ export class GridMovementScene extends Phaser.Scene {
           // Use a default texture first, playMonsterAnim will instantly load and resolve the custom textures
           const bossSprite = this.add.sprite(sx * GRID_SIZE + GRID_SIZE / 2, sy * GRID_SIZE + GRID_SIZE / 2, defaultTex, 0);
           bossSprite.setDepth(9);
-          bossSprite.setScale(1.4);
+          
+          const isLargeBoss = ['gray_boss', 'color_demon_king', 'color_dragon'].includes(bossConfig.id);
+          if (isLargeBoss) {
+            bossSprite.setScale(1.0);
+            bossSprite.setOrigin(0.5, 0.875);
+          } else {
+            bossSprite.setScale(1.4);
+          }
 
           const newBoss: SlimeData = {
             id: `boss-${Math.random().toString(36).substring(2, 9)}`,

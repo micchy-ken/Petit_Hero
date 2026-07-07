@@ -478,6 +478,7 @@ export default function EnemyEditorPage() {
                 >
                   <option value="seek">勇者を追尾する</option>
                   <option value="random">ランダムに徘徊する</option>
+                  <option value="rarely">あまり動かない (徘徊)</option>
                   <option value="idle">待機 (動かない)</option>
                 </select>
               </div>
