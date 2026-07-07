@@ -38,4 +38,5 @@ export interface MapData {
   maxEnemies?: number | 'infinite'; // 出現数
   boss?: string;     // 最大1種類
   clearConditions?: MapClearConditions;
+  scenarioId?: string;
 }

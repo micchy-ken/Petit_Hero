@@ -2185,8 +2185,6 @@ export class GridMovementScene extends Phaser.Scene {
 
     // 目的地パルス
     this.targetMarker.clear();
-    this.targetMarker.lineStyle(2, 0xfacc15, 0.9);
-    this.targetMarker.strokeRect(targetGridX * GRID_SIZE + 4, targetGridY * GRID_SIZE + 4, GRID_SIZE - 8, GRID_SIZE - 8);
 
     // HD-2D ダストトレイル
     if (this.isHd2dEffectsEnabled) {
@@ -2349,12 +2347,17 @@ export class GridMovementScene extends Phaser.Scene {
         const genItemId = `artifact_gen_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
         
         // カスタムアイテムの生成
+        let artifactGraphic = '🏺';
+        if (cat === 'weapon') artifactGraphic = '⚔️';
+        else if (cat === 'armor') artifactGraphic = '🛡️';
+        else artifactGraphic = '💍';
+
         const generatedItem: any = {
           id: genItemId,
           name: displayName,
           type: 'equipment',
           equipmentType: cat === 'weapon' ? 'weapon' : (cat === 'armor' ? 'armor' : 'accessory'),
-          chestGraphic: '🏺',
+          chestGraphic: artifactGraphic,
           description: `秘境から発掘されたアーティファクト (${levelRangeStr})。${isLucky ? '限界突破した魔力を宿している。' : ''}`,
           attack: baseAtk,
           defense: baseDef
@@ -2451,7 +2454,35 @@ export class GridMovementScene extends Phaser.Scene {
         this.checkLevelUp();
             } else if (customItem) {
         if (customItem.type === 'equipment') {
-          const slot = customItem.equipmentType || 'weapon';
+          // equipmentTypeを推測または取得
+          let slot = customItem.equipmentType;
+          if (!slot) {
+            const name = customItem.name || '';
+            if (name.includes('剣') || name.includes('ブレード') || name.includes('ソード') || name.includes('刀') || name.includes('斧') || name.includes('弓') || name.includes('杖') || name.includes('ハンマー') || name.includes('ウェポン') || name.includes('アクス') || name.includes('ダガー')) {
+              slot = 'weapon';
+            } else if (name.includes('鎧') || name.includes('盾') || name.includes('シールド') || name.includes('アーマー') || name.includes('兜') || name.includes('ヘルム') || name.includes('ローブ') || name.includes('ベスト') || name.includes('プレート')) {
+              slot = 'armor';
+            } else if (name.includes('指輪') || name.includes('リング') || name.includes('ネックレス') || name.includes('アンクレット') || name.includes('オーブ') || name.includes('アミュレット') || name.includes('靴') || name.includes('ブーツ') || name.includes('ベルト')) {
+              slot = 'accessory';
+            } else if ((customItem.attack || 0) > 0 && (!(customItem.defense || 0) || (customItem.attack || 0) > (customItem.defense || 0))) {
+              slot = 'weapon';
+            } else if ((customItem.defense || 0) > 0) {
+              slot = 'armor';
+            } else {
+              slot = 'accessory';
+            }
+          }
+          if (!slot) slot = 'weapon';
+
+          // 表示用のアイコンを取得
+          let itemIcon = customItem.chestGraphic || '🎁';
+          const chestIcons = ['📦', '🎁', '💎', '⭐', '💀', '🔔', '💰', '👑', '🏺'];
+          if (chestIcons.includes(itemIcon)) {
+            if (slot === 'weapon') itemIcon = '⚔️';
+            else if (slot === 'armor') itemIcon = '🛡️';
+            else if (slot === 'accessory') itemIcon = '💍';
+          }
+
           const equippedId = slot === 'weapon' ? this.equippedWeaponId : (slot === 'armor' ? this.equippedArmorId : this.equippedAccessoryId);
           const currentEquipped = equippedId ? this.customItems.find((it: any) => it.id === equippedId) : null;
           const currentAtk = currentEquipped?.attack || 0;
@@ -2484,13 +2515,13 @@ export class GridMovementScene extends Phaser.Scene {
             }
             const elementStr = elementInfo.length > 0 ? ` (${elementInfo.join(', ')})` : '';
             
-            const equipMsg = `『${customItem.name}』を装備した！ ⚔️\n(攻撃力+${newAtk} 防御力+${newDef}${elementStr})\n${customItem.description || ''}`;
-            this.sendLog(`『${customItem.name}』を装備した！ ⚔️ (攻撃力+${newAtk} 防御力+${newDef})`, 'info');
+            const equipMsg = `『${customItem.name}』を装備した！ ${itemIcon}\n(攻撃力+${newAtk} 防御力+${newDef}${elementStr})\n${customItem.description || ''}`;
+            this.sendLog(`『${customItem.name}』を装備した！ ${itemIcon} (攻撃力+${newAtk} 防御力+${newDef})`, 'info');
             this.enqueueMessage('item', equipMsg);
           } else {
             const descText = customItem.description ? `\n${customItem.description}` : '';
-            const msg = `『${customItem.name}』(装備品)を手に入れた！ ✨ (攻撃力+${newAtk} 防御力+${newDef}) (Exp +5)${descText}`;
-            this.sendLog(`『${customItem.name}』を手に入れた！ ✨`, 'info');
+            const msg = `『${customItem.name}』(装備品)を手に入れた！ ${itemIcon} (攻撃力+${newAtk} 防御力+${newDef}) (Exp +5)${descText}`;
+            this.sendLog(`『${customItem.name}』を手に入れた！ ${itemIcon}`, 'info');
             this.enqueueMessage('item', msg);
           }
         } else {
@@ -3808,5 +3839,42 @@ export class GridMovementScene extends Phaser.Scene {
         }
       }
     });
+  }
+
+  public setHeroStateAndPosition(state: any, pos: { gridX: number; gridY: number; camGridX: number; camGridY: number } | null) {
+    if (state) {
+      if (state.level !== undefined) this.heroLevel = state.level;
+      if (state.hp !== undefined) this.heroHp = state.hp;
+      if (state.maxHp !== undefined) this.heroMaxHp = state.maxHp;
+      if (state.attack !== undefined) this.heroAttack = state.attack;
+      if (state.defense !== undefined) this.heroDefense = state.defense;
+      if (state.baseAttack !== undefined) this.baseHeroAttack = state.baseAttack;
+      if (state.baseDefense !== undefined) this.baseHeroDefense = state.baseDefense;
+      if (state.exp !== undefined) this.heroExp = state.exp;
+      if (state.equippedWeaponId !== undefined) this.equippedWeaponId = state.equippedWeaponId;
+      if (state.equippedArmorId !== undefined) this.equippedArmorId = state.equippedArmorId;
+      if (state.equippedAccessoryId !== undefined) this.equippedAccessoryId = state.equippedAccessoryId;
+      if (state.acquiredItems) {
+        this.acquiredItems = new Set(state.acquiredItems);
+      }
+      this.recalculateStats();
+    }
+    
+    if (pos) {
+      this.currentGridX = pos.gridX;
+      this.currentGridY = pos.gridY;
+      this.currentCamGridX = pos.camGridX;
+      this.currentCamGridY = pos.camGridY;
+      
+      const { GRID_SIZE } = GridMovementScene;
+      if (this.hero) {
+        this.hero.setPosition(this.currentGridX * GRID_SIZE + GRID_SIZE / 2, this.currentGridY * GRID_SIZE + GRID_SIZE / 2);
+      }
+      if (this.cameras && this.cameras.main) {
+        this.cameras.main.scrollX = this.currentCamGridX * GRID_SIZE;
+        this.cameras.main.scrollY = this.currentCamGridY * GRID_SIZE;
+      }
+    }
+    this.notifyStateChange();
   }
 }

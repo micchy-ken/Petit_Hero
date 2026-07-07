@@ -6,7 +6,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 
 import { MapData } from '../types/MapData';
 import { CustomEvent, ConversationNode } from '../types/CustomEvent';
-import { fetchCustomEventsFromFirestore, fetchCustomItemsFromFirestore, fetchMagicDataFromFirestore } from '../lib/dbService';
+import { fetchCustomEventsFromFirestore, fetchCustomItemsFromFirestore, fetchMagicDataFromFirestore, saveScenarioProgress } from '../lib/dbService';
 import { CustomItem } from '../types/CustomItem';
 import { PORTRAITS } from '../data/portraits';
 
@@ -16,7 +16,44 @@ export interface PhaserGameContainerProps {
   initialMapId?: string;
   onTestPlayClear?: () => void;
   onTeleport?: (targetMapId: string) => void;
+  scenarioId?: string;
+  scenarioStatusMode?: 'individual' | 'shared';
+  initialHeroState?: any;
+  initialPosition?: any;
 }
+
+const getEquipmentIcon = (item: any) => {
+  if (!item) return '🎁';
+  if (item.type !== 'equipment') return item.chestGraphic || '🎁';
+  
+  // equipmentTypeを推測または取得
+  let eqType = item.equipmentType;
+  if (!eqType) {
+    const name = item.name || '';
+    if (name.includes('剣') || name.includes('ブレード') || name.includes('ソード') || name.includes('刀') || name.includes('斧') || name.includes('弓') || name.includes('杖') || name.includes('ハンマー') || name.includes('ウェポン') || name.includes('アクス') || name.includes('ダガー')) {
+      eqType = 'weapon';
+    } else if (name.includes('鎧') || name.includes('盾') || name.includes('シールド') || name.includes('アーマー') || name.includes('兜') || name.includes('ヘルム') || name.includes('ローブ') || name.includes('ベスト') || name.includes('プレート')) {
+      eqType = 'armor';
+    } else if (name.includes('指輪') || name.includes('リング') || name.includes('ネックレス') || name.includes('アンクレット') || name.includes('オーブ') || name.includes('アミュレット') || name.includes('靴') || name.includes('ブーツ') || name.includes('ベルト')) {
+      eqType = 'accessory';
+    } else if (item.attack > 0 && (!item.defense || item.attack > item.defense)) {
+      eqType = 'weapon';
+    } else if (item.defense > 0) {
+      eqType = 'armor';
+    } else {
+      eqType = 'accessory';
+    }
+  }
+
+  const chestIcons = ['📦', '🎁', '💎', '⭐', '💀', '🔔', '💰', '👑', '🏺'];
+  const currentGraphic = item.chestGraphic || '';
+  if (!currentGraphic || chestIcons.includes(currentGraphic)) {
+    if (eqType === 'weapon') return '⚔️';
+    if (eqType === 'armor') return '🛡️';
+    if (eqType === 'accessory') return '💍';
+  }
+  return currentGraphic;
+};
 
 const HeroGraphic = ({ scene, displayMode }: { scene: any, displayMode?: string }) => {
   const [dataUrl, setDataUrl] = useState<string>('');
@@ -64,7 +101,17 @@ const HeroGraphic = ({ scene, displayMode }: { scene: any, displayMode?: string 
   );
 };
 
-export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTestPlay, maps, initialMapId, onTestPlayClear, onTeleport }) => {
+export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
+  isTestPlay,
+  maps,
+  initialMapId,
+  onTestPlayClear,
+  onTeleport,
+  scenarioId,
+  scenarioStatusMode,
+  initialHeroState,
+  initialPosition
+}) => {
   const gameContainerRef = useRef<HTMLDivElement>(null);
   const gameInstanceRef = useRef<Phaser.Game | null>(null);
   const sceneRef = useRef<GridMovementScene | null>(null);
@@ -442,6 +489,11 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
 
             // Start from the correct initial position
             scene.resetPosition();
+
+            // Apply custom initial hero status or starting position from loaded save if present
+            if (initialHeroState || initialPosition) {
+              scene.setHeroStateAndPosition(initialHeroState, initialPosition);
+            }
           }
         }
 
@@ -464,6 +516,40 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
       sceneRef.current = null;
     };
   }, [isEventsLoaded]); // Run when events are loaded
+
+  // Auto-save gameplay progress for the selected scenario in background
+  useEffect(() => {
+    if (!scenarioId || isTestPlay || !heroState) return;
+
+    const timer = setTimeout(() => {
+      saveScenarioProgress(scenarioId, scenarioStatusMode || 'individual', {
+        position: {
+          mapId: initialMapId || 'map_beginning',
+          gridX: heroState.gridX,
+          gridY: heroState.gridY,
+          camGridX: heroState.camGridX,
+          camGridY: heroState.camGridY
+        },
+        heroState: {
+          hp: heroState.hp,
+          maxHp: heroState.maxHp,
+          attack: heroState.attack,
+          defense: heroState.defense,
+          level: heroState.level,
+          exp: heroState.exp,
+          requiredExp: heroState.requiredExp,
+          acquiredItems: heroState.acquiredItems || [],
+          equippedWeaponId: heroState.equippedWeaponId || null,
+          equippedArmorId: heroState.equippedArmorId || null,
+          equippedAccessoryId: heroState.equippedAccessoryId || null,
+          baseAttack: heroState.baseAttack || 5,
+          baseDefense: heroState.baseDefense || 0
+        }
+      });
+    }, 2000); // Throttle writes by saving 2 seconds after last movement/change
+
+    return () => clearTimeout(timer);
+  }, [heroState, scenarioId, scenarioStatusMode, initialMapId, isTestPlay]);
 
   // Watch for initialMapId changes (e.g. teleporting)
   useEffect(() => {
@@ -916,13 +1002,6 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                   主人公ステータス設定を開く
                 </button>
                 <button
-                  onClick={() => navigate('/editor/event')}
-                  className="flex items-center justify-center gap-2 w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-colors border border-amber-500"
-                >
-                  <MessageSquare className="w-5 h-5 text-amber-200" />
-                  イベントエディターを開く
-                </button>
-                <button
                   onClick={() => navigate('/editor/item')}
                   className="flex items-center justify-center gap-2 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-colors border border-indigo-500"
                 >
@@ -1148,7 +1227,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                           {eq ? (
                             <div className="flex justify-between items-center bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm text-sm">
                               <div className="flex items-center gap-2.5">
-                                <span className="text-xl">{eq.chestGraphic || slot.icon}</span>
+                                <span className="text-xl">{getEquipmentIcon(eq)}</span>
                                 <div>
                                   <div className="font-bold text-slate-800">{eq.name}</div>
                                   <div className="text-[10px] text-slate-500 flex flex-wrap gap-1 font-bold mt-0.5">
@@ -1230,7 +1309,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({ isTest
                           >
                             <div className="flex items-center gap-2 overflow-hidden flex-1">
                               <div className="relative flex-shrink-0 w-8 h-8 bg-slate-100 rounded flex items-center justify-center border border-slate-200">
-                                <span className="text-lg">{item.chestGraphic || '🎁'}</span>
+                                <span className="text-lg">{getEquipmentIcon(item)}</span>
                                 {isEquipped && (
                                   <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] font-extrabold w-4 h-4 rounded-full border border-white flex items-center justify-center shadow-sm">
                                     E

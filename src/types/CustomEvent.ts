@@ -10,4 +10,5 @@ export interface CustomEvent {
   name: string;
   type: 'conversation';
   nodes: ConversationNode[];
+  mapId?: string;
 }

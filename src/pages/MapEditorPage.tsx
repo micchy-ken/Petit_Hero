@@ -1,15 +1,50 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Box, Gem, Zap, Plus, Map as MapIcon, Save, Settings, Play, Loader2, RefreshCw, Check, AlertCircle, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ArrowLeft, Box, Gem, Zap, Plus, Map as MapIcon, Save, Settings, Play, Loader2, RefreshCw, Check, AlertCircle, Trash2, MessageSquare } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MapData } from '../types/MapData';
 import { getAvailableEnemies, getAvailableBosses } from '../data/EnemyAssets';
 import { PhaserGameContainer } from '../components/PhaserGameContainer';
 import { allMaps } from '../data/maps';
-import { fetchMapsFromFirestore, saveMapToFirestore, deleteMapFromFirestore, fetchEnemyAssetsFromFirestore, fetchCustomEventsFromFirestore, fetchCustomItemsFromFirestore } from '../lib/dbService';
-import { CustomEvent } from '../types/CustomEvent';
+import { fetchMapsFromFirestore, saveMapToFirestore, deleteMapFromFirestore, fetchEnemyAssetsFromFirestore, fetchCustomEventsFromFirestore, fetchCustomItemsFromFirestore, saveCustomEventsToFirestore, fetchScenariosFromFirestore, saveScenariosToFirestore } from '../lib/dbService';
+import { Scenario } from '../types/Scenario';
+import { CustomEvent, ConversationNode } from '../types/CustomEvent';
 import { CustomItem } from '../types/CustomItem';
+import { PORTRAITS } from '../data/portraits';
 // @ts-ignore
 import grassBgUrl from '../../public/grass_bg_1782776475818.jpg';
+
+const getEquipmentIcon = (item: any) => {
+  if (!item) return '🎁';
+  if (item.type !== 'equipment') return item.chestGraphic || '🎁';
+  
+  // equipmentTypeを推測または取得
+  let eqType = item.equipmentType;
+  if (!eqType) {
+    const name = item.name || '';
+    if (name.includes('剣') || name.includes('ブレード') || name.includes('ソード') || name.includes('刀') || name.includes('斧') || name.includes('弓') || name.includes('杖') || name.includes('ハンマー') || name.includes('ウェポン') || name.includes('アクス') || name.includes('ダガー')) {
+      eqType = 'weapon';
+    } else if (name.includes('鎧') || name.includes('盾') || name.includes('シールド') || name.includes('アーマー') || name.includes('兜') || name.includes('ヘルム') || name.includes('ローブ') || name.includes('ベスト') || name.includes('プレート')) {
+      eqType = 'armor';
+    } else if (name.includes('指輪') || name.includes('リング') || name.includes('ネックレス') || name.includes('アンクレット') || name.includes('オーブ') || name.includes('アミュレット') || name.includes('靴') || name.includes('ブーツ') || name.includes('ベルト')) {
+      eqType = 'accessory';
+    } else if (item.attack > 0 && (!item.defense || item.attack > item.defense)) {
+      eqType = 'weapon';
+    } else if (item.defense > 0) {
+      eqType = 'armor';
+    } else {
+      eqType = 'accessory';
+    }
+  }
+
+  const chestIcons = ['📦', '🎁', '💎', '⭐', '💀', '🔔', '💰', '👑', '🏺'];
+  const currentGraphic = item.chestGraphic || '';
+  if (!currentGraphic || chestIcons.includes(currentGraphic)) {
+    if (eqType === 'weapon') return '⚔️';
+    if (eqType === 'armor') return '🛡️';
+    if (eqType === 'accessory') return '💍';
+  }
+  return currentGraphic;
+};
 
 export default function MapEditorPage() {
   const navigate = useNavigate();
@@ -29,8 +64,35 @@ export default function MapEditorPage() {
     targetMapId?: string;
   } | null>(null);
 
-  const loadMapsFromFirestoreDB = async (isInitial = false) => {
+  // Scenario management states
+  const [scenarios, setScenarios] = useState<Scenario[]>([]);
+  const [currentScenarioId, setCurrentScenarioId] = useState<string>('scenario_test');
+  const [showNewScenarioForm, setShowNewScenarioForm] = useState(false);
+  const [newScenarioName, setNewScenarioName] = useState('');
+  const [newScenarioMode, setNewScenarioMode] = useState<'individual' | 'shared'>('individual');
+  const [showEditScenarioForm, setShowEditScenarioForm] = useState(false);
+  const [editScenarioName, setEditScenarioName] = useState('');
+  const [editScenarioMode, setEditScenarioMode] = useState<'individual' | 'shared'>('individual');
+
+  const loadMapsFromFirestoreDB = async (isInitial = false, targetScenarioId = currentScenarioId) => {
     try {
+      // Load scenarios first
+      const loadedScenarios = await fetchScenariosFromFirestore();
+      setScenarios(loadedScenarios);
+      
+      let activeScenarioId = targetScenarioId;
+      if (!loadedScenarios.some(s => s.id === activeScenarioId)) {
+        activeScenarioId = loadedScenarios[0]?.id || 'scenario_test';
+      }
+      setCurrentScenarioId(activeScenarioId);
+
+      // Initialize edit fields
+      const activeSc = loadedScenarios.find(s => s.id === activeScenarioId);
+      if (activeSc) {
+        setEditScenarioName(activeSc.name);
+        setEditScenarioMode(activeSc.statusMode);
+      }
+
       // Load custom enemy assets first to override local assets
       await fetchEnemyAssetsFromFirestore();
       
@@ -45,32 +107,15 @@ export default function MapEditorPage() {
         setNewItemParams(prev => ({ ...prev, itemId: loadedCustomItems[0].id }));
       }
 
-      // Load maps
-      let loadedMaps = await fetchMapsFromFirestore();
+      // Load maps for this scenario
+      let loadedMaps = await fetchMapsFromFirestore(activeScenarioId);
       
-      // Ensure map_beginning is always present in the selection list to preserve consistency
-      const hasBeginning = loadedMaps.some((m: MapData) => m.id === 'map_beginning');
-      if (!hasBeginning) {
-        const beginningMap = allMaps.find((m: MapData) => m.id === 'map_beginning') || allMaps[0];
-        loadedMaps = [beginningMap, ...loadedMaps];
-      }
       setMaps(loadedMaps);
       setInitialMaps(JSON.parse(JSON.stringify(loadedMaps)));
       
-      if (isInitial) {
-        // Select 'map_beginning' as the default current map if it is available
-        const defaultId = loadedMaps.some((m: MapData) => m.id === 'map_beginning')
-          ? 'map_beginning'
-          : (loadedMaps[0]?.id || '');
-        setCurrentMapId(defaultId);
-      } else {
-        // Keep current selection if it still exists
-        if (currentMapId && !loadedMaps.some((m: MapData) => m.id === currentMapId)) {
-          const defaultId = loadedMaps.some((m: MapData) => m.id === 'map_beginning')
-            ? 'map_beginning'
-            : (loadedMaps[0]?.id || '');
-          setCurrentMapId(defaultId);
-        }
+      if (isInitial || !loadedMaps.some((m: MapData) => m.id === currentMapId)) {
+        const beginningMap = loadedMaps.find((m: MapData) => m.id.startsWith('map_beginning_') || m.id === 'map_beginning') || loadedMaps[0];
+        setCurrentMapId(beginningMap?.id || '');
       }
     } catch (e: any) {
       console.warn("Fallback to bundled static maps:", e.message);
@@ -82,6 +127,84 @@ export default function MapEditorPage() {
           : (allMaps[0]?.id || '');
         setCurrentMapId(defaultId);
       }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleScenarioChange = async (targetScenarioId: string) => {
+    const anyDirty = maps.some(m => {
+      const original = initialMaps.find(o => o.id === m.id);
+      return !original ? true : JSON.stringify(m) !== JSON.stringify(original);
+    });
+    if (anyDirty) {
+      if (!confirm('マップデータに未反映の変更があります。破棄してシナリオを切り替えますか？')) {
+        return;
+      }
+    }
+    setIsLoading(true);
+    try {
+      await loadMapsFromFirestoreDB(false, targetScenarioId);
+    } catch (e: any) {
+      alert('シナリオ切り替えエラー: ' + e.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCreateScenarioInEditor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newScenarioName.trim()) return;
+
+    setIsLoading(true);
+    try {
+      const newId = `scenario_${Date.now()}`;
+      const newSc = {
+        id: newId,
+        name: newScenarioName.trim(),
+        statusMode: newScenarioMode,
+        createdAt: Date.now()
+      };
+
+      const updated = [...scenarios, newSc];
+      setScenarios(updated);
+      await saveScenariosToFirestore(updated);
+      
+      setNewScenarioName('');
+      setShowNewScenarioForm(false);
+
+      await loadMapsFromFirestoreDB(false, newId);
+      alert(`シナリオ「${newSc.name}」を作成しました。`);
+    } catch (err: any) {
+      alert('シナリオ作成エラー: ' + err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleUpdateScenarioInEditor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editScenarioName.trim()) return;
+
+    setIsLoading(true);
+    try {
+      const updated = scenarios.map(sc => {
+        if (sc.id === currentScenarioId) {
+          return {
+            ...sc,
+            name: editScenarioName.trim(),
+            statusMode: editScenarioMode
+          };
+        }
+        return sc;
+      });
+
+      setScenarios(updated);
+      await saveScenariosToFirestore(updated);
+      setShowEditScenarioForm(false);
+      alert('シナリオ設定を更新しました。');
+    } catch (err: any) {
+      alert('更新エラー: ' + err.message);
     } finally {
       setIsLoading(false);
     }
@@ -159,7 +282,127 @@ export default function MapEditorPage() {
   });
   // 障害配置用の状態
   const [obstacleType, setObstacleType] = useState<'transparent' | 'pillar' | 'rock' | 'peg' | 'wall'>('transparent');
-  const [mobileTab, setMobileTab] = useState<'map' | 'canvas' | 'tools'>('canvas');
+  
+  // 新しい統合タブ管理
+  const [activeTab, setActiveTab] = useState<'settings' | 'placement' | 'events' | 'map'>('settings');
+
+  // モバイル初期表示時にマップを表示、およびPC版でのタブ状態補正
+  useEffect(() => {
+    if (window.innerWidth < 768) {
+      setActiveTab('map');
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 768 && activeTab === 'map') {
+        setActiveTab('settings');
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    if (window.innerWidth >= 768 && activeTab === 'map') {
+      setActiveTab('settings');
+    }
+    return () => window.removeEventListener('resize', handleResize);
+  }, [activeTab]);
+
+  // 会話イベントのプレビュー用状態
+  const [previewEvent, setPreviewEvent] = useState<CustomEvent | null>(null);
+  const [previewNodeIndex, setPreviewNodeIndex] = useState(0);
+
+  const playEvent = (event: CustomEvent) => {
+    if (event.nodes.length === 0) return;
+    setPreviewEvent(event);
+    setPreviewNodeIndex(0);
+  };
+
+  const nextPreviewNode = () => {
+    if (!previewEvent) return;
+    if (previewNodeIndex < previewEvent.nodes.length - 1) {
+      setPreviewNodeIndex(previewNodeIndex + 1);
+    } else {
+      setPreviewEvent(null);
+    }
+  };
+
+  const addEvent = () => {
+    const newEvent: CustomEvent = {
+      id: `ev_${Date.now()}`,
+      name: '新規会話イベント',
+      type: 'conversation',
+      mapId: currentMap.id,
+      nodes: [
+        { id: `node_${Date.now()}`, speakerName: '村人', portraitId: 'villager', message: 'こんにちは！' }
+      ]
+    };
+    setCustomEvents([...customEvents, newEvent]);
+  };
+
+  const updateEventName = (id: string, name: string) => {
+    setCustomEvents(customEvents.map(ev => ev.id === id ? { ...ev, name } : ev));
+  };
+
+  const removeEvent = (id: string) => {
+    setCustomEvents(customEvents.filter(ev => ev.id !== id));
+  };
+
+  const addNode = (id: string) => {
+    setCustomEvents(customEvents.map(ev => {
+      if (ev.id === id) {
+        return {
+          ...ev,
+          nodes: [
+            ...ev.nodes,
+            {
+              id: `node_${Date.now()}`,
+              speakerName: '主人公',
+              portraitId: 'hero',
+              message: '...'
+            }
+          ]
+        };
+      }
+      return ev;
+    }));
+  };
+
+  const updateNode = (eventId: string, nodeIndex: number, field: keyof ConversationNode, value: string) => {
+    setCustomEvents(customEvents.map(ev => {
+      if (ev.id === eventId) {
+        const newNodes = [...ev.nodes];
+        const updatedNode = {
+          ...newNodes[nodeIndex],
+          [field]: value
+        };
+        
+        // 顔グラフィック変更時にデフォルト名前を自動設定
+        if (field === 'portraitId') {
+          if (value === 'hero') {
+            updatedNode.speakerName = '主人公';
+          } else if (value === 'villager') {
+            updatedNode.speakerName = '村人';
+          } else if (value === 'none') {
+            updatedNode.speakerName = '';
+          }
+        }
+        
+        newNodes[nodeIndex] = updatedNode;
+        return { ...ev, nodes: newNodes };
+      }
+      return ev;
+    }));
+  };
+
+  const removeNode = (eventId: string, nodeIndex: number) => {
+    setCustomEvents(customEvents.map(ev => {
+      if (ev.id === eventId) {
+        const newNodes = [...ev.nodes];
+        newNodes.splice(nodeIndex, 1);
+        return { ...ev, nodes: newNodes };
+      }
+      return ev;
+    }));
+  };
 
   const [showNewMapModal, setShowNewMapModal] = useState(false);
   const [newMapName, setNewMapName] = useState('');
@@ -470,7 +713,8 @@ export default function MapEditorPage() {
       bgImage: 'grass_bg_1782776475818.jpg',
       events: [],
       items: [],
-      enemies: []
+      enemies: [],
+      scenarioId: currentScenarioId
     };
     setMaps([...maps, newMap]);
     setCurrentMapId(newId);
@@ -555,12 +799,14 @@ export default function MapEditorPage() {
   };
 
   const handleSave = async (silent = false): Promise<boolean> => {
-    console.log("Attempting to save map to Firestore:", currentMap);
+    const mapToSave = { ...currentMap, scenarioId: currentScenarioId };
+    console.log("Attempting to save map to Firestore:", mapToSave);
     if (!silent) {
       setSaveStatus('saving');
     }
     try {
-      await saveMapToFirestore(currentMap);
+      await saveMapToFirestore(mapToSave);
+      await saveCustomEventsToFirestore(customEvents);
       if (!silent) {
         setSaveStatus('success');
         setTimeout(() => {
@@ -740,467 +986,859 @@ export default function MapEditorPage() {
         </div>
       </header>
       
-      {/* Mobile Tabs */}
-      <div className="flex md:hidden w-full bg-slate-800 border-b border-slate-700 sticky top-0 z-40">
-        <button 
-          onClick={() => setMobileTab('map')}
-          className={`flex-1 py-3 text-sm font-bold border-b-2 transition-colors ${mobileTab === 'map' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400'}`}
-        >
-          マップ選択
-        </button>
-        <button 
-          onClick={() => setMobileTab('canvas')}
-          className={`flex-1 py-3 text-sm font-bold border-b-2 transition-colors ${mobileTab === 'canvas' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400'}`}
-        >
-          キャンバス
-        </button>
-        <button 
-          onClick={() => setMobileTab('tools')}
-          className={`flex-1 py-3 text-sm font-bold border-b-2 transition-colors ${mobileTab === 'tools' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400'}`}
-        >
-          ツール設定
-        </button>
+      {/* 統合ナビゲーションタブ (スマホ・PC共通) */}
+      <div className="w-full bg-slate-800 border-b border-slate-700 sticky top-0 z-40 shadow-md">
+        <div className="max-w-7xl mx-auto flex">
+          <button 
+            onClick={() => setActiveTab('map')}
+            className={`flex-1 md:hidden py-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'map' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400'}`}
+          >
+            マップ表示
+          </button>
+          <button 
+            onClick={() => setActiveTab('settings')}
+            className={`flex-1 py-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'settings' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400'}`}
+          >
+            基本設定
+          </button>
+          <button 
+            onClick={() => setActiveTab('placement')}
+            className={`flex-1 py-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'placement' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400'}`}
+          >
+            配置
+          </button>
+          <button 
+            onClick={() => setActiveTab('events')}
+            className={`flex-1 py-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'events' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400'}`}
+          >
+            イベント
+          </button>
+        </div>
       </div>
 
       {/* エディターメイン画面 */}
       <div className="flex-1 w-full max-w-7xl p-2 md:p-6 flex flex-col md:flex-row gap-4 md:gap-6">
         
-        {/* 左側メニュー：鋼製パネル風 */}
-        <aside className={`${mobileTab === 'map' ? 'flex' : 'hidden'} md:flex w-full md:w-72 bg-slate-700 rounded-lg border border-slate-600 shadow-xl p-4 flex-col gap-6 shrink-0`} style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.1), 0 4px 6px rgba(0,0,0,0.3)' }}>
+        {/* 左側メニュー：統合タブパネル (PC版では常に表示、スマホ版では'map'タブ以外で表示) */}
+        <aside className={`${activeTab === 'map' ? 'hidden' : 'flex'} md:flex w-full md:w-[460px] bg-slate-700 rounded-lg border border-slate-600 shadow-xl p-4 flex-col gap-4 shrink-0 overflow-y-auto max-h-[85vh]`} style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.1), 0 4px 6px rgba(0,0,0,0.3)' }}>
           
-          {/* マップ選択 / 新規作成 */}
-          <div className="flex flex-col gap-3">
-            <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider border-b border-slate-600 pb-1 flex items-center gap-2">
-              <MapIcon className="w-4 h-4" /> Select Map
-            </h2>
-            <div className="flex flex-col gap-2">
-              <select 
-                value={currentMapId}
-                onChange={(e) => handleMapChange(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 outline-none focus:border-slate-400"
-              >
-                {maps.map(m => (
-                  <option key={m.id} value={m.id}>{m.name} ({m.width}x{m.height})</option>
-                ))}
-              </select>
-              
-              <button 
-                onClick={async () => {
-                  const anyDirty = maps.some(m => {
-                    const original = initialMaps.find(o => o.id === m.id);
-                    return !original ? true : JSON.stringify(m) !== JSON.stringify(original);
-                  });
-                  if (anyDirty) {
-                    if (!confirm('未保存の変更があります。変更を破棄してFirestoreの最新データと同期しますか？')) {
-                      return;
-                    }
-                  }
-                  setIsLoading(true);
-                  try {
-                    await loadMapsFromFirestoreDB(false);
-                    alert('Firestoreの最新状態を同期しました。🔄');
-                  } catch (err: any) {
-                    alert('同期エラー: ' + err.message);
-                  } finally {
-                    setIsLoading(false);
-                  }
-                }}
-                className="flex items-center justify-center gap-2 w-full px-3 py-2 bg-blue-700 hover:bg-blue-600 rounded text-sm transition-colors border border-blue-500 shadow-inner"
-                title="Firestoreのマップデータを再読込して同期します"
-              >
-                <RefreshCw className="w-4 h-4" /> Firestore同期 (更新)
-              </button>
-              
-              <button 
-                onClick={() => setShowNewMapModal(true)}
-                className="flex items-center justify-center gap-2 w-full px-3 py-2 bg-emerald-700 hover:bg-emerald-600 rounded text-sm transition-colors border border-emerald-500 shadow-inner"
-              >
-                <Plus className="w-4 h-4" /> 新規マップ作成
-              </button>
+          {/* 1. 基本設定タブ */}
+          {(activeTab === 'settings' || activeTab === 'map') && (
+            <div className="flex flex-col gap-5 animate-in fade-in duration-200">
+              {/* シナリオ管理 */}
+              <div className="flex flex-col gap-3 bg-slate-800/40 p-3.5 rounded-xl border border-slate-600/50">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-emerald-400" /> シナリオ設定
+                  </h2>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => {
+                        setShowEditScenarioForm(!showEditScenarioForm);
+                        setShowNewScenarioForm(false);
+                      }}
+                      className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold bg-indigo-500/10 border border-indigo-500/20 px-2 py-1 rounded"
+                    >
+                      設定変更
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowNewScenarioForm(!showNewScenarioForm);
+                        setShowEditScenarioForm(false);
+                      }}
+                      className="text-[10px] text-emerald-400 hover:text-emerald-300 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded"
+                    >
+                      新規作成
+                    </button>
+                  </div>
+                </div>
 
-              <button 
-                onClick={handleDeleteMap}
-                disabled={currentMapId === 'map_beginning'}
-                className="flex items-center justify-center gap-2 w-full px-3 py-2 bg-red-700 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm transition-colors border border-red-500 shadow-inner"
-              >
-                <Trash2 className="w-4 h-4" /> マップ削除
-              </button>
-            </div>
-          </div>
-
-          {/* 背景モード設定 */}
-          <div className="flex flex-col gap-3">
-            <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider border-b border-slate-600 pb-1 flex items-center gap-2">
-              <Settings className="w-4 h-4" /> Background Mode
-            </h2>
-            <div className="flex flex-col gap-2">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input 
-                  type="radio" 
-                  name="bgMode" 
-                  value="text-black" 
-                  checked={bgMode === 'text-black'}
-                  onChange={() => handleUpdateCurrentMap({ bgMode: 'text-black', bgImage: undefined })}
-                  className="accent-slate-400"
-                />
-                <span className="text-sm">テキスト黒背景</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input 
-                  type="radio" 
-                  name="bgMode" 
-                  value="stone-gray" 
-                  checked={bgMode === 'stone-gray'}
-                  onChange={() => handleUpdateCurrentMap({ bgMode: 'stone-gray', bgImage: undefined })}
-                  className="accent-slate-400"
-                />
-                <span className="text-sm">シンプル (グレイ石ころ)</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input 
-                  type="radio" 
-                  name="bgMode" 
-                  value="grass-green" 
-                  checked={bgMode === 'grass-green'}
-                  onChange={() => handleUpdateCurrentMap({ bgMode: 'grass-green', bgImage: undefined })}
-                  className="accent-slate-400"
-                />
-                <span className="text-sm">シンプル (緑草原)</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input 
-                  type="radio" 
-                  name="bgMode" 
-                  value="image" 
-                  checked={bgMode === 'image'}
-                  onChange={() => handleUpdateCurrentMap({ bgMode: 'image', bgImage: 'grass_bg_1782776475818.jpg' })}
-                  className="accent-slate-400"
-                />
-                <span className="text-sm">画像背景 (GrassBG等)</span>
-              </label>
-              
-              {bgMode === 'image' && (
-                <div className="pl-6 pt-1">
+                {/* Scenario Dropdown */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] text-slate-400 font-bold uppercase font-mono">アクティブ・シナリオ</label>
                   <select
-                    value={currentMap.bgImage || 'grass_bg_1782776475818.jpg'}
-                    onChange={(e) => handleUpdateCurrentMap({ bgImage: e.target.value })}
-                    className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-slate-400"
+                    value={currentScenarioId}
+                    onChange={(e) => handleScenarioChange(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-xs text-slate-200 outline-none focus:border-slate-400 font-bold"
                   >
-                    <option value="grass_bg_1782776475818.jpg">grass_bg_1782776475818.jpg</option>
+                    {scenarios.map(sc => (
+                      <option key={sc.id} value={sc.id}>
+                        {sc.name} ({sc.statusMode === 'individual' ? '個別保持' : '共通共有'})
+                      </option>
+                    ))}
                   </select>
+                </div>
+
+                {/* Form: New Scenario */}
+                {showNewScenarioForm && (
+                  <form onSubmit={handleCreateScenarioInEditor} className="space-y-2 pt-2 border-t border-slate-600/30 animate-in slide-in-from-top-2 duration-150">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] text-slate-400 font-bold font-mono">新規シナリオ名</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="例: 魔王討伐"
+                        value={newScenarioName}
+                        onChange={(e) => setNewScenarioName(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1.5 text-xs text-slate-200 outline-none"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] text-slate-400 font-bold font-mono">主人公ステータス保持</label>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setNewScenarioMode('individual')}
+                          className={`flex-1 py-1.5 rounded border text-[10px] font-bold transition-all ${
+                            newScenarioMode === 'individual'
+                              ? 'border-purple-500 bg-purple-500/10 text-purple-400'
+                              : 'border-slate-600 bg-slate-900 text-slate-400'
+                          }`}
+                        >
+                          個別
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNewScenarioMode('shared')}
+                          className={`flex-1 py-1.5 rounded border text-[10px] font-bold transition-all ${
+                            newScenarioMode === 'shared'
+                              ? 'border-blue-500 bg-blue-500/10 text-blue-400'
+                              : 'border-slate-600 bg-slate-900 text-slate-400'
+                          }`}
+                        >
+                          共通
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex gap-1.5 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setShowNewScenarioForm(false)}
+                        className="flex-1 py-1.5 bg-slate-800 text-slate-400 rounded text-[10px] font-bold"
+                      >
+                        キャンセル
+                      </button>
+                      <button
+                        type="submit"
+                        className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[10px] font-bold"
+                      >
+                        作成
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {/* Form: Edit Scenario */}
+                {showEditScenarioForm && (
+                  <form onSubmit={handleUpdateScenarioInEditor} className="space-y-2 pt-2 border-t border-slate-600/30 animate-in slide-in-from-top-2 duration-150">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] text-slate-400 font-bold font-mono">シナリオ名（編集）</label>
+                      <input
+                        type="text"
+                        required
+                        value={editScenarioName}
+                        onChange={(e) => setEditScenarioName(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1.5 text-xs text-slate-200 outline-none"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] text-slate-400 font-bold font-mono">主人公ステータス保持</label>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setEditScenarioMode('individual')}
+                          disabled={currentScenarioId === 'scenario_test'}
+                          className={`flex-1 py-1.5 rounded border text-[10px] font-bold transition-all ${
+                            editScenarioMode === 'individual'
+                              ? 'border-purple-500 bg-purple-500/10 text-purple-400'
+                              : 'border-slate-600 bg-slate-900 text-slate-400'
+                          } disabled:opacity-40`}
+                        >
+                          個別
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditScenarioMode('shared')}
+                          disabled={currentScenarioId === 'scenario_test'}
+                          className={`flex-1 py-1.5 rounded border text-[10px] font-bold transition-all ${
+                            editScenarioMode === 'shared'
+                              ? 'border-blue-500 bg-blue-500/10 text-blue-400'
+                              : 'border-slate-600 bg-slate-900 text-slate-400'
+                          } disabled:opacity-40`}
+                        >
+                          共通
+                        </button>
+                      </div>
+                      {currentScenarioId === 'scenario_test' && (
+                        <p className="text-[9px] text-amber-400">テストシナリオの保持設定は「個別」固定です。</p>
+                      )}
+                    </div>
+                    <div className="flex gap-1.5 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setShowEditScenarioForm(false)}
+                        className="flex-1 py-1.5 bg-slate-800 text-slate-400 rounded text-[10px] font-bold"
+                      >
+                        閉じる
+                      </button>
+                      <button
+                        type="submit"
+                        className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-[10px] font-bold"
+                      >
+                        更新
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+
+              {/* マップ選択 / 新規作成 */}
+              <div className="flex flex-col gap-3">
+                <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider border-b border-slate-600 pb-1 flex items-center gap-2">
+                  <MapIcon className="w-4 h-4 text-indigo-400" /> Select Map
+                </h2>
+                <div className="flex flex-col gap-2">
+                  <select 
+                    value={currentMapId}
+                    onChange={(e) => handleMapChange(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 outline-none focus:border-slate-400"
+                  >
+                    {maps.map(m => (
+                      <option key={m.id} value={m.id}>{m.name} ({m.width}x{m.height})</option>
+                    ))}
+                  </select>
+                  
+                  <button 
+                    onClick={async () => {
+                      const anyDirty = maps.some(m => {
+                        const original = initialMaps.find(o => o.id === m.id);
+                        return !original ? true : JSON.stringify(m) !== JSON.stringify(original);
+                      });
+                      if (anyDirty) {
+                        if (!confirm('未保存の変更があります。変更を破棄してFirestoreの最新データと同期しますか？')) {
+                          return;
+                        }
+                      }
+                      setIsLoading(true);
+                      try {
+                        await loadMapsFromFirestoreDB(false);
+                        alert('Firestoreの最新状態を同期しました。🔄');
+                      } catch (err: any) {
+                        alert('同期エラー: ' + err.message);
+                      } finally {
+                        setIsLoading(false);
+                      }
+                    }}
+                    className="flex items-center justify-center gap-2 w-full px-3 py-2 bg-blue-700 hover:bg-blue-600 rounded text-sm transition-colors border border-blue-500 shadow-inner"
+                    title="Firestoreのマップデータを再読込して同期します"
+                  >
+                    <RefreshCw className="w-4 h-4" /> Firestore同期 (更新)
+                  </button>
+                  
+                  <button 
+                    onClick={() => setShowNewMapModal(true)}
+                    className="flex items-center justify-center gap-2 w-full px-3 py-2 bg-emerald-700 hover:bg-emerald-600 rounded text-sm transition-colors border border-emerald-500 shadow-inner"
+                  >
+                    <Plus className="w-4 h-4" /> 新規マップ作成
+                  </button>
+
+                  <button 
+                    onClick={handleDeleteMap}
+                    disabled={currentMapId === 'map_beginning'}
+                    className="flex items-center justify-center gap-2 w-full px-3 py-2 bg-red-700 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm transition-colors border border-red-500 shadow-inner"
+                  >
+                    <Trash2 className="w-4 h-4" /> マップ削除
+                  </button>
+                </div>
+              </div>
+
+              {/* マップ固有設定 */}
+              <div className="flex flex-col gap-3 border-t border-slate-600 pt-4">
+                <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider pb-1">
+                  Map Config
+                </h2>
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-slate-400 font-bold uppercase">マップ表示名</label>
+                    <input 
+                      type="text"
+                      value={currentMap.name}
+                      onChange={(e) => handleUpdateCurrentMap({ name: e.target.value })}
+                      className="w-full bg-slate-800 border border-slate-600 rounded px-2.5 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                  <div className="flex gap-3">
+                    <div className="flex flex-col gap-1 w-1/2">
+                      <label className="text-xs text-slate-400 font-bold uppercase">幅 (Width)</label>
+                      <input 
+                        type="number"
+                        value={currentMap.width}
+                        onChange={(e) => handleUpdateCurrentMap({ width: Math.max(1, Number(e.target.value)) })}
+                        min={4}
+                        max={64}
+                        className="w-full bg-slate-800 border border-slate-600 rounded px-2.5 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1 w-1/2">
+                      <label className="text-xs text-slate-400 font-bold uppercase">高さ (Height)</label>
+                      <input 
+                        type="number"
+                        value={currentMap.height}
+                        onChange={(e) => handleUpdateCurrentMap({ height: Math.max(1, Number(e.target.value)) })}
+                        min={4}
+                        max={64}
+                        className="w-full bg-slate-800 border border-slate-600 rounded px-2.5 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 敵とボスの設定 */}
+              <div className="flex flex-col gap-3 border-t border-slate-600 pt-4">
+                <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider pb-1">
+                  Enemies & Boss
+                </h2>
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-slate-400 font-bold uppercase">通常敵 (最大3種)</label>
+                    {[0, 1, 2].map((index) => (
+                      <select
+                        key={index}
+                        value={(currentMap.enemies || [])[index] || ''}
+                        onChange={(e) => {
+                          const newEnemies = [...(currentMap.enemies || [])];
+                          newEnemies[index] = e.target.value;
+                          handleUpdateCurrentMap({ enemies: newEnemies.filter(v => v !== undefined && v !== '') });
+                        }}
+                        className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400 mb-1"
+                      >
+                        <option value="">なし</option>
+                        {getAvailableEnemies(bgMode).map(enemy => (
+                          <option key={enemy.id} value={enemy.id}>{enemy.name}</option>
+                        ))}
+                      </select>
+                    ))}
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-slate-400 font-bold uppercase">ボス (1種)</label>
+                    <select
+                      value={currentMap.boss || ''}
+                      onChange={(e) => handleUpdateCurrentMap({ boss: e.target.value || undefined })}
+                      className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                    >
+                      <option value="">なし</option>
+                      {getAvailableBosses(bgMode).map(boss => (
+                        <option key={boss.id} value={boss.id}>{boss.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1 mt-1">
+                    <label className="text-xs text-slate-400 font-bold uppercase">敵の出現数 (Max Enemies)</label>
+                    <select
+                      value={currentMap.maxEnemies === undefined || currentMap.maxEnemies === 'infinite' ? 'infinite' : currentMap.maxEnemies === 0 ? 'none' : String(currentMap.maxEnemies)}
+                      onChange={(e) => {
+                        let val: 'infinite' | number = 'infinite';
+                        if (e.target.value === 'infinite') val = 'infinite';
+                        else if (e.target.value === 'none') val = 0;
+                        else val = Number(e.target.value);
+                        handleUpdateCurrentMap({ maxEnemies: val });
+                      }}
+                      className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
+                    >
+                      <option value="none">なし (None)</option>
+                      <option value="infinite">無限 (Infinite)</option>
+                      <option value="5">5体</option>
+                      <option value="10">10体</option>
+                      <option value="20">20体</option>
+                      <option value="30">30体</option>
+                      <option value="50">50体</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* 背景モード設定 */}
+              <div className="flex flex-col gap-3 border-t border-slate-600 pt-4">
+                <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider pb-1 flex items-center gap-2">
+                  <Settings className="w-4 h-4 text-indigo-400" /> Background Mode
+                </h2>
+                <div className="flex flex-col gap-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input 
+                      type="radio" 
+                      name="bgMode" 
+                      value="text-black" 
+                      checked={bgMode === 'text-black'}
+                      onChange={() => handleUpdateCurrentMap({ bgMode: 'text-black', bgImage: undefined })}
+                      className="accent-slate-400"
+                    />
+                    <span className="text-sm">テキスト黒背景</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input 
+                      type="radio" 
+                      name="bgMode" 
+                      value="stone-gray" 
+                      checked={bgMode === 'stone-gray'}
+                      onChange={() => handleUpdateCurrentMap({ bgMode: 'stone-gray', bgImage: undefined })}
+                      className="accent-slate-400"
+                    />
+                    <span className="text-sm">シンプル (グレイ石ころ)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input 
+                      type="radio" 
+                      name="bgMode" 
+                      value="grass-green" 
+                      checked={bgMode === 'grass-green'}
+                      onChange={() => handleUpdateCurrentMap({ bgMode: 'grass-green', bgImage: undefined })}
+                      className="accent-slate-400"
+                    />
+                    <span className="text-sm">シンプル (緑草原)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input 
+                      type="radio" 
+                      name="bgMode" 
+                      value="image" 
+                      checked={bgMode === 'image'}
+                      onChange={() => handleUpdateCurrentMap({ bgMode: 'image', bgImage: 'grass_bg_1782776475818.jpg' })}
+                      className="accent-slate-400"
+                    />
+                    <span className="text-sm">画像背景 (GrassBG等)</span>
+                  </label>
+                  
+                  {bgMode === 'image' && (
+                    <div className="pl-6 pt-1">
+                      <select
+                        value={currentMap.bgImage || 'grass_bg_1782776475818.jpg'}
+                        onChange={(e) => handleUpdateCurrentMap({ bgImage: e.target.value })}
+                        className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-slate-400"
+                      >
+                        <option value="grass_bg_1782776475818.jpg">grass_bg_1782776475818.jpg</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 2. 配置モードタブ */}
+          {activeTab === 'placement' && (
+            <div className="flex flex-col gap-5 animate-in fade-in duration-200">
+              {/* 配置モード選択 */}
+              <div className="flex flex-col gap-3">
+                <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider border-b border-slate-600 pb-1">
+                  Placement Mode
+                </h2>
+                <div className="flex flex-col gap-2">
+                  <button 
+                    onClick={() => setPlaceMode('obstacle')}
+                    className={`flex items-center gap-2 w-full px-3 py-2 rounded text-sm transition-all ${
+                      placeMode === 'obstacle' ? 'bg-indigo-600 border border-indigo-500 shadow-inner text-white' : 'hover:bg-slate-600/50 text-slate-300'
+                    }`}
+                  >
+                    <Box className="w-4 h-4" />
+                    障害配置
+                  </button>
+                  <button 
+                    onClick={() => setPlaceMode('item')}
+                    className={`flex items-center gap-2 w-full px-3 py-2 rounded text-sm transition-all ${
+                      placeMode === 'item' ? 'bg-indigo-600 border border-indigo-500 shadow-inner text-white' : 'hover:bg-slate-600/50 text-slate-300'
+                    }`}
+                  >
+                    <Gem className="w-4 h-4" />
+                    アイテム配置
+                  </button>
+                  <button 
+                    onClick={() => setPlaceMode('event')}
+                    className={`flex items-center gap-2 w-full px-3 py-2 rounded text-sm transition-all ${
+                      placeMode === 'event' ? 'bg-indigo-600 border border-indigo-500 shadow-inner text-white' : 'hover:bg-slate-600/50 text-slate-300'
+                    }`}
+                  >
+                    <Zap className="w-4 h-4" />
+                    イベント配置
+                  </button>
+                </div>
+              </div>
+
+              {/* アイテム設定詳細 */}
+              {placeMode === 'item' && (
+                <div className="flex flex-col gap-3 border-t border-slate-600 pt-4">
+                  <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider pb-1">
+                    Item Properties
+                  </h2>
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-slate-400 font-bold uppercase">アイテムタイプ</label>
+                      <select 
+                        value={newItemParams.itemId}
+                        onChange={(e) => setNewItemParams({ ...newItemParams, itemId: e.target.value })}
+                        className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
+                      >
+                        {bgMode === 'text-black' && <option value="treasure_text">宝 (Text)</option>}
+                        
+                        <optgroup label="🏺 アーティファクト (ランダム生成)">
+                          <option value="artifact_weapon_lvl1_3">🏺 武器: 大剣 [Lv1-3]</option>
+                          <option value="artifact_armor_lvl1_3">🏺 防具: 全身鎧 [Lv1-3]</option>
+                          <option value="artifact_accessory_lvl1_3">🏺 装飾: 指輪 [Lv1-3]</option>
+                          
+                          <option value="artifact_weapon_lvl4_6">🏺 武器: 勇者の剣 [Lv4-6]</option>
+                          <option value="artifact_armor_lvl4_6">🏺 防具: 勇者の鎧 [Lv4-6]</option>
+                          <option value="artifact_accessory_lvl4_6">🏺 装飾: 勇者のネックレス [Lv4-6]</option>
+                          
+                          <option value="artifact_weapon_lvl7_9">🏺 武器: 伝説の剣 [Lv7-9]</option>
+                          <option value="artifact_armor_lvl7_9">🏺 防具: 伝説の鎧 [Lv7-9]</option>
+                          <option value="artifact_accessory_lvl7_9">🏺 装飾: 伝説 of ネックレス [Lv7-9]</option>
+                          
+                          <option value="artifact_weapon_lvl10">🏺 武器: オリハルコンソード [Lv10]</option>
+                          <option value="artifact_armor_lvl10">🏺 防具: オリハルコンアーマー [Lv10]</option>
+                          <option value="artifact_accessory_lvl10">🏺 装飾: ゴッドオーブ [Lv10]</option>
+                        </optgroup>
+
+                        <optgroup label="📦 通常登録アイテム">
+                          {customItems.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.chestGraphic || '📦'} {item.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      </select>
+                    </div>
+
+                    {/* アーティファクト仕様表 */}
+                    <div className="mt-3 bg-slate-800/90 p-3 rounded border border-slate-600 text-[11px] text-slate-300 shadow-inner">
+                      <div className="font-bold text-slate-200 mb-2 flex items-center gap-1.5 border-b border-slate-700 pb-1">
+                        <span className="text-amber-400">🏺</span> アーティファクト仕様一覧
+                      </div>
+                      <table className="w-full border-collapse text-left text-slate-300">
+                        <thead>
+                          <tr className="border-b border-slate-700 text-slate-400 font-semibold">
+                            <th className="pb-1 text-[10px]">レベル</th>
+                            <th className="pb-1 text-[10px]">武器 / 防具 / 装飾</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-700/50">
+                          <tr>
+                            <td className="py-1 font-bold text-cyan-400">1〜3</td>
+                            <td className="py-1">大剣 / 全身鎧 / 指輪</td>
+                          </tr>
+                          <tr>
+                            <td className="py-1 font-bold text-cyan-400">4〜6</td>
+                            <td className="py-1 text-[10px]">勇者の剣 / 鎧 / ネックレス</td>
+                          </tr>
+                          <tr>
+                            <td className="py-1 font-bold text-cyan-400">7〜9</td>
+                            <td className="py-1 text-[10px]">伝説の剣 / 鎧 / アンクレット</td>
+                          </tr>
+                          <tr>
+                            <td className="py-1 font-bold text-cyan-400">10</td>
+                            <td className="py-1 text-[10px]">オリハルコン剣 / 鎧 / ゴッドオーブ</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 障害設定詳細 */}
+              {placeMode === 'obstacle' && (
+                <div className="flex flex-col gap-3 border-t border-slate-600 pt-4">
+                  <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider pb-1">
+                    Obstacle Properties
+                  </h2>
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-slate-400 font-bold uppercase mb-1">障害物の種類</label>
+                      <div className="flex flex-col gap-2">
+                        {[
+                          { id: 'transparent', name: '透明の障害 (🫥)', desc: '視覚的には透明。エディタのみ表示。' },
+                          { id: 'pillar', name: '柱 (🏛️)', desc: '高精細なピクセルアート。' },
+                          { id: 'rock', name: '岩 (🪨)', desc: '高精細なピクセルアート。' },
+                          { id: 'peg', name: '杭 (🪵)', desc: '高精細なピクセルアート。' },
+                          { id: 'wall', name: '壁 (🧱)', desc: '高精細なピクセルアート。' }
+                        ].map((type) => (
+                          <button
+                            key={type.id}
+                            type="button"
+                            onClick={() => setObstacleType(type.id as any)}
+                            className={`flex flex-col items-start w-full px-3 py-2 rounded text-left transition-all border ${
+                              obstacleType === type.id 
+                                ? 'bg-slate-600 border-slate-400 text-white shadow' 
+                                : 'bg-slate-800/40 border-slate-700/60 text-slate-300 hover:bg-slate-800/80'
+                            }`}
+                          >
+                            <span className="font-bold text-xs">{type.name}</span>
+                            <span className="text-[10px] text-slate-400 mt-0.5">{type.desc}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* イベント設定詳細 */}
+              {placeMode === 'event' && (
+                <div className="flex flex-col gap-3 border-t border-slate-600 pt-4">
+                  <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider pb-1">
+                    Event Properties
+                  </h2>
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-slate-400 font-bold uppercase">イベントタイプ</label>
+                      <select 
+                        value={newEventParams.type}
+                        onChange={(e) => setNewEventParams({ ...newEventParams, type: e.target.value as any })}
+                        className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
+                      >
+                        <option value="start_point">初期値 (Start Point)</option>
+                        <option value="teleport">マップ移動 (Teleport)</option>
+                        <option value="monologue">モノローグ (Monologue)</option>
+                        <option value="custom_event">カスタムイベント (Custom Event)</option>
+                      </select>
+                    </div>
+
+                    {(newEventParams.type === 'custom_event' || newEventParams.type === 'start_point' || newEventParams.type === 'teleport') && (
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs text-slate-400 font-bold uppercase">連動イベント (任意)</label>
+                        <select 
+                          value={newEventParams.customEventId}
+                          onChange={(e) => setNewEventParams({ ...newEventParams, customEventId: e.target.value })}
+                          className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
+                        >
+                          <option value="">設定なし</option>
+                          {customEvents.filter(ev => ev.mapId === currentMap.id).map(ev => (
+                            <option key={ev.id} value={ev.id}>{ev.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {newEventParams.type === 'start_point' && (
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs text-slate-400 font-bold uppercase">元マップ指定</label>
+                        <select 
+                          value={newEventParams.startPointFromMap}
+                          onChange={(e) => setNewEventParams({ ...newEventParams, startPointFromMap: e.target.value })}
+                          className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
+                        >
+                          <option value="">設定なし (デフォルト開始位置)</option>
+                          {maps.map(m => (
+                            <option key={m.id} value={m.id}>{m.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {newEventParams.type === 'teleport' && (
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs text-slate-400 font-bold uppercase">移動先マップ</label>
+                        <select 
+                          value={newEventParams.teleportTargetMap}
+                          onChange={(e) => setNewEventParams({ ...newEventParams, teleportTargetMap: e.target.value })}
+                          className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
+                        >
+                          <option value="" disabled>選択してください</option>
+                          {maps.map(m => (
+                            <option key={m.id} value={m.id}>{m.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {newEventParams.type === 'monologue' && (
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs text-slate-400 font-bold uppercase">モノローグテキスト</label>
+                        <textarea 
+                          value={newEventParams.monologueText}
+                          onChange={(e) => setNewEventParams({ ...newEventParams, monologueText: e.target.value })}
+                          className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
+                          rows={3}
+                          placeholder="表示するテキストを入力"
+                        />
+                      </div>
+                    )}
+
+                    {(newEventParams.type === 'custom_event' || newEventParams.type === 'start_point' || newEventParams.type === 'teleport' || newEventParams.type === 'monologue') && (
+                      <div className="flex flex-col gap-1 mt-2">
+                        <label className="text-xs text-slate-400 font-bold uppercase">再生頻度設定</label>
+                        <select 
+                          value={newEventParams.playMode}
+                          onChange={(e) => setNewEventParams({ ...newEventParams, playMode: e.target.value as any })}
+                          className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
+                        >
+                          <option value="always">何度でも表示する (Always)</option>
+                          <option value="once_per_map">一回だけ表示 (マップ出入りでリセット)</option>
+                          <option value="once_global">ゲーム中一回だけしか表示しない</option>
+                        </select>
+                      </div>
+                    )}
+                    
+                    <div className="flex flex-col gap-1 mt-2 border-t border-slate-600 pt-2">
+                      <label className="text-xs text-slate-400 font-bold uppercase">固有条件 (踏破率)</label>
+                      <select 
+                        value={newEventParams.eventCondExpRate === null ? 'null' : String(newEventParams.eventCondExpRate)}
+                        onChange={(e) => setNewEventParams({ ...newEventParams, eventCondExpRate: e.target.value === 'null' ? null : Number(e.target.value) })}
+                        className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
+                      >
+                        <option value="null">なし (条件なし)</option>
+                        <option value="50">50%</option>
+                        <option value="80">80%</option>
+                        <option value="100">100%</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
-          </div>
-
-          {/* 配置モード設定 */}
-          <div className="flex flex-col gap-3">
-            <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider border-b border-slate-600 pb-1">
-              Placement Mode
-            </h2>
-            <div className="flex flex-col gap-2">
-              <button 
-                onClick={() => setPlaceMode('obstacle')}
-                className={`flex items-center gap-2 w-full px-3 py-2 rounded text-sm transition-all ${
-                  placeMode === 'obstacle' ? 'bg-slate-600 border border-slate-500 shadow-inner text-white' : 'hover:bg-slate-600/50 text-slate-300'
-                }`}
-              >
-                <Box className="w-4 h-4" />
-                障害配置
-              </button>
-              <button 
-                onClick={() => setPlaceMode('item')}
-                className={`flex items-center gap-2 w-full px-3 py-2 rounded text-sm transition-all ${
-                  placeMode === 'item' ? 'bg-slate-600 border border-slate-500 shadow-inner text-white' : 'hover:bg-slate-600/50 text-slate-300'
-                }`}
-              >
-                <Gem className="w-4 h-4" />
-                アイテム配置
-              </button>
-              <button 
-                onClick={() => setPlaceMode('event')}
-                className={`flex items-center gap-2 w-full px-3 py-2 rounded text-sm transition-all ${
-                  placeMode === 'event' ? 'bg-slate-600 border border-slate-500 shadow-inner text-white' : 'hover:bg-slate-600/50 text-slate-300'
-                }`}
-              >
-                <Zap className="w-4 h-4" />
-                イベント配置
-              </button>
-            </div>
-          </div>
-
-          {/* アイテム設定詳細 */}
-          {placeMode === 'item' && (
-            <div className="flex flex-col gap-3 mt-2 border-t border-slate-600 pt-4">
-              <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider pb-1">
-                Item Properties
-              </h2>
-              <div className="flex flex-col gap-3">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-400 font-bold uppercase">アイテムタイプ</label>
-                  <select 
-                    value={newItemParams.itemId}
-                    onChange={(e) => setNewItemParams({ ...newItemParams, itemId: e.target.value })}
-                    className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
-                  >
-                    {bgMode === 'text-black' && <option value="treasure_text">宝 (Text)</option>}
-                    
-                    <optgroup label="🏺 アーティファクト (ランダム生成)">
-                      <option value="artifact_weapon_lvl1_3">🏺 武器: 大剣 [Lv1-3]</option>
-                      <option value="artifact_armor_lvl1_3">🏺 防具: 全身鎧 [Lv1-3]</option>
-                      <option value="artifact_accessory_lvl1_3">🏺 装飾: 指輪 [Lv1-3]</option>
-                      
-                      <option value="artifact_weapon_lvl4_6">🏺 武器: 勇者の剣 [Lv4-6]</option>
-                      <option value="artifact_armor_lvl4_6">🏺 防具: 勇者の鎧 [Lv4-6]</option>
-                      <option value="artifact_accessory_lvl4_6">🏺 装飾: 勇者のネックレス [Lv4-6]</option>
-                      
-                      <option value="artifact_weapon_lvl7_9">🏺 武器: 伝説の剣 [Lv7-9]</option>
-                      <option value="artifact_armor_lvl7_9">🏺 防具: 伝説の鎧 [Lv7-9]</option>
-                      <option value="artifact_accessory_lvl7_9">🏺 装飾: 伝説のアンクレット [Lv7-9]</option>
-                      
-                      <option value="artifact_weapon_lvl10">🏺 武器: オリハルコンソード [Lv10]</option>
-                      <option value="artifact_armor_lvl10">🏺 防具: オリハルコンアーマー [Lv10]</option>
-                      <option value="artifact_accessory_lvl10">🏺 装飾: ゴッドオーブ [Lv10]</option>
-                    </optgroup>
-
-                    <optgroup label="📦 通常登録アイテム">
-                      {customItems.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.chestGraphic || '📦'} {item.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  </select>
-                </div>
-
-                {/* アーティファクト仕様表 */}
-                <div className="mt-3 bg-slate-800/90 p-3 rounded border border-slate-600 text-[11px] text-slate-300 shadow-inner">
-                  <div className="font-bold text-slate-200 mb-2 flex items-center gap-1.5 border-b border-slate-700 pb-1">
-                    <span className="text-amber-400">🏺</span> アーティファクト仕様一覧
-                  </div>
-                  <table className="w-full border-collapse text-left text-slate-300">
-                    <thead>
-                      <tr className="border-b border-slate-700 text-slate-400 font-semibold">
-                        <th className="pb-1 text-[10px]">レベル</th>
-                        <th className="pb-1 text-[10px]">武器 / 防具 / 装飾</th>
-                        <th className="pb-1 text-[10px]">属性付与 (10%で強化)</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-700/50">
-                      <tr>
-                        <td className="py-1 font-bold text-cyan-400">1〜3</td>
-                        <td className="py-1">大剣 / 全身鎧 / 指輪</td>
-                        <td className="py-1 text-emerald-400">2〜5 (10%で 10)</td>
-                      </tr>
-                      <tr>
-                        <td className="py-1 font-bold text-cyan-400">4〜6</td>
-                        <td className="py-1 text-[10px]">勇者の剣/鎧/ネックレス</td>
-                        <td className="py-1 text-emerald-400">4〜8 (10%で 15)</td>
-                      </tr>
-                      <tr>
-                        <td className="py-1 font-bold text-cyan-400">7〜9</td>
-                        <td className="py-1 text-[10px]">伝説の剣/鎧/アンクレット</td>
-                        <td className="py-1 text-emerald-400">7〜15 (10%で 20)</td>
-                      </tr>
-                      <tr>
-                        <td className="py-1 font-bold text-cyan-400">10</td>
-                        <td className="py-1 text-[10px]">オリハルコン剣/鎧/ゴッドオーブ</td>
-                        <td className="py-1 text-emerald-400">16〜20 (10%で 30)</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  <div className="text-[10px] text-slate-400 mt-2 leading-relaxed border-t border-slate-700/60 pt-1.5">
-                    ※ <span className="font-semibold text-slate-300">属性対象:</span> 地・水・火・風・光・闇の中からランダムで1つ。
-                    <br />
-                    ※ <span className="font-semibold text-slate-300">付与方法:</span> 武器なら攻撃属性、防具なら防御属性、装飾なら両方に1/2ずつ付与されます。
-                  </div>
-                </div>
-              </div>
-            </div>
           )}
 
-          {/* 障害設定詳細 */}
-          {placeMode === 'obstacle' && (
-            <div className="flex flex-col gap-3 mt-2 border-t border-slate-600 pt-4">
-              <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider pb-1">
-                Obstacle Properties
-              </h2>
-              <div className="flex flex-col gap-3">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-400 font-bold uppercase mb-1">障害物の種類</label>
-                  <div className="flex flex-col gap-2">
-                    {[
-                      { id: 'transparent', name: '透明の障害 (🫥)', desc: '視覚的には透明。エディタのみ表示。' },
-                      { id: 'pillar', name: '柱 (🏛️)', desc: '64x64の高精細なピクセルアート。' },
-                      { id: 'rock', name: '岩 (🪨)', desc: '64x64の高精細なピクセルアート。' },
-                      { id: 'peg', name: '杭 (🪵)', desc: '64x64の高精細なピクセルアート。' },
-                      { id: 'wall', name: '壁 (🧱)', desc: '64x64の高精細なピクセルアート。' }
-                    ].map((type) => (
-                      <button
-                        key={type.id}
-                        type="button"
-                        onClick={() => setObstacleType(type.id as any)}
-                        className={`flex flex-col items-start w-full px-3 py-2 rounded text-left transition-all border ${
-                          obstacleType === type.id 
-                            ? 'bg-slate-700/80 border-slate-400 text-white shadow' 
-                            : 'bg-slate-800/40 border-slate-700/60 text-slate-300 hover:bg-slate-800/80'
-                        }`}
-                      >
-                        <span className="font-bold text-xs">{type.name}</span>
-                        <span className="text-[10px] text-slate-400 mt-0.5">{type.desc}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
+          {/* 3. イベントエディタタブ */}
+          {activeTab === 'events' && (
+            <div className="flex flex-col gap-4 animate-in fade-in duration-200">
+              <div className="flex items-center justify-between border-b border-slate-600 pb-2">
+                <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-indigo-400" /> 会話イベント一覧
+                </h2>
+                <button
+                  onClick={addEvent}
+                  className="flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-bold transition-colors"
+                >
+                  <Plus className="w-3 h-3" /> 追加
+                </button>
               </div>
-            </div>
-          )}
 
-          {/* イベント設定詳細 */}
-          {placeMode === 'event' && (
-            <div className="flex flex-col gap-3 mt-2 border-t border-slate-600 pt-4">
-              <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider pb-1">
-                Event Properties
-              </h2>
-              <div className="flex flex-col gap-3">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-400 font-bold uppercase">イベントタイプ</label>
-                  <select 
-                    value={newEventParams.type}
-                    onChange={(e) => setNewEventParams({ ...newEventParams, type: e.target.value as any })}
-                    className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
-                  >
-                    <option value="start_point">初期値 (Start Point)</option>
-                    <option value="teleport">マップ移動 (Teleport)</option>
-                    <option value="monologue">モノローグ (Monologue)</option>
-                    <option value="custom_event">カスタムイベント (Custom Event)</option>
-                  </select>
+              {customEvents.filter(ev => ev.mapId === currentMap.id).length === 0 ? (
+                <div className="text-center py-6 text-slate-400 text-sm">
+                  このマップに登録されている会話イベントはありません。
                 </div>
+              ) : (
+                <div className="flex flex-col gap-4 max-h-[50vh] overflow-y-auto pr-1">
+                  {customEvents.filter(ev => ev.mapId === currentMap.id).map((ev) => (
+                    <div key={ev.id} className="bg-slate-800 border border-slate-600 rounded-lg p-3 flex flex-col gap-3 shadow">
+                      <div className="flex items-center justify-between gap-2 border-b border-slate-700 pb-2">
+                        <input
+                          type="text"
+                          value={ev.name}
+                          onChange={(e) => updateEventName(ev.id, e.target.value)}
+                          className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white font-bold flex-1 focus:border-indigo-500 outline-none"
+                          placeholder="イベント名"
+                        />
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => playEvent(ev)}
+                            className="p-1 hover:bg-slate-700 text-yellow-400 rounded transition-colors"
+                            title="会話劇をプレビュー"
+                          >
+                            <Play className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => removeEvent(ev.id)}
+                            className="p-1 hover:bg-slate-700 text-red-400 rounded transition-colors"
+                            title="イベント削除"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
 
-                {(newEventParams.type === 'custom_event' || newEventParams.type === 'start_point' || newEventParams.type === 'teleport') && (
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs text-slate-400 font-bold uppercase">連動イベント (任意)</label>
-                    <select 
-                      value={newEventParams.customEventId}
-                      onChange={(e) => setNewEventParams({ ...newEventParams, customEventId: e.target.value })}
-                      className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
-                    >
-                      <option value="">設定なし</option>
-                      {customEvents.map(ev => (
-                        <option key={ev.id} value={ev.id}>{ev.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+                      {/* Conversation Nodes */}
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-slate-400 font-bold uppercase">メッセージノード</span>
+                          <button
+                            onClick={() => addNode(ev.id)}
+                            className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold flex items-center gap-0.5"
+                          >
+                            <Plus className="w-2.5 h-2.5" /> ノード追加
+                          </button>
+                        </div>
 
-                {newEventParams.type === 'start_point' && (
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs text-slate-400 font-bold uppercase">元マップ指定</label>
-                    <select 
-                      value={newEventParams.startPointFromMap}
-                      onChange={(e) => setNewEventParams({ ...newEventParams, startPointFromMap: e.target.value })}
-                      className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
-                    >
-                      <option value="">設定なし (デフォルト開始位置)</option>
-                      {maps.map(m => (
-                        <option key={m.id} value={m.id}>{m.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+                        {ev.nodes.length === 0 ? (
+                          <div className="text-center py-2 text-[10px] text-slate-500">
+                            ノードがありません。
+                          </div>
+                        ) : (
+                          <div className="flex flex-col gap-2.5 max-h-[220px] overflow-y-auto bg-slate-900/50 p-2 rounded border border-slate-700/50">
+                            {ev.nodes.map((node, nodeIdx) => (
+                              <div key={node.id} className="bg-slate-900 border border-slate-700 p-2 rounded flex flex-col gap-2 relative">
+                                <button
+                                  onClick={() => removeNode(ev.id, nodeIdx)}
+                                  className="absolute top-1.5 right-1.5 text-slate-500 hover:text-red-400 transition-colors"
+                                  title="ノード削除"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
 
-                {newEventParams.type === 'teleport' && (
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs text-slate-400 font-bold uppercase">移動先マップ</label>
-                    <select 
-                      value={newEventParams.teleportTargetMap}
-                      onChange={(e) => setNewEventParams({ ...newEventParams, teleportTargetMap: e.target.value })}
-                      className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
-                    >
-                      <option value="" disabled>選択してください</option>
-                      {maps.map(m => (
-                        <option key={m.id} value={m.id}>{m.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+                                <div className="grid grid-cols-2 gap-2 mt-1">
+                                  <div className="flex flex-col gap-0.5">
+                                    <label className="text-[9px] text-slate-400 uppercase">話者グラフィック</label>
+                                    <div className="flex items-center gap-2">
+                                      {PORTRAITS[node.portraitId || 'none'] ? (
+                                        <div className="w-10 h-10 bg-slate-800 border border-indigo-500/50 rounded overflow-hidden shrink-0 flex items-center justify-center">
+                                          <img 
+                                            src={PORTRAITS[node.portraitId || 'none']} 
+                                            alt="portrait" 
+                                            className="w-full h-full object-cover animate-in fade-in duration-200"
+                                          />
+                                        </div>
+                                      ) : (
+                                        <div className="w-10 h-10 bg-slate-800 border border-slate-700 rounded shrink-0 flex items-center justify-center text-[9px] text-slate-500 font-bold">
+                                          なし
+                                        </div>
+                                      )}
+                                      <select
+                                        value={node.portraitId}
+                                        onChange={(e) => updateNode(ev.id, nodeIdx, 'portraitId', e.target.value)}
+                                        className="bg-slate-800 border border-slate-700 rounded px-1.5 py-1 text-[10px] text-slate-200 outline-none flex-1"
+                                      >
+                                        <option value="none">グラフィックなし</option>
+                                        <option value="hero">主人公</option>
+                                        <option value="villager">村人</option>
+                                      </select>
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-col gap-0.5">
+                                    <label className="text-[9px] text-slate-400 uppercase">話者名</label>
+                                    <input
+                                      type="text"
+                                      value={node.speakerName}
+                                      onChange={(e) => updateNode(ev.id, nodeIdx, 'speakerName', e.target.value)}
+                                      className="bg-slate-800 border border-slate-700 rounded px-1.5 py-1 text-[10px] text-slate-200 outline-none"
+                                      placeholder="話者名"
+                                    />
+                                  </div>
+                                </div>
 
-                {newEventParams.type === 'monologue' && (
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs text-slate-400 font-bold uppercase">モノローグテキスト</label>
-                    <textarea 
-                      value={newEventParams.monologueText}
-                      onChange={(e) => setNewEventParams({ ...newEventParams, monologueText: e.target.value })}
-                      className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
-                      rows={3}
-                      placeholder="表示するテキストを入力"
-                    />
-                  </div>
-                )}
-
-                {(newEventParams.type === 'custom_event' || newEventParams.type === 'start_point' || newEventParams.type === 'teleport' || newEventParams.type === 'monologue') && (
-                  <div className="flex flex-col gap-1 mt-2">
-                    <label className="text-xs text-slate-400 font-bold uppercase">再生頻度設定</label>
-                    <select 
-                      value={newEventParams.playMode}
-                      onChange={(e) => setNewEventParams({ ...newEventParams, playMode: e.target.value as any })}
-                      className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
-                    >
-                      <option value="always">何度でも表示する (Always)</option>
-                      <option value="once_per_map">一回だけ表示 (マップ出入りでリセット)</option>
-                      <option value="once_global">ゲーム中一回だけしか表示しない</option>
-                    </select>
-                  </div>
-                )}
-                
-                <div className="flex flex-col gap-1 mt-2 border-t border-slate-600 pt-2">
-                  <label className="text-xs text-slate-400 font-bold uppercase">固有条件 (踏破率)</label>
-                  <select 
-                    value={newEventParams.eventCondExpRate === null ? 'null' : String(newEventParams.eventCondExpRate)}
-                    onChange={(e) => setNewEventParams({ ...newEventParams, eventCondExpRate: e.target.value === 'null' ? null : Number(e.target.value) })}
-                    className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
-                  >
-                    <option value="null">なし (条件なし)</option>
-                    <option value="50">50%</option>
-                    <option value="80">80%</option>
-                    <option value="100">100%</option>
-                  </select>
+                                <div className="flex flex-col gap-0.5">
+                                  <label className="text-[9px] text-slate-400 uppercase">メッセージ内容</label>
+                                  <textarea
+                                    value={node.message}
+                                    onChange={(e) => updateNode(ev.id, nodeIdx, 'message', e.target.value)}
+                                    className="bg-slate-800 border border-slate-700 rounded px-1.5 py-1 text-[10px] text-slate-200 outline-none resize-none"
+                                    rows={2}
+                                    placeholder="セリフを入力してください"
+                                  />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-400 font-bold uppercase">固有条件 (捜索率)</label>
-                  <select 
-                    value={newEventParams.eventCondSearchRate === null ? 'null' : String(newEventParams.eventCondSearchRate)}
-                    onChange={(e) => setNewEventParams({ ...newEventParams, eventCondSearchRate: e.target.value === 'null' ? null : Number(e.target.value) })}
-                    className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
-                  >
-                    <option value="null">なし (条件なし)</option>
-                    <option value="50">50%</option>
-                    <option value="80">80%</option>
-                    <option value="100">100%</option>
-                  </select>
-                </div>
-
-                <div className="flex flex-col gap-1 mt-2 border-t border-slate-600 pt-2">
-                  <label className="text-xs text-slate-400 font-bold uppercase">固有条件 (撃破率)</label>
-                  <select 
-                    value={newEventParams.eventCondDefeatRate === null ? 'null' : String(newEventParams.eventCondDefeatRate)}
-                    onChange={(e) => setNewEventParams({ ...newEventParams, eventCondDefeatRate: e.target.value === 'null' ? null : Number(e.target.value) })}
-                    className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
-                  >
-                    <option value="null">なし (条件なし)</option>
-                    <option value="50">50%</option>
-                    <option value="80">80%</option>
-                    <option value="100">100%</option>
-                  </select>
-                </div>
-              </div>
+              )}
             </div>
           )}
         </aside>
 
         {/* 中央：マッププレビュー領域 */}
-        <main className={`${mobileTab === 'canvas' ? 'flex' : 'hidden'} md:flex flex-1 bg-slate-900 rounded-lg border-2 border-slate-700 p-2 flex-col items-center justify-center relative overflow-auto shadow-inner min-h-[50vh]`}>
+        <main className={`${activeTab === 'map' ? 'flex' : 'hidden'} md:flex flex-1 bg-slate-900 rounded-lg border-2 border-slate-700 p-2 flex-col items-center justify-center relative overflow-auto shadow-inner min-h-[50vh]`}>
           <div className={`w-full max-w-[600px] aspect-square rounded ${
             bgMode === 'text-black' ? 'bg-black' : 
             bgMode === 'stone-gray' ? 'bg-slate-400' : 
@@ -1333,7 +1971,7 @@ export default function MapEditorPage() {
                                   ? '宝' 
                                   : hasItem.itemId.startsWith('artifact_')
                                     ? '🏺'
-                                    : (customItems.find(it => it.id === hasItem.itemId)?.chestGraphic || '🎁')}
+                                    : getEquipmentIcon(customItems.find(it => it.id === hasItem.itemId))}
                               </div>
                            )}
                         </>
@@ -1353,115 +1991,6 @@ export default function MapEditorPage() {
             </div>
           </div>
         </main>
-
-        {/* 右側：マップ設定領域 */}
-        <aside className={`${mobileTab === 'tools' ? 'flex' : 'hidden'} md:flex w-full md:w-80 bg-slate-700 rounded-lg border border-slate-600 shadow-xl p-4 flex-col gap-6 overflow-y-auto shrink-0`} style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.1), 0 4px 6px rgba(0,0,0,0.3)' }}>
-          {/* マップ固有設定 */}
-          <div className="flex flex-col gap-3 border-b border-slate-600 pb-4">
-            <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider pb-1">
-              Map Config
-            </h2>
-            <div className="flex flex-col gap-3">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-slate-400 font-bold uppercase">マップ表示名</label>
-                <input 
-                  type="text"
-                  value={currentMap.name}
-                  onChange={(e) => handleUpdateCurrentMap({ name: e.target.value })}
-                  className="w-full bg-slate-800 border border-slate-600 rounded px-2.5 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-500"
-                />
-              </div>
-              <div className="flex gap-3">
-                <div className="flex flex-col gap-1 w-1/2">
-                  <label className="text-xs text-slate-400 font-bold uppercase">幅 (Width)</label>
-                  <input 
-                    type="number"
-                    value={currentMap.width}
-                    onChange={(e) => handleUpdateCurrentMap({ width: Math.max(1, Number(e.target.value)) })}
-                    min={4}
-                    max={64}
-                    className="w-full bg-slate-800 border border-slate-600 rounded px-2.5 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-500"
-                  />
-                </div>
-                <div className="flex flex-col gap-1 w-1/2">
-                  <label className="text-xs text-slate-400 font-bold uppercase">高さ (Height)</label>
-                  <input 
-                    type="number"
-                    value={currentMap.height}
-                    onChange={(e) => handleUpdateCurrentMap({ height: Math.max(1, Number(e.target.value)) })}
-                    min={4}
-                    max={64}
-                    className="w-full bg-slate-800 border border-slate-600 rounded px-2.5 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-500"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* 敵とボスの設定 */}
-          <div className="flex flex-col gap-3">
-            <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider border-b border-slate-600 pb-1">
-              Enemies & Boss
-            </h2>
-            <div className="flex flex-col gap-3">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-slate-400 font-bold uppercase">通常敵 (最大3種)</label>
-                {[0, 1, 2].map((index) => (
-                  <select
-                    key={index}
-                    value={(currentMap.enemies || [])[index] || ''}
-                    onChange={(e) => {
-                      const newEnemies = [...(currentMap.enemies || [])];
-                      newEnemies[index] = e.target.value;
-                      handleUpdateCurrentMap({ enemies: newEnemies.filter(v => v !== undefined && v !== '') });
-                    }}
-                    className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
-                  >
-                    <option value="">なし</option>
-                    {getAvailableEnemies(bgMode).map(enemy => (
-                      <option key={enemy.id} value={enemy.id}>{enemy.name}</option>
-                    ))}
-                  </select>
-                ))}
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-slate-400 font-bold uppercase">ボス (1種)</label>
-                <select
-                  value={currentMap.boss || ''}
-                  onChange={(e) => handleUpdateCurrentMap({ boss: e.target.value || undefined })}
-                  className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-500"
-                >
-                  <option value="">なし</option>
-                  {getAvailableBosses(bgMode).map(boss => (
-                    <option key={boss.id} value={boss.id}>{boss.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex flex-col gap-1 mt-2 border-t border-slate-600 pt-2">
-                <label className="text-xs text-slate-400 font-bold uppercase">敵の出現数 (Max Enemies)</label>
-                <select
-                  value={currentMap.maxEnemies === undefined || currentMap.maxEnemies === 'infinite' ? 'infinite' : currentMap.maxEnemies === 0 ? 'none' : String(currentMap.maxEnemies)}
-                  onChange={(e) => {
-                    let val: 'infinite' | number = 'infinite';
-                    if (e.target.value === 'infinite') val = 'infinite';
-                    else if (e.target.value === 'none') val = 0;
-                    else val = Number(e.target.value);
-                    handleUpdateCurrentMap({ maxEnemies: val });
-                  }}
-                  className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
-                >
-                  <option value="none">なし (None)</option>
-                  <option value="infinite">無限 (Infinite)</option>
-                  <option value="5">5体</option>
-                  <option value="10">10体</option>
-                  <option value="20">20体</option>
-                  <option value="30">30体</option>
-                  <option value="50">50体</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        </aside>
       </div>
 
       {/* 新規マップ作成モーダル */}
@@ -1567,7 +2096,7 @@ export default function MapEditorPage() {
                     className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 outline-none focus:border-emerald-500"
                   >
                     <option value="">設定なし</option>
-                    {customEvents.map(ev => (
+                    {customEvents.filter(ev => ev.mapId === currentMap.id).map(ev => (
                       <option key={ev.id} value={ev.id}>{ev.name}</option>
                     ))}
                   </select>

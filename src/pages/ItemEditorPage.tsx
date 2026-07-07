@@ -14,6 +14,23 @@ const CHEST_GRAPHICS = [
   { key: '🔔', label: 'ベルチェスト (🔔)' },
   { key: '💰', label: 'ゴールドチェスト (💰)' },
   { key: '👑', label: 'ロイヤルチェスト (👑)' },
+  // 武器 (Weapons)
+  { key: '⚔️', label: '⚔️ 双剣 / 武器' },
+  { key: '🗡️', label: '🗡️ 短剣 / 武器' },
+  { key: '🪓', label: '🪓 バトルアクス / 武器' },
+  { key: '🏹', label: '🏹 弓矢 / 武器' },
+  { key: '🪄', label: '🪄 魔法の杖 / 武器' },
+  { key: '🔨', label: '🔨 ハンマー / 武器' },
+  // 防具 (Armor)
+  { key: '🛡️', label: '🛡️ 盾 / 防具' },
+  { key: '🧥', label: '🧥 防護ローブ / 防具' },
+  { key: '🦺', label: '🦺 ベスト / 防具' },
+  { key: '👑', label: '👑 ヘルム / 防具' },
+  // 装飾品 (Accessories)
+  { key: '💍', label: '💍 指輪 / 装飾' },
+  { key: '📿', label: '📿 ネックレス / 装飾' },
+  { key: '🔮', label: '🔮 ゴッドオーブ / 装飾' },
+  { key: '🏺', label: '🏺 アーティファクト壺 / 装飾' },
 ];
 
 const ITEM_TYPES: { value: ItemType; label: string; color: string; description: string }[] = [
@@ -47,7 +64,7 @@ export default function ItemEditorPage() {
     // Seed default items if empty
     if (data.length === 0) {
       const defaultItems: CustomItem[] = [
-        { id: 'item_iron_sword', name: '鋼鉄の剣', type: 'equipment', chestGraphic: '📦', description: '攻撃力が上昇する頑丈な剣。' },
+        { id: 'item_iron_sword', name: '鋼鉄の剣', type: 'equipment', equipmentType: 'weapon', chestGraphic: '⚔️', description: '攻撃力が上昇する頑丈な剣。', attack: 10 },
         { id: 'item_fire_scroll', name: 'ファイアボルト', type: 'magic', chestGraphic: '🔥', description: '炎の弾を撃ち出す古代の呪文書。', targetMagicId: 'magic_fire' },
         { id: 'item_ice_scroll', name: 'アイスブラスト', type: 'magic', chestGraphic: '❄️', description: '冷たい吹雪を巻き起こす呪文書。', targetMagicId: 'magic_ice' },
         { id: 'item_teleport_boots', name: 'エルメスの靴', type: 'move_asset', chestGraphic: '💎', description: 'すばやく移動できるようになる不思議な靴。' },
@@ -81,18 +98,38 @@ export default function ItemEditorPage() {
       id: `item_${Date.now()}`,
       name: '新規アイテム',
       type: 'equipment',
-      chestGraphic: '📦',
-      description: 'アイテムの説明文。'
+      equipmentType: 'weapon',
+      chestGraphic: '⚔️',
+      description: 'アイテムの説明文。',
+      attack: 0,
+      defense: 0
     };
     setItems([...items, newItem]);
   };
 
   const updateItem = (index: number, field: keyof CustomItem, value: any) => {
     const newItems = [...items];
-    newItems[index] = {
-      ...newItems[index],
-      [field]: value
-    };
+    const item = { ...newItems[index] };
+
+    item[field] = value;
+
+    // タイプが「装備品」に変更された際、もしくは装備タイプが変更された際のアシスト処理
+    if (field === 'type' && value === 'equipment') {
+      if (!item.equipmentType) {
+        item.equipmentType = 'weapon';
+      }
+      if (!item.chestGraphic || item.chestGraphic === '📦') {
+        item.chestGraphic = '⚔️';
+      }
+    } else if (field === 'equipmentType') {
+      if (!item.chestGraphic || ['📦', '⚔️', '🛡️', '💍'].includes(item.chestGraphic)) {
+        if (value === 'weapon') item.chestGraphic = '⚔️';
+        else if (value === 'armor') item.chestGraphic = '🛡️';
+        else if (value === 'accessory') item.chestGraphic = '💍';
+      }
+    }
+
+    newItems[index] = item;
     setItems(newItems);
   };
 

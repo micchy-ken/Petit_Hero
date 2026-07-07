@@ -13,7 +13,8 @@ export const BeginningMap: MapData = {
       "y": 0,
       "type": "start_point",
       "data": {
-        "fromMap": null
+        "fromMap": null,
+        "eventId": "ev_beginning"
       }
     },
     {

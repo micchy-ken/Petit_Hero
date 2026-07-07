@@ -16,6 +16,14 @@ export const Map1782951234203: MapData = {
       }
     },
     {
+      "x": 4,
+      "y": 4,
+      "type": "custom_event",
+      "data": {
+        "eventId": "ev_villager"
+      }
+    },
+    {
       "x": 8,
       "y": 8,
       "type": "teleport",

@@ -7,12 +7,13 @@ import { CustomEvent } from '../types/CustomEvent';
 import { HeroStatus } from '../types/HeroStatus';
 import { DefaultHeroStatus, setDynamicHeroStatus } from '../data/HeroStatusAssets';
 import { CustomItem } from '../types/CustomItem';
+import { Scenario } from '../types/Scenario';
 
 /**
- * Fetch all maps from Firestore.
- * If Firestore is empty, seed it with initial default static maps and return them.
+ * Fetch all maps from Firestore for a specific scenario.
+ * If Firestore is empty, seed it with initial default static maps and return them for the 'scenario_test' scenario.
  */
-export async function fetchMapsFromFirestore(): Promise<MapData[]> {
+export async function fetchMapsFromFirestore(scenarioId: string = 'scenario_test'): Promise<MapData[]> {
   try {
     const mapsCol = collection(db, 'maps');
     const snapshot = await getDocs(mapsCol);
@@ -21,31 +22,68 @@ export async function fetchMapsFromFirestore(): Promise<MapData[]> {
       console.log('Firestore maps collection is empty. Seeding with default static maps...');
       const seededMaps: MapData[] = [];
       for (const map of staticMaps) {
+        const seededMap = { ...map, scenarioId: 'scenario_test' };
         const docRef = doc(db, 'maps', map.id);
-        await setDoc(docRef, map);
-        seededMaps.push(map);
+        await setDoc(docRef, seededMap);
+        seededMaps.push(seededMap);
       }
-      return seededMaps;
+      return seededMaps.filter(m => m.scenarioId === scenarioId);
     }
 
-    const maps: MapData[] = [];
+    let maps: MapData[] = [];
     snapshot.forEach((doc) => {
-      maps.push(doc.data() as MapData);
+      const data = doc.data() as MapData;
+      // Add default scenarioId if missing
+      if (!data.scenarioId) {
+        data.scenarioId = 'scenario_test';
+      }
+      maps.push(data);
     });
 
-    // Sort maps to ensure 'map_beginning' comes first, or order by ID to keep consistency
-    maps.sort((a, b) => {
-      if (a.id === 'map_beginning') return -1;
-      if (b.id === 'map_beginning') return 1;
+    // Filter maps by target scenarioId
+    let filteredMaps = maps.filter((m) => m.scenarioId === scenarioId);
+
+    // If a scenario has NO maps (e.g. newly created scenario), seed it with a copy of 'map_beginning'
+    if (filteredMaps.length === 0) {
+      console.log(`Scenario ${scenarioId} has no maps. Seeding a starting map...`);
+      const originalBeginning = staticMaps.find(m => m.id === 'map_beginning') || staticMaps[0];
+      const newMapId = `map_beginning_${scenarioId}`;
+      const newBeginningMap: MapData = {
+        ...originalBeginning,
+        id: newMapId,
+        name: '始まり',
+        scenarioId: scenarioId,
+        events: originalBeginning.events.map(ev => {
+          // If there is a teleport event, make sure it points to correct maps or adjust
+          return { ...ev };
+        })
+      };
+      
+      const docRef = doc(db, 'maps', newMapId);
+      await setDoc(docRef, newBeginningMap);
+      filteredMaps = [newBeginningMap];
+    }
+
+    // Sort maps to ensure starting map comes first
+    filteredMaps.sort((a, b) => {
+      const isBeginningA = a.id === 'map_beginning' || a.id.startsWith('map_beginning_');
+      const isBeginningB = b.id === 'map_beginning' || b.id.startsWith('map_beginning_');
+      if (isBeginningA) return -1;
+      if (isBeginningB) return 1;
       return a.id.localeCompare(b.id);
     });
 
-    console.log(`Loaded ${maps.length} maps from Firestore`);
-    return maps;
+    console.log(`Loaded ${filteredMaps.length} maps for scenario ${scenarioId} from Firestore`);
+    return filteredMaps;
   } catch (error) {
     console.error('Error fetching maps from Firestore:', error);
-    // Fallback to static maps if Firestore fails or network is offline
-    return staticMaps;
+    // Fallback to static maps (filtered to starting map for others)
+    if (scenarioId === 'scenario_test') {
+      return staticMaps.map(m => ({ ...m, scenarioId: 'scenario_test' }));
+    } else {
+      const originalBeginning = staticMaps.find(m => m.id === 'map_beginning') || staticMaps[0];
+      return [{ ...originalBeginning, id: `map_beginning_${scenarioId}`, scenarioId }];
+    }
   }
 }
 
@@ -56,9 +94,13 @@ export async function saveMapToFirestore(mapData: MapData): Promise<void> {
   if (!mapData || !mapData.id) {
     throw new Error('Invalid map data or ID');
   }
+  // Ensure a scenarioId exists
+  if (!mapData.scenarioId) {
+    mapData.scenarioId = 'scenario_test';
+  }
   const docRef = doc(db, 'maps', mapData.id);
   await setDoc(docRef, mapData);
-  console.log(`Saved map ${mapData.id} to Firestore`);
+  console.log(`Saved map ${mapData.id} (scenario: ${mapData.scenarioId}) to Firestore`);
 }
 
 /**
@@ -158,19 +200,75 @@ export async function fetchCustomEventsFromFirestore(): Promise<CustomEvent[]> {
     const docRef = doc(db, 'config', 'custom_events');
     const docSnap = await getDoc(docRef);
     
+    const defaultEvents: CustomEvent[] = [
+      {
+        id: 'ev_beginning',
+        name: '始まり',
+        type: 'conversation',
+        mapId: 'map_beginning',
+        nodes: [
+          { id: 'node_b1', speakerName: '主人公', portraitId: 'hero', message: 'ここは…？どうやら始まりの場所のようだ。' }
+        ]
+      },
+      {
+        id: 'ev_villager',
+        name: '村人',
+        type: 'conversation',
+        mapId: 'map_1782951234203',
+        nodes: [
+          { id: 'node_v1', speakerName: '村人', portraitId: 'villager', message: 'ようこそ！ここはHD-2Dの世界だよ。美しいグラフィックを楽しんでね。' }
+        ]
+      }
+    ];
+
     if (docSnap.exists()) {
       const data = docSnap.data();
-      const events = data.events || [];
+      let events = data.events || [];
+      if (events.length === 0) {
+        console.log('Custom events empty. Seeding defaults...');
+        await setDoc(docRef, { events: defaultEvents });
+        return defaultEvents;
+      }
+      
+      // mapId補正
+      events = events.map((ev: any) => {
+        if (!ev.mapId) {
+          if (ev.id === 'ev_beginning') return { ...ev, mapId: 'map_beginning' };
+          if (ev.id === 'ev_villager') return { ...ev, mapId: 'map_1782951234203' };
+          return { ...ev, mapId: 'map_beginning' };
+        }
+        return ev;
+      });
+
       console.log('Loaded custom events from Firestore');
       return events;
     } else {
-      console.log('No custom events found in Firestore. Seeding with empty array...');
-      await setDoc(docRef, { events: [] });
-      return [];
+      console.log('No custom events found in Firestore. Seeding defaults...');
+      await setDoc(docRef, { events: defaultEvents });
+      return defaultEvents;
     }
   } catch (error) {
     console.error('Error fetching custom events from Firestore:', error);
-    return [];
+    return [
+      {
+        id: 'ev_beginning',
+        name: '始まり',
+        type: 'conversation',
+        mapId: 'map_beginning',
+        nodes: [
+          { id: 'node_b1', speakerName: '主人公', portraitId: 'hero', message: 'ここは…？どうやら始まりの場所のようだ。' }
+        ]
+      },
+      {
+        id: 'ev_villager',
+        name: '村人',
+        type: 'conversation',
+        mapId: 'map_1782951234203',
+        nodes: [
+          { id: 'node_v1', speakerName: '村人', portraitId: 'villager', message: 'ようこそ！ここはHD-2Dの世界だよ。美しいグラフィックを楽しんでね。' }
+        ]
+      }
+    ];
   }
 }
 
@@ -239,5 +337,202 @@ export async function saveMagicDataToFirestore(magics: MagicData[]): Promise<voi
   await setDoc(docRef, { magics });
   console.log('Saved custom magics to Firestore');
 }
+
+/**
+ * Fetch scenarios from Firestore.
+ * If empty/missing, seed with the default 'scenario_test' (テスト) scenario.
+ */
+export async function fetchScenariosFromFirestore(): Promise<Scenario[]> {
+  try {
+    const docRef = doc(db, 'config', 'scenarios');
+    const docSnap = await getDoc(docRef);
+    
+    const defaultScenarios: Scenario[] = [
+      {
+        id: 'scenario_test',
+        name: 'テスト',
+        statusMode: 'individual',
+        createdAt: 1712345678000
+      }
+    ];
+
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      const scenarios = data.scenarios || [];
+      if (scenarios.length === 0) {
+        await setDoc(docRef, { scenarios: defaultScenarios });
+        return defaultScenarios;
+      }
+      return scenarios;
+    } else {
+      await setDoc(docRef, { scenarios: defaultScenarios });
+      return defaultScenarios;
+    }
+  } catch (error) {
+    console.error('Error fetching scenarios:', error);
+    return [
+      {
+        id: 'scenario_test',
+        name: 'テスト',
+        statusMode: 'individual',
+        createdAt: 1712345678000
+      }
+    ];
+  }
+}
+
+/**
+ * Save scenarios list to Firestore.
+ */
+export async function saveScenariosToFirestore(scenarios: Scenario[]): Promise<void> {
+  const docRef = doc(db, 'config', 'scenarios');
+  await setDoc(docRef, { scenarios });
+  console.log('Saved scenarios list to Firestore');
+}
+
+/**
+ * Save game progress (level, hp, maps, position, items) for a given scenario.
+ */
+export async function saveScenarioProgress(
+  scenarioId: string,
+  statusMode: 'individual' | 'shared',
+  progress: {
+    position: {
+      mapId: string;
+      gridX: number;
+      gridY: number;
+      camGridX: number;
+      camGridY: number;
+    };
+    heroState: {
+      hp: number;
+      maxHp: number;
+      attack: number;
+      defense: number;
+      level: number;
+      exp: number;
+      requiredExp: number;
+      acquiredItems: string[];
+      equippedWeaponId: string | null;
+      equippedArmorId: string | null;
+      equippedAccessoryId: string | null;
+      baseAttack: number;
+      baseDefense: number;
+    };
+  }
+): Promise<void> {
+  try {
+    // 1. Save position under specific scenario
+    const positionDocRef = doc(db, 'saves', scenarioId);
+    
+    // 2. If statusMode is individual, save heroState under scenario save doc.
+    // If statusMode is shared, save heroState under 'shared_status' doc.
+    if (statusMode === 'individual') {
+      await setDoc(positionDocRef, {
+        position: progress.position,
+        heroState: progress.heroState,
+        timestamp: Date.now()
+      });
+    } else {
+      await setDoc(positionDocRef, {
+        position: progress.position,
+        timestamp: Date.now()
+      });
+      const sharedStatusRef = doc(db, 'saves', 'shared_status');
+      await setDoc(sharedStatusRef, {
+        heroState: progress.heroState,
+        timestamp: Date.now()
+      });
+    }
+
+    // 3. Update last played scenario
+    const metaRef = doc(db, 'saves', 'metadata');
+    await setDoc(metaRef, {
+      lastPlayedScenarioId: scenarioId,
+      timestamp: Date.now()
+    });
+    console.log(`Saved scenario progress for ${scenarioId} (${statusMode})`);
+  } catch (error) {
+    console.error('Error saving scenario progress:', error);
+  }
+}
+
+/**
+ * Load game progress for a given scenario.
+ */
+export async function loadScenarioProgress(
+  scenarioId: string,
+  statusMode: 'individual' | 'shared'
+): Promise<{
+  position: {
+    mapId: string;
+    gridX: number;
+    gridY: number;
+    camGridX: number;
+    camGridY: number;
+  } | null;
+  heroState: {
+    hp: number;
+    maxHp: number;
+    attack: number;
+    defense: number;
+    level: number;
+    exp: number;
+    requiredExp: number;
+    acquiredItems: string[];
+    equippedWeaponId: string | null;
+    equippedArmorId: string | null;
+    equippedAccessoryId: string | null;
+    baseAttack: number;
+    baseDefense: number;
+  } | null;
+}> {
+  try {
+    const positionDocRef = doc(db, 'saves', scenarioId);
+    const posSnap = await getDoc(positionDocRef);
+    
+    let position = null;
+    let heroState = null;
+
+    if (posSnap.exists()) {
+      const data = posSnap.data();
+      position = data.position || null;
+      if (statusMode === 'individual') {
+        heroState = data.heroState || null;
+      }
+    }
+
+    if (statusMode === 'shared') {
+      const sharedStatusRef = doc(db, 'saves', 'shared_status');
+      const sharedSnap = await getDoc(sharedStatusRef);
+      if (sharedSnap.exists()) {
+        const data = sharedSnap.data();
+        heroState = data.heroState || null;
+      }
+    }
+
+    return { position, heroState };
+  } catch (error) {
+    console.error('Error loading scenario progress:', error);
+    return { position: null, heroState: null };
+  }
+}
+
+/**
+ * Fetch the last played scenario ID from Firestore metadata.
+ */
+export async function fetchLastPlayedScenarioId(): Promise<string | null> {
+  try {
+    const metaRef = doc(db, 'saves', 'metadata');
+    const snap = await getDoc(metaRef);
+    if (snap.exists()) {
+      return snap.data().lastPlayedScenarioId || null;
+    }
+  } catch (e) {
+    console.error('Error fetching last played scenario ID:', e);
+  }
+  return null;
+}
+
 
 
