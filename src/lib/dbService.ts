@@ -1,4 +1,4 @@
-import { db } from './firebase';
+import { db, auth } from './firebase';
 import { collection, doc, getDocs, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { MapData } from '../types/MapData';
 import { allMaps as staticMaps } from '../data/maps';
@@ -8,6 +8,53 @@ import { HeroStatus } from '../types/HeroStatus';
 import { DefaultHeroStatus, setDynamicHeroStatus } from '../data/HeroStatusAssets';
 import { CustomItem } from '../types/CustomItem';
 import { Scenario } from '../types/Scenario';
+
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+export interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  }
+}
+
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid || null,
+      email: auth.currentUser?.email || null,
+      emailVerified: auth.currentUser?.emailVerified || null,
+      isAnonymous: auth.currentUser?.isAnonymous || null,
+      tenantId: auth.currentUser?.tenantId || null,
+      providerInfo: auth.currentUser?.providerData?.map(provider => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || []
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
 
 /**
  * Fetch all maps from Firestore for a specific scenario.
@@ -454,6 +501,7 @@ export async function saveScenarioProgress(
     console.log(`Saved scenario progress for ${scenarioId} (${statusMode})`);
   } catch (error) {
     console.error('Error saving scenario progress:', error);
+    handleFirestoreError(error, OperationType.WRITE, 'saves/' + scenarioId);
   }
 }
 
@@ -514,6 +562,7 @@ export async function loadScenarioProgress(
     return { position, heroState };
   } catch (error) {
     console.error('Error loading scenario progress:', error);
+    handleFirestoreError(error, OperationType.GET, 'saves/' + scenarioId);
     return { position: null, heroState: null };
   }
 }
@@ -530,6 +579,7 @@ export async function fetchLastPlayedScenarioId(): Promise<string | null> {
     }
   } catch (e) {
     console.error('Error fetching last played scenario ID:', e);
+    handleFirestoreError(e, OperationType.GET, 'saves/metadata');
   }
   return null;
 }

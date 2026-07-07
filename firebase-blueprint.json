@@ -24,6 +24,28 @@
         "bossAssets": "map"
       },
       "indexes": []
+    },
+    "config": {
+      "description": "Global custom configurations (assets, status, events, items, scenarios)",
+      "fields": {
+        "id": "string",
+        "events": "array (optional)",
+        "items": "array (optional)",
+        "magics": "array (optional)",
+        "scenarios": "array (optional)",
+        "statusList": "array (optional)"
+      },
+      "indexes": []
+    },
+    "saves": {
+      "description": "Game progress saves (saves/<scenarioId>, saves/shared_status, saves/metadata)",
+      "fields": {
+        "position": "map (optional)",
+        "heroState": "map (optional)",
+        "timestamp": "number (optional)",
+        "lastPlayedScenarioId": "string (optional)"
+      },
+      "indexes": []
     }
   }
 }
