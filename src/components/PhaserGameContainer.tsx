@@ -604,6 +604,36 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
     sceneRef.current?.setAutoMode(nextMode);
   };
 
+  const handleNavigateToEditor = (path: string) => {
+    if (scenarioId && !isTestPlay && heroState) {
+      saveScenarioProgress(scenarioId, scenarioStatusMode || 'individual', {
+        position: {
+          mapId: initialMapId || 'map_beginning',
+          gridX: heroState.gridX,
+          gridY: heroState.gridY,
+          camGridX: heroState.camGridX,
+          camGridY: heroState.camGridY
+        },
+        heroState: {
+          hp: heroState.hp,
+          maxHp: heroState.maxHp,
+          attack: heroState.attack,
+          defense: heroState.defense,
+          level: heroState.level,
+          exp: heroState.exp,
+          requiredExp: heroState.requiredExp,
+          acquiredItems: heroState.acquiredItems || [],
+          equippedWeaponId: heroState.equippedWeaponId || null,
+          equippedArmorId: heroState.equippedArmorId || null,
+          equippedAccessoryId: heroState.equippedAccessoryId || null,
+          baseAttack: heroState.baseAttack || 5,
+          baseDefense: heroState.baseDefense || 0
+        }
+      });
+    }
+    navigate(path);
+  };
+
   useEffect(() => {
     if (sceneRef.current) {
       sceneRef.current.movementBehavior = movementBehavior;
@@ -993,35 +1023,35 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
               <div className="flex flex-col gap-6 animate-in fade-in">
                 {/* エディターへの遷移 */}
                 <button
-                  onClick={() => navigate(`/editor/map?scenarioId=${scenarioId || 'scenario_test'}&returnTo=settings`)}
+                  onClick={() => handleNavigateToEditor(`/editor/map?scenarioId=${scenarioId || 'scenario_test'}&returnTo=settings`)}
                   className="flex items-center justify-center gap-2 w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-colors border border-slate-700 mt-2"
                 >
                   <Map className="w-5 h-5 text-slate-300" />
                   マップ＆イベントエディターを開く
                 </button>
                 <button
-                  onClick={() => navigate(`/editor/enemy?scenarioId=${scenarioId || 'scenario_test'}&returnTo=settings`)}
+                  onClick={() => handleNavigateToEditor(`/editor/enemy?scenarioId=${scenarioId || 'scenario_test'}&returnTo=settings`)}
                   className="flex items-center justify-center gap-2 w-full bg-indigo-700 hover:bg-indigo-800 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-colors border border-indigo-600"
                 >
                   <Ghost className="w-5 h-5 text-indigo-300" />
                   エネミーエディターを開く
                 </button>
                 <button
-                  onClick={() => navigate(`/editor/hero?scenarioId=${scenarioId || 'scenario_test'}&returnTo=settings`)}
+                  onClick={() => handleNavigateToEditor(`/editor/hero?scenarioId=${scenarioId || 'scenario_test'}&returnTo=settings`)}
                   className="flex items-center justify-center gap-2 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-colors border border-emerald-500"
                 >
                   <Sword className="w-5 h-5 text-emerald-200" />
                   主人公ステータス設定を開く
                 </button>
                 <button
-                  onClick={() => navigate(`/editor/item?scenarioId=${scenarioId || 'scenario_test'}&returnTo=settings`)}
+                  onClick={() => handleNavigateToEditor(`/editor/item?scenarioId=${scenarioId || 'scenario_test'}&returnTo=settings`)}
                   className="flex items-center justify-center gap-2 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-colors border border-indigo-500"
                 >
                   <Package className="w-5 h-5 text-indigo-200" />
                   アイテムエディターを開く
                 </button>
                 <button
-                  onClick={() => navigate(`/editor/magic?scenarioId=${scenarioId || 'scenario_test'}&returnTo=settings`)}
+                  onClick={() => handleNavigateToEditor(`/editor/magic?scenarioId=${scenarioId || 'scenario_test'}&returnTo=settings`)}
                   className="flex items-center justify-center gap-2 w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-colors border border-purple-500"
                 >
                   <Sparkles className="w-5 h-5 text-purple-200" />

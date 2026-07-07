@@ -12,10 +12,11 @@ import {
   saveScenariosToFirestore
 } from '../lib/dbService';
 import { Scenario } from '../types/Scenario';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 export default function GamePage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [currentMapId, setCurrentMapId] = useState('map_beginning');
   const [allMaps, setAllMaps] = useState<MapData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -77,7 +78,8 @@ export default function GamePage() {
 
   useEffect(() => {
     if (scenarios.length > 0 && viewState !== 'playing') {
-      const urlParams = new URLSearchParams(window.location.search);
+      const search = location.search || (window.location.hash.includes('?') ? '?' + window.location.hash.split('?')[1] : '');
+      const urlParams = new URLSearchParams(search);
       const resumeId = urlParams.get('resumeScenarioId');
       if (resumeId) {
         const scToResume = scenarios.find(s => s.id === resumeId);
@@ -86,14 +88,16 @@ export default function GamePage() {
         }
       }
     }
-  }, [scenarios, viewState]);
+  }, [scenarios, viewState, location.search]);
 
   const launchGame = async (scenario: Scenario, continueGame: boolean) => {
-    const shouldShowSettings = window.location.search.includes('settings=true') || window.location.hash.includes('settings=true');
+    const search = location.search || (window.location.hash.includes('?') ? '?' + window.location.hash.split('?')[1] : '');
+    const urlParams = new URLSearchParams(search);
+    const shouldShowSettings = urlParams.get('settings') === 'true' || window.location.hash.includes('settings=true');
     setInitialShowSettings(shouldShowSettings);
 
     // Clear URL parameters to prevent settings menu from auto-opening
-    if (shouldShowSettings) {
+    if (shouldShowSettings || urlParams.get('resumeScenarioId')) {
       navigate('/', { replace: true });
     }
 

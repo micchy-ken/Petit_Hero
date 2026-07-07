@@ -1363,17 +1363,12 @@ export class GridMovementScene extends Phaser.Scene {
         let sx = 0;
         let sy = 0;
         let found = false;
-        let attempts = 0;
 
-        // Ensure they don't overlap with hero, items, events, or other slimes
-        while (attempts < 100) {
-          sx = Phaser.Math.Between(2, this.gridCols - 3);
-          sy = Phaser.Math.Between(2, this.gridRows - 3);
-          if (!this.isTileOccupiedByAnything(sx, sy)) {
-            found = true;
-            break;
-          }
-          attempts++;
+        const pos = this.findScatteredSpawnPosition(3, 2);
+        if (pos) {
+          sx = pos.x;
+          sy = pos.y;
+          found = true;
         }
 
         if (found) {
@@ -3009,19 +3004,102 @@ export class GridMovementScene extends Phaser.Scene {
     }
   }
 
+  private findScatteredSpawnPosition(minHeroDist: number = 4, minEnemyDist: number = 3): { x: number; y: number } | null {
+    // 候補地選定プロセス（複数パスで徐々に制約を緩和）
+    const maxPasses = 5;
+    for (let pass = 0; pass < maxPasses; pass++) {
+      const currentMinHeroDist = Math.max(0, minHeroDist - pass);
+      const currentMinEnemyDist = Math.max(0, minEnemyDist - pass);
+      
+      const candidates: { x: number; y: number }[] = [];
+      
+      // マップ全体の移動可能な範囲から選定（外周1タイルは壁などの設置を考慮して内側を優先）
+      for (let x = 1; x < this.gridCols - 1; x++) {
+        for (let y = 1; y < this.gridRows - 1; y++) {
+          if (this.isTileOccupiedByAnything(x, y)) {
+            continue;
+          }
+
+          // 勇者からの距離（マンハッタン距離）
+          const heroDist = Math.abs(x - this.currentGridX) + Math.abs(y - this.currentGridY);
+          if (heroDist < currentMinHeroDist) {
+            continue;
+          }
+
+          // 初期画面（ビューポート）内への出現を避ける
+          if (currentMinHeroDist > 0) {
+            const inViewport = (x >= this.currentCamGridX && x < this.currentCamGridX + GridMovementScene.VIEWPORT_COLS) &&
+                               (y >= this.currentCamGridY && y < this.currentCamGridY + GridMovementScene.VIEWPORT_ROWS);
+            if (inViewport) {
+              continue;
+            }
+          }
+
+          // 他の敵との最小距離チェック
+          let tooCloseToOtherEnemy = false;
+          for (const s of this.slimes) {
+            const dist = Math.abs(x - s.gridX) + Math.abs(y - s.gridY);
+            if (dist < currentMinEnemyDist) {
+              tooCloseToOtherEnemy = true;
+              break;
+            }
+          }
+          if (tooCloseToOtherEnemy) {
+            continue;
+          }
+
+          candidates.push({ x, y });
+        }
+      }
+
+      if (candidates.length > 0) {
+        return Phaser.Utils.Array.GetRandom(candidates);
+      }
+    }
+
+    // 究極のフォールバック：重複が一切ないマスを探す
+    const fallbackCandidates: { x: number; y: number }[] = [];
+    for (let x = 0; x < this.gridCols; x++) {
+      for (let y = 0; y < this.gridRows; y++) {
+        if (!this.isTileOccupiedByAnything(x, y)) {
+          fallbackCandidates.push({ x, y });
+        }
+      }
+    }
+    if (fallbackCandidates.length > 0) {
+      return Phaser.Utils.Array.GetRandom(fallbackCandidates);
+    }
+
+    // 最後の手段：勇者以外のすべてのマス
+    for (let x = 0; x < this.gridCols; x++) {
+      for (let y = 0; y < this.gridRows; y++) {
+        if (x !== this.currentGridX || y !== this.currentGridY) {
+          return { x, y };
+        }
+      }
+    }
+
+    return null;
+  }
+
   private spawnInitialEnemies() {
     // Clean up any existing slimes
     this.slimes.forEach(s => {
       if (s.sprite && s.sprite.active) s.sprite.destroy();
     });
     this.slimes = [];
+    
+    this.totalEnemiesSpawned = 0;
+    this.enemiesDefeated = 0;
+    this.bossSpawned = false;
+    this.bossDefeated = false;
 
     if (!this.mapData) return;
 
     const { GRID_SIZE } = GridMovementScene;
     const maxEnemies = this.mapData.maxEnemies;
     const isInfinite = maxEnemies === undefined || maxEnemies === 'infinite';
-    const initialSpawnCount = isInfinite ? 5 : Math.min(5, maxEnemies as number);
+    const initialSpawnCount = isInfinite ? 5 : (maxEnemies as number);
 
     // Determine initial texture based on bgMode
     const mode = this.displayMode; // 'text' | 'grayscale' | 'normal'
@@ -3031,20 +3109,10 @@ export class GridMovementScene extends Phaser.Scene {
     if (this.mapData.boss) {
       const bossConfig = getEnemyAssetById(this.mapData.boss);
       if (bossConfig) {
-        let sx = 0;
-        let sy = 0;
-        let found = false;
-        let attempts = 0;
-        while (attempts < 500) {
-          sx = Phaser.Math.Between(2, this.gridCols - 3);
-          sy = Phaser.Math.Between(2, this.gridRows - 3);
-          if (!this.isTileOccupiedByAnything(sx, sy)) {
-            found = true;
-            break;
-          }
-          attempts++;
-        }
-        if (found) {
+        const pos = this.findScatteredSpawnPosition(4, 3);
+        if (pos) {
+          const sx = pos.x;
+          const sy = pos.y;
           // Use a default texture first, playMonsterAnim will instantly load and resolve the custom textures
           const bossSprite = this.add.sprite(sx * GRID_SIZE + GRID_SIZE / 2, sy * GRID_SIZE + GRID_SIZE / 2, defaultTex, 0);
           bossSprite.setDepth(9);
@@ -3093,33 +3161,11 @@ export class GridMovementScene extends Phaser.Scene {
     const loopCount = isInfinite ? initialSpawnCount : Math.min(initialSpawnCount, remainingToSpawn);
     
     for (let i = 0; i < loopCount; i++) {
-      let sx = 0;
-      let sy = 0;
-      let found = false;
-      let attempts = 0;
+      const pos = this.findScatteredSpawnPosition(4, 3);
+      if (!pos) continue;
 
-      while (attempts < 500) {
-        sx = Phaser.Math.Between(2, this.gridCols - 3);
-        sy = Phaser.Math.Between(2, this.gridRows - 3);
-        if (!this.isTileOccupiedByAnything(sx, sy)) {
-          found = true;
-          break;
-        }
-        attempts++;
-      }
-
-      if (!found) {
-        attempts = 0;
-        while (attempts < 100) {
-          sx = Phaser.Math.Between(2, this.gridCols - 3);
-          sy = Phaser.Math.Between(2, this.gridRows - 3);
-          if (!this.isTileOccupied(sx, sy)) {
-            found = true;
-            break;
-          }
-          attempts++;
-        }
-      }
+      const sx = pos.x;
+      const sy = pos.y;
 
       let enemyConfig: EnemyAsset | undefined = undefined;
       if (this.mapData.enemies && this.mapData.enemies.length > 0) {
