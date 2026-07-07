@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import Phaser from 'phaser';
 import { GridMovementScene, HeroState, Direction, ActionLog } from '../phaser/GridMovementScene';
-import { Play, Pause, RotateCcw, Eye, EyeOff, Sparkles, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Gauge, Grid, Image as ImageIcon, Heart, Sword, Star, Settings, X, Move, Flame, Zap, Map, Menu, User, Brain, Shield, Ghost, MessageSquare, Package, Scroll, Download } from 'lucide-react';
+import { Play, Pause, RotateCcw, Eye, EyeOff, Sparkles, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Gauge, Grid, Image as ImageIcon, Heart, Sword, Star, Settings, X, Move, Flame, Zap, Map, Menu, User, Brain, Shield, Ghost, MessageSquare, Package, Scroll, Download, Loader2 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 import { MapData } from '../types/MapData';
@@ -162,6 +162,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
   const [onEventComplete, setOnEventComplete] = useState<(() => void) | null>(null);
 
   const [isEventsLoaded, setIsEventsLoaded] = useState(false);
+  const [isGameReady, setIsGameReady] = useState(false);
   const [customItems, setCustomItems] = useState<CustomItem[]>([]);
   const customItemsRef = useRef<CustomItem[]>([]);
   const magicsRef = useRef<any[]>([]);
@@ -497,6 +498,10 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
           }
         }
 
+        setTimeout(() => {
+          setIsGameReady(true);
+        }, 150);
+
         // テクスチャからプレビュー用URLを抽出
         setTimeout(() => {
           if (game.textures.exists('hero_spritesheet')) {
@@ -717,7 +722,14 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
   };
 
   return (
-    <div className="flex flex-col items-center justify-center w-full max-w-5xl mx-auto p-4 sm:p-6 lg:p-8 relative">
+    <>
+      {!isGameReady && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-50">
+          <Loader2 className="w-8 h-8 animate-spin text-emerald-500 mb-4" />
+          <p className="text-xs font-medium tracking-widest text-slate-400">Loading Game World...</p>
+        </div>
+      )}
+      <div className={`flex flex-col items-center justify-center w-full max-w-5xl mx-auto p-4 sm:p-6 lg:p-8 relative transition-opacity duration-700 ${isGameReady ? 'opacity-100' : 'opacity-0'}`}>
       
       {/* Settings Toggle Button */}
       <button 
@@ -981,35 +993,35 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
               <div className="flex flex-col gap-6 animate-in fade-in">
                 {/* エディターへの遷移 */}
                 <button
-                  onClick={() => navigate('/editor/map')}
+                  onClick={() => navigate(`/editor/map?scenarioId=${scenarioId || 'scenario_test'}&returnTo=settings`)}
                   className="flex items-center justify-center gap-2 w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-colors border border-slate-700 mt-2"
                 >
                   <Map className="w-5 h-5 text-slate-300" />
                   マップ＆イベントエディターを開く
                 </button>
                 <button
-                  onClick={() => navigate('/editor/enemy')}
+                  onClick={() => navigate(`/editor/enemy?scenarioId=${scenarioId || 'scenario_test'}&returnTo=settings`)}
                   className="flex items-center justify-center gap-2 w-full bg-indigo-700 hover:bg-indigo-800 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-colors border border-indigo-600"
                 >
                   <Ghost className="w-5 h-5 text-indigo-300" />
                   エネミーエディターを開く
                 </button>
                 <button
-                  onClick={() => navigate('/editor/hero')}
+                  onClick={() => navigate(`/editor/hero?scenarioId=${scenarioId || 'scenario_test'}&returnTo=settings`)}
                   className="flex items-center justify-center gap-2 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-colors border border-emerald-500"
                 >
                   <Sword className="w-5 h-5 text-emerald-200" />
                   主人公ステータス設定を開く
                 </button>
                 <button
-                  onClick={() => navigate('/editor/item')}
+                  onClick={() => navigate(`/editor/item?scenarioId=${scenarioId || 'scenario_test'}&returnTo=settings`)}
                   className="flex items-center justify-center gap-2 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-colors border border-indigo-500"
                 >
                   <Package className="w-5 h-5 text-indigo-200" />
                   アイテムエディターを開く
                 </button>
                 <button
-                  onClick={() => navigate('/editor/magic')}
+                  onClick={() => navigate(`/editor/magic?scenarioId=${scenarioId || 'scenario_test'}&returnTo=settings`)}
                   className="flex items-center justify-center gap-2 w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-colors border border-purple-500"
                 >
                   <Sparkles className="w-5 h-5 text-purple-200" />
@@ -1573,5 +1585,6 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
       )}
 
     </div>
+    </>
   );
 };

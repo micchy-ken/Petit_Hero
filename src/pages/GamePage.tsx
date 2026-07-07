@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { PhaserGameContainer } from '../components/PhaserGameContainer';
-import { Gamepad2, Layers, Cpu, ShieldCheck, Loader2, Play, RotateCcw, Plus, ArrowLeft, Settings, Trash2, Heart, Sword, Star } from 'lucide-react';
+import { Gamepad2, Layers, Cpu, ShieldCheck, Loader2, Play, RotateCcw, Plus, ArrowLeft, Settings, Trash2, Heart, Sword, Star, ChevronDown, ChevronUp, Map, Ghost, Package, Sparkles } from 'lucide-react';
 import { MapData } from '../types/MapData';
 import { 
   fetchMapsFromFirestore, 
@@ -31,9 +31,11 @@ export default function GamePage() {
   const [activeScenario, setActiveScenario] = useState<Scenario | null>(null);
   const [loadedHeroState, setLoadedHeroState] = useState<any | null>(null);
   const [loadedPosition, setLoadedPosition] = useState<any | null>(null);
+  const [initialShowSettings, setInitialShowSettings] = useState(false);
 
   // New Scenario Modal
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditorMenu, setShowEditorMenu] = useState(false);
   const [newScenarioName, setNewScenarioName] = useState('');
   const [newScenarioMode, setNewScenarioMode] = useState<'individual' | 'shared'>('individual');
 
@@ -73,7 +75,28 @@ export default function GamePage() {
     }
   }, [viewState]);
 
+  useEffect(() => {
+    if (scenarios.length > 0 && viewState !== 'playing') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const resumeId = urlParams.get('resumeScenarioId');
+      if (resumeId) {
+        const scToResume = scenarios.find(s => s.id === resumeId);
+        if (scToResume) {
+          launchGame(scToResume, true);
+        }
+      }
+    }
+  }, [scenarios, viewState]);
+
   const launchGame = async (scenario: Scenario, continueGame: boolean) => {
+    const shouldShowSettings = window.location.search.includes('settings=true') || window.location.hash.includes('settings=true');
+    setInitialShowSettings(shouldShowSettings);
+
+    // Clear URL parameters to prevent settings menu from auto-opening
+    if (shouldShowSettings) {
+      navigate('/', { replace: true });
+    }
+
     setIsLoading(true);
     try {
       // Fetch maps specifically for this scenario
@@ -185,7 +208,8 @@ export default function GamePage() {
 
         <main className="flex-1 flex items-center justify-center p-4">
           <PhaserGameContainer 
-            isTestPlay={false} 
+            isTestPlay={false}
+            initialShowSettings={initialShowSettings} 
             maps={allMaps} 
             initialMapId={currentMapId} 
             scenarioId={activeScenario.id}
@@ -262,13 +286,59 @@ export default function GamePage() {
               <span className="text-[10px] font-mono text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">SCENARIOS</span>
             </button>
 
-            <button
-              onClick={() => navigate('/editor/map')}
-              className="w-full py-4 px-6 bg-slate-800/40 hover:bg-slate-800 text-slate-400 border border-slate-800 rounded-2xl font-bold text-sm transition-all hover:text-slate-200 flex items-center gap-3 justify-center mt-4 border-dashed"
-            >
-              <Settings className="w-4 h-4 text-slate-500" />
-              マップエディターへ移動
-            </button>
+            
+            <div className="w-full mt-4 flex flex-col gap-2">
+              <button
+                onClick={() => setShowEditorMenu(!showEditorMenu)}
+                className="w-full py-4 px-6 bg-slate-800/40 hover:bg-slate-800 text-slate-400 border border-slate-800 rounded-2xl font-bold text-sm transition-all hover:text-slate-200 flex items-center justify-between border-dashed"
+              >
+                <div className="flex items-center gap-3">
+                  <Settings className="w-4 h-4 text-slate-500" />
+                  エディターを開く
+                </div>
+                {showEditorMenu ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+              
+              {showEditorMenu && (
+                <div className="flex flex-col gap-2 animate-in fade-in zoom-in-95 duration-200 mt-1">
+                  <button
+                    onClick={() => navigate(`/editor/map?scenarioId=${lastPlayedScenarioId || 'scenario_test'}&returnTo=title`)}
+                    className="flex items-center justify-start gap-3 w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 px-4 rounded-xl shadow-md transition-colors border border-slate-700"
+                  >
+                    <Map className="w-4 h-4 text-emerald-400" />
+                    マップ＆イベントエディター
+                  </button>
+                  <button
+                    onClick={() => navigate(`/editor/enemy?scenarioId=${lastPlayedScenarioId || 'scenario_test'}&returnTo=title`)}
+                    className="flex items-center justify-start gap-3 w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 px-4 rounded-xl shadow-md transition-colors border border-slate-700"
+                  >
+                    <Ghost className="w-4 h-4 text-indigo-400" />
+                    エネミーエディター
+                  </button>
+                  <button
+                    onClick={() => navigate(`/editor/hero?scenarioId=${lastPlayedScenarioId || 'scenario_test'}&returnTo=title`)}
+                    className="flex items-center justify-start gap-3 w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 px-4 rounded-xl shadow-md transition-colors border border-slate-700"
+                  >
+                    <Sword className="w-4 h-4 text-rose-400" />
+                    主人公ステータスエディター
+                  </button>
+                  <button
+                    onClick={() => navigate(`/editor/item?scenarioId=${lastPlayedScenarioId || 'scenario_test'}&returnTo=title`)}
+                    className="flex items-center justify-start gap-3 w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 px-4 rounded-xl shadow-md transition-colors border border-slate-700"
+                  >
+                    <Package className="w-4 h-4 text-amber-400" />
+                    アイテムエディター
+                  </button>
+                  <button
+                    onClick={() => navigate(`/editor/magic?scenarioId=${lastPlayedScenarioId || 'scenario_test'}&returnTo=title`)}
+                    className="flex items-center justify-start gap-3 w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 px-4 rounded-xl shadow-md transition-colors border border-slate-700"
+                  >
+                    <Sparkles className="w-4 h-4 text-purple-400" />
+                    マジックエディター
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
 

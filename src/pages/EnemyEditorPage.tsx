@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Save, Ghost, Loader2 } from 'lucide-react';
 import { EnemyAssets as initialEnemyAssets, BossAssets as initialBossAssets, EnemyAsset } from '../data/EnemyAssets';
 import { fetchEnemyAssetsFromFirestore, saveEnemyAssetsToFirestore } from '../lib/dbService';
@@ -218,6 +218,18 @@ function EnemyGraphicPreview({ bgMode, enemyId }: { bgMode: BgMode, enemyId: str
 
 export default function EnemyEditorPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const currentScenarioId = queryParams.get('scenarioId') || 'scenario_test';
+  const returnTo = queryParams.get('returnTo');
+
+  const handleExit = () => {
+    if (returnTo === 'settings') {
+      navigate(`/?settings=true&resumeScenarioId=${currentScenarioId}`);
+    } else {
+      navigate('/');
+    }
+  };
   const [enemyAssets, setEnemyAssets] = useState(initialEnemyAssets);
   const [bossAssets, setBossAssets] = useState(initialBossAssets);
 
@@ -306,7 +318,7 @@ export default function EnemyEditorPage() {
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
-              onClick={() => navigate('/?settings=true')}
+              onClick={() => handleExit()}
               className="p-2 hover:bg-slate-100 rounded-full transition-colors"
             >
               <ArrowLeft className="w-5 h-5 text-slate-600" />

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Box, Gem, Zap, Plus, Map as MapIcon, Save, Settings, Play, Loader2, RefreshCw, Check, AlertCircle, Trash2, MessageSquare } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { MapData } from '../types/MapData';
 import { getAvailableEnemies, getAvailableBosses } from '../data/EnemyAssets';
 import { PhaserGameContainer } from '../components/PhaserGameContainer';
@@ -48,6 +48,18 @@ const getEquipmentIcon = (item: any) => {
 
 export default function MapEditorPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const initialScenarioId = queryParams.get('scenarioId') || 'scenario_test';
+  const returnTo = queryParams.get('returnTo');
+
+  const handleExit = () => {
+    if (returnTo === 'settings') {
+      navigate(`/?settings=true&resumeScenarioId=${currentScenarioId}`);
+    } else {
+      navigate('/');
+    }
+  };
   
   const [maps, setMaps] = useState<MapData[]>([]);
   const [currentMapId, setCurrentMapId] = useState<string>('');
@@ -66,7 +78,7 @@ export default function MapEditorPage() {
 
   // Scenario management states
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
-  const [currentScenarioId, setCurrentScenarioId] = useState<string>('scenario_test');
+  const [currentScenarioId, setCurrentScenarioId] = useState<string>(initialScenarioId);
   const [showNewScenarioForm, setShowNewScenarioForm] = useState(false);
   const [newScenarioName, setNewScenarioName] = useState('');
   const [newScenarioMode, setNewScenarioMode] = useState<'individual' | 'shared'>('individual');
@@ -254,7 +266,7 @@ export default function MapEditorPage() {
         type: 'go_back'
       });
     } else {
-      navigate('/?settings=true');
+      handleExit();
     }
   };
 
@@ -850,7 +862,7 @@ export default function MapEditorPage() {
       if (pendingTransition.type === 'switch_map') {
         setCurrentMapId(pendingTransition.targetMapId!);
       } else if (pendingTransition.type === 'go_back') {
-        navigate('/?settings=true');
+        handleExit();
       }
       setPendingTransition(null);
     }
@@ -867,7 +879,7 @@ export default function MapEditorPage() {
       }
       setCurrentMapId(pendingTransition.targetMapId!);
     } else if (pendingTransition.type === 'go_back') {
-      navigate('/?settings=true');
+      handleExit();
     }
     setPendingTransition(null);
   };

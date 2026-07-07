@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Save, Plus, Trash2, Loader2, Package, Sparkles, Check, HelpCircle } from 'lucide-react';
 import { CustomItem, ItemType } from '../types/CustomItem';
 import { fetchCustomItemsFromFirestore, saveCustomItemsToFirestore, fetchMagicDataFromFirestore } from '../lib/dbService';
@@ -44,6 +44,18 @@ const ITEM_TYPES: { value: ItemType; label: string; color: string; description: 
 
 export default function ItemEditorPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const currentScenarioId = queryParams.get('scenarioId') || 'scenario_test';
+  const returnTo = queryParams.get('returnTo');
+
+  const handleExit = () => {
+    if (returnTo === 'settings') {
+      navigate(`/?settings=true&resumeScenarioId=${currentScenarioId}`);
+    } else {
+      navigate('/');
+    }
+  };
   const [items, setItems] = useState<CustomItem[]>([]);
   const [magics, setMagics] = useState<MagicData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -154,7 +166,7 @@ export default function ItemEditorPage() {
       <header className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-20 shadow-sm">
         <div className="flex items-center gap-4">
           <button
-            onClick={() => navigate('/?settings=true')}
+            onClick={() => handleExit()}
             className="p-2 hover:bg-slate-100 rounded-full transition-colors"
             title="戻る"
           >
