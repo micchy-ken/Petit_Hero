@@ -121,17 +121,17 @@ export default function GamePage() {
     setScenarios(updated);
     await saveScenariosToFirestore(updated);
 
-    // Auto-select and launch options for this new scenario
-    setSelectedScenario(newScenario);
-    setNewScenarioName('');
-    setShowCreateModal(false);
-    setViewState('scenario_options');
-    
     // Seed saveStates with empty check for new scenario
     setSaveStates(prev => ({
       ...prev,
       [newId]: { position: null, heroState: null }
     }));
+
+    setNewScenarioName('');
+    setShowCreateModal(false);
+
+    // Launch directly into game as a new game for this scenario!
+    await launchGame(newScenario, false);
   };
 
   const handleDeleteScenario = async (scenarioId: string, e: React.MouseEvent) => {
@@ -286,21 +286,17 @@ export default function GamePage() {
               </button>
             </div>
 
-            <div className="max-h-[220px] overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+            <div className="max-h-[300px] overflow-y-auto space-y-3 pr-1 custom-scrollbar">
               {scenarios.map((sc) => {
                 const save = saveStates[sc.id];
                 const hasSave = save && save.position;
                 return (
                   <div
                     key={sc.id}
-                    onClick={() => {
-                      setSelectedScenario(sc);
-                      setViewState('scenario_options');
-                    }}
-                    className="p-3.5 rounded-xl border border-slate-800 hover:border-slate-700 bg-slate-800/30 hover:bg-slate-800/60 cursor-pointer transition-all flex justify-between items-center"
+                    className="p-4 rounded-xl border border-slate-800 bg-slate-800/30 flex flex-col gap-3"
                   >
                     <div>
-                      <div className="font-bold text-white text-sm flex items-center gap-2">
+                      <div className="font-bold text-white text-sm flex items-center gap-2 flex-wrap">
                         {sc.name}
                         {sc.statusMode === 'shared' && (
                           <span className="text-[9px] px-1.5 py-0.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded">共通</span>
@@ -316,13 +312,33 @@ export default function GamePage() {
                       </div>
                     </div>
                     
-                    <button
-                      onClick={(e) => handleDeleteScenario(sc.id, e)}
-                      className="p-1.5 text-slate-500 hover:text-red-400 rounded-md hover:bg-slate-800 transition-all ml-2"
-                      title="シナリオ削除"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex gap-2.5 justify-end">
+                      <button
+                        onClick={() => {
+                          if (hasSave && !confirm('進行中のセーブデータが上書きされます。よろしいですか？')) {
+                            return;
+                          }
+                          launchGame(sc, false);
+                        }}
+                        className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 hover:scale-[1.01] active:scale-[0.99]"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
+                        最初から
+                      </button>
+
+                      <button
+                        onClick={() => launchGame(sc, true)}
+                        disabled={!hasSave}
+                        className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border ${
+                          hasSave
+                            ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500 hover:scale-[1.01] active:scale-[0.99]'
+                            : 'bg-slate-850/40 text-slate-600 border-slate-800/20 cursor-not-allowed'
+                        }`}
+                      >
+                        <Play className="w-3.5 h-3.5" />
+                        続きから
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -334,55 +350,6 @@ export default function GamePage() {
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               タイトルメニューに戻る
-            </button>
-          </div>
-        )}
-
-        {/* --- VIEW: SCENARIO OPTIONS (NEW GAME vs CONTINUE) --- */}
-        {viewState === 'scenario_options' && selectedScenario && (
-          <div className="space-y-4 animate-in fade-in duration-200">
-            <div className="bg-slate-800/20 border border-slate-800 p-4 rounded-2xl text-center">
-              <span className="text-[10px] tracking-widest text-slate-500 uppercase font-mono">選択中</span>
-              <h3 className="font-bold text-white text-base mt-1">{selectedScenario.name}</h3>
-              <p className="text-[11px] text-slate-400 mt-1.5">
-                ステータス保持: {selectedScenario.statusMode === 'individual' ? '個別管理（独立）' : '共通共有（共通同士で共有）'}
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-2.5">
-              <button
-                onClick={() => launchGame(selectedScenario, true)}
-                disabled={!saveStates[selectedScenario.id]?.position}
-                className={`w-full py-4 px-6 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 border shadow-sm ${
-                  saveStates[selectedScenario.id]?.position
-                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500 hover:scale-[1.01] active:scale-[0.99]'
-                    : 'bg-slate-800/40 text-slate-500 border-slate-800/50 cursor-not-allowed'
-                }`}
-              >
-                <Play className="w-4 h-4" />
-                続きから（ロード）
-              </button>
-
-              <button
-                onClick={() => {
-                  if (saveStates[selectedScenario.id]?.position && !confirm('進行中のセーブデータが上書きされます。よろしいですか？')) {
-                    return;
-                  }
-                  launchGame(selectedScenario, false);
-                }}
-                className="w-full py-4 px-6 bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 rounded-2xl font-bold text-sm transition-all hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2 shadow-md"
-              >
-                <RotateCcw className="w-4 h-4 text-emerald-400" />
-                最初から（新規開始）
-              </button>
-            </div>
-
-            <button
-              onClick={() => setViewState('scenarios')}
-              className="w-full mt-4 py-2 text-xs font-bold text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1.5 justify-center"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              シナリオ選択に戻る
             </button>
           </div>
         )}
