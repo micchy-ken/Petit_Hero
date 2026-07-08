@@ -1069,7 +1069,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
               <div className="flex flex-col gap-6 animate-in fade-in">
                 {/* エディターへの遷移 */}
                 <button
-                  onClick={() => handleNavigateToEditor(`/editor/map?scenarioId=${scenarioId || 'scenario_test'}&returnTo=settings`)}
+                  onClick={() => handleNavigateToEditor(`/editor/map?scenarioId=${scenarioId || 'scenario_test'}&returnTo=settings&mapId=${initialMapId || ''}`)}
                   className="flex items-center justify-center gap-2 w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-colors border border-slate-700 mt-2"
                 >
                   <Map className="w-5 h-5 text-slate-300" />

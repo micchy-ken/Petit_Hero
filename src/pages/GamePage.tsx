@@ -390,7 +390,11 @@ export default function GamePage() {
               {showEditorMenu && (
                 <div className="flex flex-col gap-2 animate-in fade-in zoom-in-95 duration-200 mt-1">
                   <button
-                    onClick={() => navigate(`/editor/map?scenarioId=${lastPlayedScenarioId || 'scenario_test'}&returnTo=title`)}
+                    onClick={() => {
+                      const scId = lastPlayedScenarioId || 'scenario_test';
+                      const mapId = saveStates[scId]?.position?.mapId || '';
+                      navigate(`/editor/map?scenarioId=${scId}&returnTo=title${mapId ? `&mapId=${mapId}` : ''}`);
+                    }}
                     className="flex items-center justify-start gap-3 w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 px-4 rounded-xl shadow-md transition-colors border border-slate-700"
                   >
                     <Map className="w-4 h-4 text-emerald-400" />

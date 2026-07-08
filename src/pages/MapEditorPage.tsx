@@ -6,7 +6,7 @@ import { MapData } from '../types/MapData';
 import { getAvailableEnemies, getAvailableBosses } from '../data/EnemyAssets';
 import { PhaserGameContainer } from '../components/PhaserGameContainer';
 import { allMaps } from '../data/maps';
-import { fetchMapsFromFirestore, saveMapToFirestore, deleteMapFromFirestore, fetchEnemyAssetsFromFirestore, fetchCustomEventsFromFirestore, fetchCustomItemsFromFirestore, saveCustomEventsToFirestore, fetchScenariosFromFirestore, saveScenariosToFirestore } from '../lib/dbService';
+import { fetchMapsFromFirestore, saveMapToFirestore, deleteMapFromFirestore, fetchEnemyAssetsFromFirestore, fetchCustomEventsFromFirestore, fetchCustomItemsFromFirestore, saveCustomEventsToFirestore, fetchScenariosFromFirestore, saveScenariosToFirestore, loadScenarioProgress } from '../lib/dbService';
 import { Scenario } from '../types/Scenario';
 import { CustomEvent, ConversationNode } from '../types/CustomEvent';
 import { CustomItem } from '../types/CustomItem';
@@ -128,8 +128,32 @@ export default function MapEditorPage() {
       setInitialMaps(JSON.parse(JSON.stringify(loadedMaps)));
       
       if (isInitial || !loadedMaps.some((m: MapData) => m.id === currentMapId)) {
-        const beginningMap = loadedMaps.find((m: MapData) => m.id.startsWith('map_beginning_') || m.id === 'map_beginning') || loadedMaps[0];
-        setCurrentMapId(beginningMap?.id || '');
+        let initialMapIdToSet = '';
+
+        // 1. Check if mapId is specified in URL query parameters
+        const queryMapId = queryParams.get('mapId');
+        if (isInitial && queryMapId && loadedMaps.some((m: MapData) => m.id === queryMapId)) {
+          initialMapIdToSet = queryMapId;
+        }
+
+        // 2. Load progress data to find active map ID for this scenario
+        if (!initialMapIdToSet) {
+          const sc = loadedScenarios.find(s => s.id === activeScenarioId);
+          if (sc) {
+            const progress = await loadScenarioProgress(activeScenarioId, sc.statusMode);
+            if (progress && progress.position && progress.position.mapId && loadedMaps.some((m: MapData) => m.id === progress.position.mapId)) {
+              initialMapIdToSet = progress.position.mapId;
+            }
+          }
+        }
+
+        // 3. Fallback to default start map
+        if (!initialMapIdToSet) {
+          const beginningMap = loadedMaps.find((m: MapData) => m.id.startsWith('map_beginning_') || m.id === 'map_beginning') || loadedMaps[0];
+          initialMapIdToSet = beginningMap?.id || '';
+        }
+
+        setCurrentMapId(initialMapIdToSet);
       }
     } catch (e: any) {
       console.warn("Fallback to bundled static maps:", e.message);

@@ -53,6 +53,11 @@ function EnemyGraphicPreview({ bgMode, enemyId }: { bgMode: BgMode, enemyId: str
           else if (enemyId === 'color_goblin') char = 'ゴ';
           else if (enemyId === 'color_demon_king' || enemyId === 'gray_boss' || enemyId === 'text_boss') char = '魔';
           else if (enemyId === 'color_dragon') char = '竜';
+          else if (enemyId === 'color_golem') char = '剛';
+          else if (enemyId === 'color_lizardman') char = '蜥';
+          else if (enemyId === 'color_skeleton') char = '骨';
+          else if (enemyId === 'color_swordsman') char = '剣';
+          else if (enemyId === 'color_griffon') char = '鷲';
           else if (enemyId === 'text_teki') char = '敵';
           
           ctx.font = isBoss ? 'bold 64px "Inter", sans-serif' : 'bold 32px "Inter", sans-serif';
@@ -499,6 +504,142 @@ function EnemyGraphicPreview({ bgMode, enemyId }: { bgMode: BgMode, enemyId: str
               gp(23, wpY, 2, 6, cWeapon); gp(22, wpY - 2, 4, 3, cWeapon); gp(21, wpY + 4, 2, 2, cClothDark);
 
               tCtx.restore();
+
+            // ----------------- ゴーレム -----------------
+            } else if (enemyId === 'color_golem') {
+              const cStone = isGray ? '#64748b' : '#78716c';
+              const cStoneDark = isGray ? '#334155' : '#44403c';
+              const cRune = isGray ? '#e2e8f0' : '#38bdf8';
+              tCtx.save();
+              const isStep = frame === 1 || frame === 3;
+              const bobY = isStep ? -1 : 0;
+              tCtx.translate(0, bobY);
+              // 影
+              tCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+              tCtx.beginPath(); tCtx.ellipse(16, 28, 9, 2.5, 0, 0, Math.PI * 2); tCtx.fill();
+              // 本体
+              gp(8, 8, 16, 18, cStoneDark);
+              gp(9, 9, 14, 16, cStone);
+              // 肩
+              gp(6, 11, 4, 4, cStoneDark); gp(6, 12, 3, 3, cStone);
+              gp(22, 11, 4, 4, cStoneDark); gp(23, 12, 3, 3, cStone);
+              // 顔
+              gp(11, 12, 10, 4, cStoneDark);
+              gp(13, 13, 2, 2, cRune); gp(17, 13, 2, 2, cRune);
+              // ルーン
+              gp(15, 18, 2, 4, cRune); gp(13, 19, 6, 2, cRune);
+              // 足
+              gp(9, 25, 4, 4, cStoneDark); gp(19, 25, 4, 4, cStoneDark);
+              tCtx.restore();
+
+            // ----------------- リザードマン -----------------
+            } else if (enemyId === 'color_lizardman') {
+              const cScale = isGray ? '#475569' : '#15803d';
+              const cScaleDark = isGray ? '#1e293b' : '#14532d';
+              const cBelly = isGray ? '#94a3b8' : '#86efac';
+              const cShield = isGray ? '#64748b' : '#b45309';
+              const cSword = isGray ? '#cbd5e1' : '#94a3b8';
+              const cEye = isGray ? '#ffffff' : '#facc15';
+              tCtx.save();
+              const isStep1 = frame === 1;
+              const isStep2 = frame === 3;
+              const bobY = (isStep1 || isStep2) ? -1 : 0;
+              const legOffset = isStep1 ? 1 : (isStep2 ? -1 : 0);
+              tCtx.translate(0, bobY);
+              // 影
+              tCtx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+              tCtx.beginPath(); tCtx.ellipse(16, 28, 6, 2, 0, 0, Math.PI * 2); tCtx.fill();
+              // 頭
+              gp(11, 9, 10, 8, cScaleDark); gp(12, 10, 8, 6, cScale);
+              gp(10, 11, 2, 2, cScaleDark); gp(16, 12, 2, 2, cEye); gp(17, 13, 1, 1, '#000000');
+              // 体
+              gp(11, 17, 10, 9, cScaleDark); gp(13, 17, 6, 8, cBelly);
+              // 足
+              gp(11, 26 + (legOffset > 0 ? -1 : 0), 2, 3, cScale);
+              gp(19, 26 + (legOffset < 0 ? -1 : 0), 2, 3, cScale);
+              // 手
+              gp(22, 16, 4, 6, cShield); gp(23, 15, 2, 8, cShield);
+              gp(7, 17, 4, 2, cScale); gp(6, 11, 2, 9, cSword); gp(5, 20, 4, 1, cShield);
+              tCtx.restore();
+
+            // ----------------- ガイコツ -----------------
+            } else if (enemyId === 'color_skeleton') {
+              const cBone = isGray ? '#e2e8f0' : '#f8fafc';
+              const cBoneDark = isGray ? '#94a3b8' : '#cbd5e1';
+              const cEye = isGray ? '#ffffff' : '#ef4444';
+              const cSword = isGray ? '#64748b' : '#71717a';
+              tCtx.save();
+              const isStep1 = frame === 1;
+              const isStep2 = frame === 3;
+              const bobY = (isStep1 || isStep2) ? -1 : 0;
+              const legOffset = isStep1 ? 1 : (isStep2 ? -1 : 0);
+              tCtx.translate(0, bobY);
+              // 影
+              tCtx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+              tCtx.beginPath(); tCtx.ellipse(16, 28, 5, 1.5, 0, 0, Math.PI * 2); tCtx.fill();
+              // 頭
+              gp(11, 9, 10, 8, cBoneDark); gp(12, 9, 8, 7, cBone);
+              gp(13, 13, 2, 2, '#000000'); gp(17, 13, 2, 2, '#000000');
+              gp(14, 14, 1, 1, cEye); gp(18, 14, 1, 1, cEye); gp(14, 16, 4, 1, '#000000');
+              // 肋骨・背骨
+              gp(15, 17, 2, 8, cBoneDark); gp(12, 18, 8, 1, cBone); gp(11, 20, 10, 1, cBone); gp(13, 22, 6, 1, cBone);
+              // 腕・足
+              gp(9, 18, 1, 5, cBone); gp(22, 18, 1, 5, cBone);
+              gp(12, 24 + (legOffset > 0 ? -1 : 0), 1, 4, cBone); gp(18, 24 + (legOffset < 0 ? -1 : 0), 1, 4, cBone);
+              // 剣
+              gp(23, 14, 2, 9, cSword); gp(22, 21, 4, 1, '#b45309');
+              tCtx.restore();
+
+            // ----------------- 剣士 -----------------
+            } else if (enemyId === 'color_swordsman') {
+              const cArmor = isGray ? '#94a3b8' : '#cbd5e1';
+              const cArmorDark = isGray ? '#475569' : '#64748b';
+              const cCloth = isGray ? '#334155' : '#1d4ed8';
+              const cGold = isGray ? '#cbd5e1' : '#fbbf24';
+              const cSword = isGray ? '#e2e8f0' : '#f1f5f9';
+              tCtx.save();
+              const isStep1 = frame === 1;
+              const isStep2 = frame === 3;
+              const bobY = (isStep1 || isStep2) ? -1 : 0;
+              const legOffset = isStep1 ? 1 : (isStep2 ? -1 : 0);
+              tCtx.translate(0, bobY);
+              // 影
+              tCtx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+              tCtx.beginPath(); tCtx.ellipse(16, 28, 6, 2, 0, 0, Math.PI * 2); tCtx.fill();
+              // 兜
+              gp(10, 8, 12, 10, cArmorDark); gp(11, 9, 10, 8, cArmor);
+              gp(10, 8, 12, 2, cCloth); gp(15, 6, 2, 3, cCloth);
+              gp(12, 13, 8, 2, '#1e293b'); gp(14, 13, 1, 1, '#ef4444'); gp(17, 13, 1, 1, '#ef4444');
+              // 鎧
+              gp(10, 18, 12, 8, cArmorDark); gp(11, 18, 10, 7, cArmor); gp(14, 20, 4, 4, cGold);
+              gp(8, 18, 3, 3, cArmorDark); gp(21, 18, 3, 3, cArmorDark);
+              // 脚・剣
+              gp(11, 26 + (legOffset > 0 ? -1 : 0), 3, 3, cArmorDark); gp(18, 26 + (legOffset < 0 ? -1 : 0), 3, 3, cArmorDark);
+              gp(6, 17, 2, 2, cArmorDark); gp(6, 8, 2, 10, cSword); gp(4, 16, 6, 1, cGold);
+              tCtx.restore();
+
+            // ----------------- グリフォン -----------------
+            } else if (enemyId === 'color_griffon') {
+              const cFeather = isGray ? '#94a3b8' : '#d97706';
+              const cFeatherDark = isGray ? '#475569' : '#78350f';
+              const cBeak = isGray ? '#cbd5e1' : '#facc15';
+              const cWing = isGray ? '#cbd5e1' : '#f8fafc';
+              tCtx.save();
+              const bounceY = Math.sin((frame / frames) * Math.PI * 2) * 2;
+              tCtx.translate(0, bounceY);
+              // 影
+              tCtx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+              tCtx.beginPath(); tCtx.ellipse(16, 28, 7 - Math.abs(bounceY) * 0.4, 1.8, 0, 0, Math.PI * 2); tCtx.fill();
+              // 頭
+              gp(11, 8, 9, 8, cFeatherDark); gp(12, 9, 7, 6, '#f8fafc');
+              gp(9, 11, 3, 3, cBeak); gp(15, 11, 1.5, 1.5, '#ef4444');
+              // 胴体・翼
+               gp(10, 16, 12, 9, cFeatherDark); gp(11, 17, 10, 7, cFeather);
+               const flap = (frame === 1 || frame === 3) ? -2 : (frame === 2 ? 1 : -1);
+               gp(20, 12 + flap, 7, 5, cWing); gp(19, 14 + flap, 4, 4, cFeatherDark);
+               // 脚
+               gp(11, 25, 2, 3, cBeak); gp(18, 25, 3, 3, cFeatherDark);
+               tCtx.restore();
 
             // ----------------- スライム系 -----------------
             } else {

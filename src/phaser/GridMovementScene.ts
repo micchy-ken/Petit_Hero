@@ -1,6 +1,17 @@
 import Phaser from 'phaser';
 import { generateHeroSpritesheet } from './HeroSpritesheet';
-import { generateSlimeSpritesheet, generateBatSpritesheet, generateGoblinSpritesheet, generateDemonKingSpritesheet, generateDragonSpritesheet } from './MonsterSpritesheets';
+import {
+  generateSlimeSpritesheet,
+  generateBatSpritesheet,
+  generateGoblinSpritesheet,
+  generateDemonKingSpritesheet,
+  generateDragonSpritesheet,
+  generateGolemSpritesheet,
+  generateLizardmanSpritesheet,
+  generateSkeletonSpritesheet,
+  generateSwordsmanSpritesheet,
+  generateGriffonSpritesheet
+} from './MonsterSpritesheets';
 import { generateObstacleTextures } from './ObstacleTextures';
 import { getEnemyAssetById, EnemyAsset, getAvailableEnemies } from '../data/EnemyAssets';
 import { getHeroStatusByLevel, getAllHeroStatus } from '../data/HeroStatusAssets';
@@ -276,6 +287,21 @@ export class GridMovementScene extends Phaser.Scene {
     generateGoblinSpritesheet(this, 'normal');
     generateGoblinSpritesheet(this, 'text');
     generateGoblinSpritesheet(this, 'grayscale');
+    generateGolemSpritesheet(this, 'normal');
+    generateGolemSpritesheet(this, 'text');
+    generateGolemSpritesheet(this, 'grayscale');
+    generateLizardmanSpritesheet(this, 'normal');
+    generateLizardmanSpritesheet(this, 'text');
+    generateLizardmanSpritesheet(this, 'grayscale');
+    generateSkeletonSpritesheet(this, 'normal');
+    generateSkeletonSpritesheet(this, 'text');
+    generateSkeletonSpritesheet(this, 'grayscale');
+    generateSwordsmanSpritesheet(this, 'normal');
+    generateSwordsmanSpritesheet(this, 'text');
+    generateSwordsmanSpritesheet(this, 'grayscale');
+    generateGriffonSpritesheet(this, 'normal');
+    generateGriffonSpritesheet(this, 'text');
+    generateGriffonSpritesheet(this, 'grayscale');
     generateDemonKingSpritesheet(this, 'normal');
     generateDemonKingSpritesheet(this, 'grayscale');
     generateDragonSpritesheet(this);
@@ -526,6 +552,53 @@ export class GridMovementScene extends Phaser.Scene {
         key: `goblin-idle-${key}-gray`,
         frames: [{ key: 'goblin_spritesheet_gray', frame: startFrame }],
         frameRate: 1
+      });
+    });
+
+    // 新モンスター5体のアニメーション（golem, lizardman, skeleton, swordsman, griffon）
+    const newMonsters = ['golem', 'lizardman', 'skeleton', 'swordsman', 'griffon'];
+    const standardDirs: { key: Direction; row: number }[] = [
+      { key: 'down', row: 0 },
+      { key: 'up', row: 1 },
+      { key: 'left', row: 2 },
+      { key: 'right', row: 3 }
+    ];
+
+    newMonsters.forEach(mName => {
+      standardDirs.forEach(({ key, row }) => {
+        const startFrame = row * 4;
+        
+        // カラー版歩き・待機
+        this.anims.create({
+          key: `${mName}-walk-${key}`,
+          frames: this.anims.generateFrameNumbers(`${mName}_spritesheet`, {
+            start: startFrame,
+            end: startFrame + 3
+          }),
+          frameRate: 8,
+          repeat: -1
+        });
+        this.anims.create({
+          key: `${mName}-idle-${key}`,
+          frames: [{ key: `${mName}_spritesheet`, frame: startFrame }],
+          frameRate: 1
+        });
+
+        // 白黒版歩き・待機
+        this.anims.create({
+          key: `${mName}-walk-${key}-gray`,
+          frames: this.anims.generateFrameNumbers(`${mName}_spritesheet_gray`, {
+            start: startFrame,
+            end: startFrame + 3
+          }),
+          frameRate: 8,
+          repeat: -1
+        });
+        this.anims.create({
+          key: `${mName}-idle-${key}-gray`,
+          frames: [{ key: `${mName}_spritesheet_gray`, frame: startFrame }],
+          frameRate: 1
+        });
       });
     });
 
@@ -1057,6 +1130,16 @@ export class GridMovementScene extends Phaser.Scene {
         char = '蝙';
       } else if (enemyId === 'color_goblin') {
         char = 'ゴ';
+      } else if (enemyId === 'color_golem') {
+        char = '剛';
+      } else if (enemyId === 'color_lizardman') {
+        char = '蜥';
+      } else if (enemyId === 'color_skeleton') {
+        char = '骨';
+      } else if (enemyId === 'color_swordsman') {
+        char = '剣';
+      } else if (enemyId === 'color_griffon') {
+        char = '鷲';
       } else {
         const asset = getEnemyAssetById(enemyId);
         if (asset && asset.name) {
@@ -1151,6 +1234,56 @@ export class GridMovementScene extends Phaser.Scene {
     if (enemyId === 'color_goblin') {
       const tex = isGray ? 'goblin_spritesheet_gray' : 'goblin_spritesheet';
       const animPrefix = action === 'walk' ? 'goblin-walk' : 'goblin-idle';
+      const cleanDir = (dir === 'up-left' || dir === 'up-right') ? 'up' : 
+                      (dir === 'down-left' || dir === 'down-right') ? 'down' : dir;
+      const finalDir = (cleanDir === 'idle' || cleanDir === 'up' || cleanDir === 'down' || cleanDir === 'left' || cleanDir === 'right') ? cleanDir : 'down';
+      return { texture: tex, anim: `${animPrefix}-${finalDir}${suffix}` };
+    }
+
+    // ゴーレム
+    if (enemyId === 'color_golem') {
+      const tex = isGray ? 'golem_spritesheet_gray' : 'golem_spritesheet';
+      const animPrefix = action === 'walk' ? 'golem-walk' : 'golem-idle';
+      const cleanDir = (dir === 'up-left' || dir === 'up-right') ? 'up' : 
+                      (dir === 'down-left' || dir === 'down-right') ? 'down' : dir;
+      const finalDir = (cleanDir === 'idle' || cleanDir === 'up' || cleanDir === 'down' || cleanDir === 'left' || cleanDir === 'right') ? cleanDir : 'down';
+      return { texture: tex, anim: `${animPrefix}-${finalDir}${suffix}` };
+    }
+
+    // リザードマン
+    if (enemyId === 'color_lizardman') {
+      const tex = isGray ? 'lizardman_spritesheet_gray' : 'lizardman_spritesheet';
+      const animPrefix = action === 'walk' ? 'lizardman-walk' : 'lizardman-idle';
+      const cleanDir = (dir === 'up-left' || dir === 'up-right') ? 'up' : 
+                      (dir === 'down-left' || dir === 'down-right') ? 'down' : dir;
+      const finalDir = (cleanDir === 'idle' || cleanDir === 'up' || cleanDir === 'down' || cleanDir === 'left' || cleanDir === 'right') ? cleanDir : 'down';
+      return { texture: tex, anim: `${animPrefix}-${finalDir}${suffix}` };
+    }
+
+    // ガイコツ
+    if (enemyId === 'color_skeleton') {
+      const tex = isGray ? 'skeleton_spritesheet_gray' : 'skeleton_spritesheet';
+      const animPrefix = action === 'walk' ? 'skeleton-walk' : 'skeleton-idle';
+      const cleanDir = (dir === 'up-left' || dir === 'up-right') ? 'up' : 
+                      (dir === 'down-left' || dir === 'down-right') ? 'down' : dir;
+      const finalDir = (cleanDir === 'idle' || cleanDir === 'up' || cleanDir === 'down' || cleanDir === 'left' || cleanDir === 'right') ? cleanDir : 'down';
+      return { texture: tex, anim: `${animPrefix}-${finalDir}${suffix}` };
+    }
+
+    // 剣士
+    if (enemyId === 'color_swordsman') {
+      const tex = isGray ? 'swordsman_spritesheet_gray' : 'swordsman_spritesheet';
+      const animPrefix = action === 'walk' ? 'swordsman-walk' : 'swordsman-idle';
+      const cleanDir = (dir === 'up-left' || dir === 'up-right') ? 'up' : 
+                      (dir === 'down-left' || dir === 'down-right') ? 'down' : dir;
+      const finalDir = (cleanDir === 'idle' || cleanDir === 'up' || cleanDir === 'down' || cleanDir === 'left' || cleanDir === 'right') ? cleanDir : 'down';
+      return { texture: tex, anim: `${animPrefix}-${finalDir}${suffix}` };
+    }
+
+    // グリフォン
+    if (enemyId === 'color_griffon') {
+      const tex = isGray ? 'griffon_spritesheet_gray' : 'griffon_spritesheet';
+      const animPrefix = action === 'walk' ? 'griffon-walk' : 'griffon-idle';
       const cleanDir = (dir === 'up-left' || dir === 'up-right') ? 'up' : 
                       (dir === 'down-left' || dir === 'down-right') ? 'down' : dir;
       const finalDir = (cleanDir === 'idle' || cleanDir === 'up' || cleanDir === 'down' || cleanDir === 'left' || cleanDir === 'right') ? cleanDir : 'down';

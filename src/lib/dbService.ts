@@ -169,12 +169,53 @@ export async function fetchEnemyAssetsFromFirestore() {
     const docRef = doc(db, 'config', 'custom_assets');
     const docSnap = await getDoc(docRef);
     
+    const mergeAssets = (loaded: Record<string, any[]>, fallback: Record<string, any[]>) => {
+      const merged = { ...loaded };
+      for (const mode of Object.keys(fallback)) {
+        if (!merged[mode]) {
+          merged[mode] = [...fallback[mode]];
+        } else {
+          const existingIds = new Set(merged[mode].map(item => item.id));
+          for (const item of fallback[mode]) {
+            if (!existingIds.has(item.id)) {
+              merged[mode].push({ ...item });
+            }
+          }
+        }
+      }
+      return merged;
+    };
+
     if (docSnap.exists()) {
       const data = docSnap.data();
-      const enemyAssets = data.enemyAssets || staticEnemyAssets;
-      const bossAssets = data.bossAssets || staticBossAssets;
+      const rawEnemyAssets = data.enemyAssets || {};
+      const rawBossAssets = data.bossAssets || {};
+      
+      const enemyAssets = mergeAssets(rawEnemyAssets, staticEnemyAssets);
+      const bossAssets = mergeAssets(rawBossAssets, staticBossAssets);
+      
+      // もしマージによって要素数等が変わった（新モンスターが追加された）場合は、Firestoreに保存しておく
+      let needsSave = false;
+      for (const mode of Object.keys(staticEnemyAssets)) {
+        if ((rawEnemyAssets[mode] || []).length !== (enemyAssets[mode] || []).length) {
+          needsSave = true;
+          break;
+        }
+      }
+      for (const mode of Object.keys(staticBossAssets)) {
+        if ((rawBossAssets[mode] || []).length !== (bossAssets[mode] || []).length) {
+          needsSave = true;
+          break;
+        }
+      }
+      
+      if (needsSave) {
+        console.log('Detected missing standard assets in Firestore. Auto-updating config...');
+        await setDoc(docRef, { enemyAssets, bossAssets });
+      }
+
       setDynamicAssets(enemyAssets, bossAssets);
-      console.log('Loaded custom enemy/boss assets from Firestore');
+      console.log('Loaded custom enemy/boss assets from Firestore (and merged missing defaults)');
       return { enemyAssets, bossAssets };
     } else {
       console.log('No custom enemy assets found in Firestore. Seeding with defaults...');

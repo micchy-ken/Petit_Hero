@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Save, Plus, MessageSquare, Trash2, Loader2, Check, Play } from 'lucide-react';
 import { PORTRAITS } from '../data/portraits';
 import { CustomEvent, ConversationNode } from '../types/CustomEvent';
@@ -7,6 +7,19 @@ import { fetchCustomEventsFromFirestore, saveCustomEventsToFirestore } from '../
 
 export default function EventEditorPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const currentScenarioId = queryParams.get('scenarioId') || 'scenario_test';
+  const returnTo = queryParams.get('returnTo');
+
+  const handleExit = () => {
+    if (returnTo === 'settings') {
+      navigate(`/?settings=true&resumeScenarioId=${currentScenarioId}`);
+    } else {
+      navigate('/');
+    }
+  };
+
   const [events, setEvents] = useState<CustomEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -140,7 +153,7 @@ export default function EventEditorPage() {
       <header className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-20 shadow-sm">
         <div className="flex items-center gap-4">
           <button
-            onClick={() => navigate('/?settings=true')}
+            onClick={() => handleExit()}
             className="p-2 hover:bg-slate-100 rounded-full transition-colors"
             title="戻る"
           >

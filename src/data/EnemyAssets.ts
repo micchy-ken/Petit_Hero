@@ -27,6 +27,11 @@ export const EnemyAssets: Record<string, EnemyAsset[]> = {
     { id: 'color_slime_blue', name: 'ブルースライム', hp: 12, attack: 3, defense: 1, exp: 3, speed: 800, behavior: 'seek', attackElement: 'water', attackElementEnchantValue: 2, defenseElement: 'water', defenseElementEnchantValue: 1 },
     { id: 'color_goblin', name: 'ゴブリン', hp: 20, attack: 5, defense: 2, exp: 5, speed: 700, behavior: 'seek' },
     { id: 'color_bat', name: 'コウモリ', hp: 8, attack: 2, defense: 0, exp: 1, speed: 500, behavior: 'random' },
+    { id: 'color_golem', name: 'ゴーレム', hp: 45, attack: 10, defense: 6, exp: 12, speed: 1200, behavior: 'random' },
+    { id: 'color_lizardman', name: 'リザードマン', hp: 30, attack: 7, defense: 3, exp: 8, speed: 800, behavior: 'seek' },
+    { id: 'color_skeleton', name: 'ガイコツ', hp: 20, attack: 5, defense: 1, exp: 5, speed: 950, behavior: 'seek', defenseElement: 'dark', defenseElementEnchantValue: 2 },
+    { id: 'color_swordsman', name: '剣士', hp: 28, attack: 8, defense: 2, exp: 9, speed: 750, behavior: 'seek' },
+    { id: 'color_griffon', name: 'グリフォン', hp: 32, attack: 7, defense: 2, exp: 11, speed: 600, behavior: 'seek', attackElement: 'wind', attackElementEnchantValue: 2 },
   ],
 };
 
