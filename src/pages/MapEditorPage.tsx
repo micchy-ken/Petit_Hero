@@ -293,13 +293,13 @@ export default function MapEditorPage() {
   // イベント配置用の状態（オブジェクト化）
   const [newEventParams, setNewEventParams] = useState({
     type: 'start_point' as 'start_point' | 'teleport' | 'monologue' | 'custom_event',
-    startPointFromMap: '',
-    teleportTargetMap: '',
-    eventCondExpRate: null as number | null,
-    eventCondSearchRate: null as number | null,
-    eventCondDefeatRate: null as number | null,
-    monologueText: '',
-    customEventId: '',
+    fromMap: '',
+    targetMap: '',
+    text: '',
+    eventId: '',
+    requiredExplorationRate: null as number | null,
+    requiredSearchRate: null as number | null,
+    requiredDefeatRate: null as number | null,
     playMode: 'always' as 'always' | 'once_per_map' | 'once_global',
   });
   
@@ -542,10 +542,10 @@ export default function MapEditorPage() {
   }, [currentMapId, currentMap]);
 
   useEffect(() => {
-    if (!newEventParams.teleportTargetMap && maps.length > 0) {
-      setNewEventParams(prev => ({ ...prev, teleportTargetMap: maps[0].id }));
+    if (!newEventParams.targetMap && maps.length > 0) {
+      setNewEventParams(prev => ({ ...prev, targetMap: maps[0].id }));
     }
-  }, [maps, newEventParams.teleportTargetMap]);
+  }, [maps, newEventParams.targetMap]);
 
   const handleGridClick = (x: number, y: number) => {
     if (placeMode === 'event') {
@@ -553,25 +553,25 @@ export default function MapEditorPage() {
       const newEvents = [...currentMap.events];
       
       if (existingIndex >= 0) {
-        const ev = currentMap.events[existingIndex];
-        setEditingEvent({
-          index: existingIndex,
-          x: ev.x,
-          y: ev.y,
-          type: ev.type as 'start_point' | 'teleport' | 'monologue' | 'custom_event',
-          fromMap: ev.data?.fromMap || '',
-          targetMap: ev.data?.targetMap || '',
-          text: ev.data?.text || '',
-          eventId: ev.data?.eventId || '',
-          requiredExplorationRate: ev.data?.requiredExplorationRate ?? null,
-          requiredSearchRate: ev.data?.requiredSearchRate ?? null,
-          requiredDefeatRate: ev.data?.requiredDefeatRate ?? null,
-          playMode: ev.data?.playMode || 'always',
-        });
+         const ev = currentMap.events[existingIndex];
+         setEditingEvent({
+           index: existingIndex,
+           x: ev.x,
+           y: ev.y,
+           type: ev.type as 'start_point' | 'teleport' | 'monologue' | 'custom_event',
+           fromMap: ev.data?.fromMap || '',
+           targetMap: ev.data?.targetMap || '',
+           text: ev.data?.text || '',
+           eventId: ev.data?.eventId || '',
+           requiredExplorationRate: ev.data?.requiredExplorationRate ?? null,
+           requiredSearchRate: ev.data?.requiredSearchRate ?? null,
+           requiredDefeatRate: ev.data?.requiredDefeatRate ?? null,
+           playMode: ev.data?.playMode || 'always',
+         });
       } else {
         let data: any = {};
         if (newEventParams.type === 'start_point') {
-          const targetFromMap = newEventParams.startPointFromMap || null;
+          const targetFromMap = newEventParams.fromMap || null;
           // 元マップ(fromMap)ごとに初期値は1つしか置けないようにする
           const sameFromMapIndex = newEvents.findIndex(
             e => e.type === 'start_point' && (e.data?.fromMap || null) === targetFromMap
@@ -579,19 +579,19 @@ export default function MapEditorPage() {
           if (sameFromMapIndex >= 0) {
             newEvents.splice(sameFromMapIndex, 1);
           }
-          data = { fromMap: targetFromMap, eventId: newEventParams.customEventId || undefined };
+          data = { fromMap: targetFromMap, eventId: newEventParams.eventId || undefined };
         } else if (newEventParams.type === 'teleport') {
-          if (!newEventParams.teleportTargetMap) return;
-          data = { targetMap: newEventParams.teleportTargetMap, eventId: newEventParams.customEventId || undefined };
+          if (!newEventParams.targetMap) return;
+          data = { targetMap: newEventParams.targetMap, eventId: newEventParams.eventId || undefined };
         } else if (newEventParams.type === 'monologue') {
-          data = { text: newEventParams.monologueText };
+          data = { text: newEventParams.text };
         } else if (newEventParams.type === 'custom_event') {
-          data = { eventId: newEventParams.customEventId };
+          data = { eventId: newEventParams.eventId };
         }
         
-        if (newEventParams.eventCondExpRate !== null) data.requiredExplorationRate = newEventParams.eventCondExpRate;
-        if (newEventParams.eventCondSearchRate !== null) data.requiredSearchRate = newEventParams.eventCondSearchRate;
-        if (newEventParams.eventCondDefeatRate !== null) data.requiredDefeatRate = newEventParams.eventCondDefeatRate;
+        if (newEventParams.requiredExplorationRate !== null) data.requiredExplorationRate = newEventParams.requiredExplorationRate;
+        if (newEventParams.requiredSearchRate !== null) data.requiredSearchRate = newEventParams.requiredSearchRate;
+        if (newEventParams.requiredDefeatRate !== null) data.requiredDefeatRate = newEventParams.requiredDefeatRate;
         data.playMode = newEventParams.playMode;
         
         newEvents.push({ x, y, type: newEventParams.type, data });
@@ -1640,8 +1640,8 @@ export default function MapEditorPage() {
                       <div className="flex flex-col gap-1">
                         <label className="text-xs text-slate-400 font-bold uppercase">連動イベント (任意)</label>
                         <select 
-                          value={newEventParams.customEventId}
-                          onChange={(e) => setNewEventParams({ ...newEventParams, customEventId: e.target.value })}
+                          value={newEventParams.eventId}
+                          onChange={(e) => setNewEventParams({ ...newEventParams, eventId: e.target.value })}
                           className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
                         >
                           <option value="">設定なし</option>
@@ -1656,8 +1656,8 @@ export default function MapEditorPage() {
                       <div className="flex flex-col gap-1">
                         <label className="text-xs text-slate-400 font-bold uppercase">元マップ指定</label>
                         <select 
-                          value={newEventParams.startPointFromMap}
-                          onChange={(e) => setNewEventParams({ ...newEventParams, startPointFromMap: e.target.value })}
+                          value={newEventParams.fromMap}
+                          onChange={(e) => setNewEventParams({ ...newEventParams, fromMap: e.target.value })}
                           className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
                         >
                           <option value="">設定なし (デフォルト開始位置)</option>
@@ -1672,8 +1672,8 @@ export default function MapEditorPage() {
                       <div className="flex flex-col gap-1">
                         <label className="text-xs text-slate-400 font-bold uppercase">移動先マップ</label>
                         <select 
-                          value={newEventParams.teleportTargetMap}
-                          onChange={(e) => setNewEventParams({ ...newEventParams, teleportTargetMap: e.target.value })}
+                          value={newEventParams.targetMap}
+                          onChange={(e) => setNewEventParams({ ...newEventParams, targetMap: e.target.value })}
                           className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
                         >
                           <option value="" disabled>選択してください</option>
@@ -1688,8 +1688,8 @@ export default function MapEditorPage() {
                       <div className="flex flex-col gap-1">
                         <label className="text-xs text-slate-400 font-bold uppercase">モノローグテキスト</label>
                         <textarea 
-                          value={newEventParams.monologueText}
-                          onChange={(e) => setNewEventParams({ ...newEventParams, monologueText: e.target.value })}
+                          value={newEventParams.text}
+                          onChange={(e) => setNewEventParams({ ...newEventParams, text: e.target.value })}
                           className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
                           rows={3}
                           placeholder="表示するテキストを入力"
@@ -1715,8 +1715,36 @@ export default function MapEditorPage() {
                     <div className="flex flex-col gap-1 mt-2 border-t border-slate-600 pt-2">
                       <label className="text-xs text-slate-400 font-bold uppercase">固有条件 (踏破率)</label>
                       <select 
-                        value={newEventParams.eventCondExpRate === null ? 'null' : String(newEventParams.eventCondExpRate)}
-                        onChange={(e) => setNewEventParams({ ...newEventParams, eventCondExpRate: e.target.value === 'null' ? null : Number(e.target.value) })}
+                        value={newEventParams.requiredExplorationRate === null ? 'null' : String(newEventParams.requiredExplorationRate)}
+                        onChange={(e) => setNewEventParams({ ...newEventParams, requiredExplorationRate: e.target.value === 'null' ? null : Number(e.target.value) })}
+                        className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
+                      >
+                        <option value="null">なし (条件なし)</option>
+                        <option value="50">50%</option>
+                        <option value="80">80%</option>
+                        <option value="100">100%</option>
+                      </select>
+                    </div>
+
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-slate-400 font-bold uppercase">固有条件 (捜索率)</label>
+                      <select 
+                        value={newEventParams.requiredSearchRate === null ? 'null' : String(newEventParams.requiredSearchRate)}
+                        onChange={(e) => setNewEventParams({ ...newEventParams, requiredSearchRate: e.target.value === 'null' ? null : Number(e.target.value) })}
+                        className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
+                      >
+                        <option value="null">なし (条件なし)</option>
+                        <option value="50">50%</option>
+                        <option value="80">80%</option>
+                        <option value="100">100%</option>
+                      </select>
+                    </div>
+
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-slate-400 font-bold uppercase">固有条件 (撃破率)</label>
+                      <select 
+                        value={newEventParams.requiredDefeatRate === null ? 'null' : String(newEventParams.requiredDefeatRate)}
+                        onChange={(e) => setNewEventParams({ ...newEventParams, requiredDefeatRate: e.target.value === 'null' ? null : Number(e.target.value) })}
                         className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
                       >
                         <option value="null">なし (条件なし)</option>
@@ -2186,6 +2214,21 @@ export default function MapEditorPage() {
                     className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 outline-none focus:border-emerald-500"
                     rows={4}
                   />
+                </div>
+              )}
+
+              {(editingEvent.type === 'custom_event' || editingEvent.type === 'start_point' || editingEvent.type === 'teleport' || editingEvent.type === 'monologue') && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-300 font-bold uppercase">再生頻度設定</label>
+                  <select 
+                    value={editingEvent.playMode}
+                    onChange={(e) => setEditingEvent({ ...editingEvent, playMode: e.target.value as any })}
+                    className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                  >
+                    <option value="always">何度でも表示する (Always)</option>
+                    <option value="once_per_map">一回だけ表示 (マップ出入りでリセット)</option>
+                    <option value="once_global">ゲーム中一回だけしか表示しない</option>
+                  </select>
                 </div>
               )}
 
