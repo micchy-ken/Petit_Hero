@@ -2081,12 +2081,46 @@ export class GridMovementScene extends Phaser.Scene {
     });
   }
 
+  private isBossEnemy(enemyId: string): boolean {
+    return ['gray_boss', 'color_demon_king', 'color_dragon'].includes(enemyId);
+  }
+
+  private isTileOccupiedByOthers(x: number, y: number, excludeSlimeId: string): boolean {
+    if (this.currentGridX === x && this.currentGridY === y) return true;
+    if (this.heroTargetGridX === x && this.heroTargetGridY === y) return true;
+    for (const s of this.slimes) {
+      if (s.id === excludeSlimeId) continue;
+      const isBoss = this.isBossEnemy(s.enemyId);
+      if (isBoss) {
+        if (x >= s.gridX && x <= s.gridX + 1 && y >= s.gridY && y <= s.gridY + 1) return true;
+        if (s.targetGridX !== undefined && s.targetGridY !== undefined) {
+          if (x >= s.targetGridX && x <= s.targetGridX + 1 && y >= s.targetGridY && y <= s.targetGridY + 1) return true;
+        }
+      } else {
+        if (s.gridX === x && s.gridY === y) return true;
+        if (s.targetGridX === x && s.targetGridY === y) return true;
+      }
+    }
+    if (this.mapData && this.mapData.obstacles) {
+      if (this.mapData.obstacles.some((obs: any) => obs.x === x && obs.y === y)) return true;
+    }
+    return false;
+  }
+
   private isTileOccupied(x: number, y: number): boolean {
     if (this.currentGridX === x && this.currentGridY === y) return true;
     if (this.heroTargetGridX === x && this.heroTargetGridY === y) return true;
     for (const s of this.slimes) {
-      if (s.gridX === x && s.gridY === y) return true;
-      if (s.targetGridX === x && s.targetGridY === y) return true;
+      const isBoss = this.isBossEnemy(s.enemyId);
+      if (isBoss) {
+        if (x >= s.gridX && x <= s.gridX + 1 && y >= s.gridY && y <= s.gridY + 1) return true;
+        if (s.targetGridX !== undefined && s.targetGridY !== undefined) {
+          if (x >= s.targetGridX && x <= s.targetGridX + 1 && y >= s.targetGridY && y <= s.targetGridY + 1) return true;
+        }
+      } else {
+        if (s.gridX === x && s.gridY === y) return true;
+        if (s.targetGridX === x && s.targetGridY === y) return true;
+      }
     }
     if (this.mapData && this.mapData.obstacles) {
       if (this.mapData.obstacles.some((obs: any) => obs.x === x && obs.y === y)) return true;
@@ -2099,10 +2133,18 @@ export class GridMovementScene extends Phaser.Scene {
     if (this.currentGridX === x && this.currentGridY === y) return true;
     if (this.heroTargetGridX === x && this.heroTargetGridY === y) return true;
 
-    // 2. 敵との重複チェック
+    // 2. 敵との重複チェック (ボス考慮)
     for (const s of this.slimes) {
-      if (s.gridX === x && s.gridY === y) return true;
-      if (s.targetGridX === x && s.targetGridY === y) return true;
+      const isBoss = this.isBossEnemy(s.enemyId);
+      if (isBoss) {
+        if (x >= s.gridX && x <= s.gridX + 1 && y >= s.gridY && y <= s.gridY + 1) return true;
+        if (s.targetGridX !== undefined && s.targetGridY !== undefined) {
+          if (x >= s.targetGridX && x <= s.targetGridX + 1 && y >= s.targetGridY && y <= s.targetGridY + 1) return true;
+        }
+      } else {
+        if (s.gridX === x && s.gridY === y) return true;
+        if (s.targetGridX === x && s.targetGridY === y) return true;
+      }
     }
 
     // 3. マップ上のアイテムとの重複チェック
@@ -2141,15 +2183,46 @@ export class GridMovementScene extends Phaser.Scene {
       case 'down-right': targetGridY += 1; targetGridX += 1; break;
     }
 
-    // 勇者への攻撃判定
-    if ((targetGridX === this.currentGridX && targetGridY === this.currentGridY) || 
-        (targetGridX === this.heroTargetGridX && targetGridY === this.heroTargetGridY)) {
-      slime.direction = dir;
-      this.performSlimeAttack(slime);
-      return;
+    const isBoss = this.isBossEnemy(slime.enemyId);
+
+    if (isBoss) {
+      // マップ外はみ出し防止 (ボスは2x2を占有するため、右下方向がはみ出ないようにする)
+      if (targetGridX < 0 || targetGridX + 1 >= this.gridCols || targetGridY < 0 || targetGridY + 1 >= this.gridRows) {
+        return;
+      }
+
+      // ボスの2x2マス全てについて判定
+      for (let ox = 0; ox < 2; ox++) {
+        for (let oy = 0; oy < 2; oy++) {
+          const tx = targetGridX + ox;
+          const ty = targetGridY + oy;
+
+          // 勇者への攻撃判定
+          if ((tx === this.currentGridX && ty === this.currentGridY) || 
+              (tx === this.heroTargetGridX && ty === this.heroTargetGridY)) {
+            slime.direction = dir;
+            this.performSlimeAttack(slime);
+            return;
+          }
+
+          // 他のキャラクター等との重なり防止
+          if (this.isTileOccupiedByOthers(tx, ty, slime.id)) {
+            return;
+          }
+        }
+      }
+    } else {
+      // 通常スライムの衝突チェック
+      // 勇者への攻撃判定
+      if ((targetGridX === this.currentGridX && targetGridY === this.currentGridY) || 
+          (targetGridX === this.heroTargetGridX && targetGridY === this.heroTargetGridY)) {
+        slime.direction = dir;
+        this.performSlimeAttack(slime);
+        return;
+      }
+      // 全てのキャラクターとの重なり防止
+      if (this.isTileOccupied(targetGridX, targetGridY)) return;
     }
-    // 全てのキャラクターとの重なり防止
-    if (this.isTileOccupied(targetGridX, targetGridY)) return;
 
     slime.isMoving = true;
     slime.targetGridX = targetGridX;
@@ -2160,8 +2233,13 @@ export class GridMovementScene extends Phaser.Scene {
     this.playMonsterAnim(slime, 'shake', dir);
 
     const { GRID_SIZE } = GridMovementScene;
-    const targetX = targetGridX * GRID_SIZE + GRID_SIZE / 2;
-    const targetY = targetGridY * GRID_SIZE + GRID_SIZE / 2;
+    // 128x128（2x2グリッド）のボスは基準点が中央にあるため、x, y座標が+GRID_SIZE (2x2の中心) になる。
+    const targetX = isBoss 
+      ? targetGridX * GRID_SIZE + GRID_SIZE 
+      : targetGridX * GRID_SIZE + GRID_SIZE / 2;
+    const targetY = isBoss 
+      ? targetGridY * GRID_SIZE + GRID_SIZE 
+      : targetGridY * GRID_SIZE + GRID_SIZE / 2;
 
     // プルプルする時間 (移動速度の30%程度、最大150ms)
     const shakeDuration = this.isTurboActive ? 2 : Math.min(150, this.moveSpeedMs * 0.3);
@@ -2216,11 +2294,25 @@ export class GridMovementScene extends Phaser.Scene {
 
     const { VIEWPORT_COLS, VIEWPORT_ROWS, GRID_SIZE } = GridMovementScene;
     
-    // スライムとの戦闘判定
-    const targetSlimeIndex = this.slimes.findIndex(s => 
-      (s.gridX === targetGridX && s.gridY === targetGridY) || 
-      (s.targetGridX === targetGridX && s.targetGridY === targetGridY)
-    );
+    // スライムとの戦闘判定 (ボス考慮)
+    const targetSlimeIndex = this.slimes.findIndex(s => {
+      const isBoss = this.isBossEnemy(s.enemyId);
+      if (isBoss) {
+        // 2x2マスのいずれかと重なっているか
+        if (targetGridX >= s.gridX && targetGridX <= s.gridX + 1 && targetGridY >= s.gridY && targetGridY <= s.gridY + 1) {
+          return true;
+        }
+        if (s.targetGridX !== undefined && s.targetGridY !== undefined) {
+          if (targetGridX >= s.targetGridX && targetGridX <= s.targetGridX + 1 && targetGridY >= s.targetGridY && targetGridY <= s.targetGridY + 1) {
+            return true;
+          }
+        }
+        return false;
+      } else {
+        return (s.gridX === targetGridX && s.gridY === targetGridY) || 
+               (s.targetGridX === targetGridX && s.targetGridY === targetGridY);
+      }
+    });
     
     if (targetSlimeIndex !== -1) {
       this.isMoving = true;
@@ -2733,50 +2825,50 @@ export class GridMovementScene extends Phaser.Scene {
   }
 
   private handleTeleport(event: any) {
-      const eventData = event.data || {};
-      let met = true;
-      const expRate = (this.visitedGrids.size / this.totalGrids) * 100;
-      const sRate = (this.viewedGrids.size / this.totalGrids) * 100;
-      const dRate = this.getDefeatRate();
-      
-      if (eventData.requiredExplorationRate && expRate < eventData.requiredExplorationRate) met = false;
-      if (eventData.requiredSearchRate && sRate < eventData.requiredSearchRate) met = false;
-      if (eventData.requiredDefeatRate && dRate < eventData.requiredDefeatRate) met = false;
-      
-      if (met) {
-        const doTransition = () => {
-          this.isTurboActive = false;
-          if (this.onTestPlayClear) {
-            this.onTestPlayClear();
-          } else if (this.onTeleport && eventData.targetMap) {
-            this.sendLog(`条件クリア！次のマップへ移動します。`, 'system');
-            this.onTeleport(eventData.targetMap);
-          } else {
-            this.sendLog(`条件クリア！次のマップへ移動します。(※移動先未設定)`, 'system');
-          }
-        };
-
-        const teleportHasCustomEvent = eventData.eventId;
-        if (teleportHasCustomEvent && this.onCustomEventCallback && this.canPlayEvent(event)) {
-          this.isShowingMonologue = true;
-          this.markEventPlayed(event);
-          this.onCustomEventCallback(eventData.eventId, () => {
-            this.isShowingMonologue = false;
-            doTransition();
-          });
+    const eventData = event.data || {};
+    let met = true;
+    const expRate = (this.visitedGrids.size / this.totalGrids) * 100;
+    const sRate = (this.viewedGrids.size / this.totalGrids) * 100;
+    const dRate = this.getDefeatRate();
+    
+    if (eventData.requiredExplorationRate && expRate < eventData.requiredExplorationRate) met = false;
+    if (eventData.requiredSearchRate && sRate < eventData.requiredSearchRate) met = false;
+    if (eventData.requiredDefeatRate && dRate < eventData.requiredDefeatRate) met = false;
+    
+    if (met) {
+      const doTransition = () => {
+        this.isTurboActive = false;
+        if (this.onTestPlayClear) {
+          this.onTestPlayClear();
+        } else if (this.onTeleport && eventData.targetMap) {
+          this.sendLog(`条件クリア！次のマップへ移動します。`, 'system');
+          this.onTeleport(eventData.targetMap);
         } else {
-          doTransition();
+          this.sendLog(`条件クリア！次のマップへ移動します。(※移動先未設定)`, 'system');
         }
+      };
+
+      const teleportHasCustomEvent = eventData.eventId;
+      if (teleportHasCustomEvent && this.onCustomEventCallback && this.canPlayEvent(event)) {
+        this.isShowingMonologue = true;
+        this.markEventPlayed(event);
+        this.onCustomEventCallback(eventData.eventId, () => {
+          this.isShowingMonologue = false;
+          doTransition();
+        });
       } else {
-        const reqExp = eventData.requiredExplorationRate || 0;
-        const reqSearch = eventData.requiredSearchRate || 0;
-        const reqDefeat = eventData.requiredDefeatRate || 0;
-        let reason = '';
-        if (reqExp > 0 && expRate < reqExp) reason += ` 踏破率: ${Math.floor(expRate)}% / ${reqExp}%`;
-        if (reqSearch > 0 && sRate < reqSearch) reason += ` 捜索率: ${Math.floor(sRate)}% / ${reqSearch}%`;
-        if (reqDefeat > 0 && dRate < reqDefeat) reason += ` 撃破率: ${Math.floor(dRate)}% / ${reqDefeat}%`;
-        this.sendLog(`イベント発生条件を満たしていません:${reason}`, 'info');
+        doTransition();
       }
+    } else {
+      const reqExp = eventData.requiredExplorationRate || 0;
+      const reqSearch = eventData.requiredSearchRate || 0;
+      const reqDefeat = eventData.requiredDefeatRate || 0;
+      let reason = '';
+      if (reqExp > 0 && expRate < reqExp) reason += ` 踏破率: ${Math.floor(expRate)}% / ${reqExp}%`;
+      if (reqSearch > 0 && sRate < reqSearch) reason += ` 捜索率: ${Math.floor(sRate)}% / ${reqSearch}%`;
+      if (reqDefeat > 0 && dRate < reqDefeat) reason += ` 撃破率: ${Math.floor(dRate)}% / ${reqDefeat}%`;
+      this.sendLog(`イベント発生条件を満たしていません:${reason}`, 'info');
+    }
   }
 
   private spawnStepTrail(px: number, py: number) {
@@ -2801,7 +2893,7 @@ export class GridMovementScene extends Phaser.Scene {
       if (this.bossSpawned) {
         return this.bossDefeated ? 100 : 0;
       }
-      return 0; // for math comparisons, treat infinite as 0 if no boss
+      return 0;
     } else {
       const targetCount = Math.max(maxEnemies as number, this.bossSpawned ? 1 : 0);
       if (targetCount > 0) {
@@ -2819,6 +2911,151 @@ export class GridMovementScene extends Phaser.Scene {
       return null;
     }
     return this.getDefeatRate();
+  }
+
+  public resetPosition(fromMapId?: string | null, overridePosition?: { gridX: number; gridY: number; camGridX: number; camGridY: number } | null) {
+    // マップ切り替え時は強制的に移動 animation 等をクリアしてリセットする
+    this.isMoving = false;
+    if (this.tweens) {
+      this.tweens.killAll();
+    }
+
+    this.totalEnemiesSpawned = 0;
+    this.enemiesDefeated = 0;
+    this.bossSpawned = false;
+    this.bossDefeated = false;
+    
+    // マップ切り替え時の処理
+    if (fromMapId !== undefined && fromMapId !== this.mapData?.id) {
+       this.playedMapEvents.clear();
+     }
+    
+    // 踏破・視野情報をクリアし、表示もクリアする
+    this.visitedGrids.clear();
+    this.viewedGrids.clear();
+    if (this.visitedTraceGraphics) {
+      this.visitedTraceGraphics.clear();
+    }
+    
+    // reset slimes array when loading map
+    this.slimes.forEach(s => {
+      if (s.sprite && s.sprite.active) s.sprite.destroy();
+    });
+    this.slimes = [];
+    
+    this.itemSprites.forEach(item => {
+      if (item.sprite && item.sprite.active) item.sprite.destroy();
+    });
+    this.itemSprites = [];
+
+    this.obstacleSprites.forEach(obs => {
+      if (obs.sprite && obs.sprite.active) obs.sprite.destroy();
+    });
+    this.obstacleSprites = [];
+
+    this.teleportPortals.forEach(p => {
+      if (p.container && p.container.active) p.container.destroy();
+    });
+    this.teleportPortals = [];
+
+    if (overridePosition) {
+      this.currentGridX = overridePosition.gridX;
+      this.currentGridY = overridePosition.gridY;
+      const { GRID_SIZE } = GridMovementScene;
+      if (this.cameras && this.cameras.main) {
+        this.cameras.main.setBounds(0, 0, this.gridCols * GRID_SIZE, this.gridRows * GRID_SIZE);
+      }
+    } else if (this.mapData) {
+       const { GRID_SIZE } = GridMovementScene;
+       // カメラのスクロール境界を新しいマップサイズに動的更新
+       if (this.cameras && this.cameras.main) {
+         this.cameras.main.setBounds(0, 0, this.gridCols * GRID_SIZE, this.gridRows * GRID_SIZE);
+       }
+
+       // 1. 指定された移行元のマップID(fromMapId)に合致するスタート地点を優先検索
+       let startEvent = null;
+       if (fromMapId) {
+         startEvent = this.mapData.events?.find(
+           (e: any) => e.type === 'start_point' && e.data?.fromMap === fromMapId
+         );
+       }
+
+       // 2. なければ、設定なし(fromMapがnullまたは空文字列)の初期値を探す
+       if (!startEvent) {
+         startEvent = this.mapData.events?.find(
+           (e: any) => e.type === 'start_point' && (!e.data || e.data.fromMap === null || e.data.fromMap === '')
+         );
+       }
+
+       // 3. それでもなければ、何かしらの最初の start_point を使用
+       if (!startEvent) {
+         startEvent = this.mapData.events?.find((e: any) => e.type === 'start_point');
+       }
+
+       if (startEvent) {
+          this.currentGridX = startEvent.x;
+          this.currentGridY = startEvent.y;
+       } else {
+          this.currentGridX = 0;
+          this.currentGridY = 0;
+       }
+    } else {
+       this.currentGridX = 7;
+       this.currentGridY = 7;
+    }
+
+    if (overridePosition) {
+      this.currentCamGridX = overridePosition.camGridX;
+      this.currentCamGridY = overridePosition.camGridY;
+    } else {
+      this.currentCamGridX = Math.max(0, Math.min(this.currentGridX - Math.floor(GridMovementScene.VIEWPORT_COLS / 2), this.gridCols - GridMovementScene.VIEWPORT_COLS));
+      this.currentCamGridY = Math.max(0, Math.min(this.currentGridY - Math.floor(GridMovementScene.VIEWPORT_ROWS / 2), this.gridRows - GridMovementScene.VIEWPORT_ROWS));
+    }
+    
+    const { GRID_SIZE } = GridMovementScene;
+    if (this.hero) {
+      this.hero.setPosition(this.currentGridX * GRID_SIZE + GRID_SIZE / 2, this.currentGridY * GRID_SIZE + GRID_SIZE / 2);
+    }
+    if (this.cameras && this.cameras.main) {
+      this.cameras.main.scrollX = this.currentCamGridX * GRID_SIZE;
+      this.cameras.main.scrollY = this.currentCamGridY * GRID_SIZE;
+    }
+    if (this.hero) {
+      this.hero.play(this.getAnimKey('idle-down'));
+    }
+    this.currentDirection = 'idle';
+    this.spawnMapItems();
+    this.spawnMapObstacles();
+    this.spawnInitialEnemies();
+    this.notifyStateChange(false);
+
+    // Initial check (start_point, custom_event, monologue)
+    if (this.mapData && this.mapData.events) {
+      const customEvent = this.mapData.events.find((e: any) => e.type === 'custom_event' && e.x === this.currentGridX && e.y === this.currentGridY);
+      const startPointEvent = this.mapData.events.find((e: any) => e.type === 'start_point' && e.x === this.currentGridX && e.y === this.currentGridY);
+      
+      const activeEvent = customEvent || startPointEvent;
+      
+      if (activeEvent && activeEvent.data?.eventId && this.onCustomEventCallback && this.canPlayEvent(activeEvent)) {
+        this.isShowingMonologue = true;
+        this.markEventPlayed(activeEvent);
+        this.onCustomEventCallback(activeEvent.data.eventId, () => {
+          this.isShowingMonologue = false;
+        });
+        return;
+      }
+
+      const monologueEvent = this.mapData.events.find((e: any) => e.type === 'monologue' && e.x === this.currentGridX && e.y === this.currentGridY);
+      if (monologueEvent && this.canPlayEvent(monologueEvent)) {
+        this.markEventPlayed(monologueEvent);
+        this.showMonologue(monologueEvent.data?.text || '', () => {
+          if (activeEvent && activeEvent.type === 'start_point' && activeEvent.data?.targetMap) {
+            this.handleTeleport(activeEvent);
+          }
+        });
+        return;
+      }
+    }
   }
 
   private updateStats(currentX: number, currentY: number, camX: number, camY: number) {
@@ -2877,134 +3114,7 @@ export class GridMovementScene extends Phaser.Scene {
     }
   }
 
-  public resetPosition(fromMapId?: string | null) {
-    // マップ切り替え時は強制的に移動アニメーション等をクリアしてリセットする
-    this.isMoving = false;
-    if (this.tweens) {
-      this.tweens.killAll();
-    }
-
-    this.totalEnemiesSpawned = 0;
-    this.enemiesDefeated = 0;
-    this.bossSpawned = false;
-    this.bossDefeated = false;
-    
-    // マップ切り替え時の処理
-    if (fromMapId !== undefined && fromMapId !== this.mapData?.id) {
-       this.playedMapEvents.clear();
-    }
-    
-    // 踏破・視野情報をクリアし、表示もクリアする
-    this.visitedGrids.clear();
-    this.viewedGrids.clear();
-    if (this.visitedTraceGraphics) {
-      this.visitedTraceGraphics.clear();
-    }
-    
-    // reset slimes array when loading map
-    this.slimes.forEach(s => {
-      if (s.sprite && s.sprite.active) s.sprite.destroy();
-    });
-    this.slimes = [];
-    
-    this.itemSprites.forEach(item => {
-      if (item.sprite && item.sprite.active) item.sprite.destroy();
-    });
-    this.itemSprites = [];
-
-    this.obstacleSprites.forEach(obs => {
-      if (obs.sprite && obs.sprite.active) obs.sprite.destroy();
-    });
-    this.obstacleSprites = [];
-
-    this.teleportPortals.forEach(p => {
-      if (p.container && p.container.active) p.container.destroy();
-    });
-    this.teleportPortals = [];
-
-    if (this.mapData) {
-       const { GRID_SIZE } = GridMovementScene;
-       // カメラのスクロール境界を新しいマップサイズに動的更新
-       if (this.cameras && this.cameras.main) {
-         this.cameras.main.setBounds(0, 0, this.gridCols * GRID_SIZE, this.gridRows * GRID_SIZE);
-       }
-
-       // 1. 指定された移行元のマップID(fromMapId)に合致するスタート地点を優先検索
-       let startEvent = null;
-       if (fromMapId) {
-         startEvent = this.mapData.events?.find(
-           (e: any) => e.type === 'start_point' && e.data?.fromMap === fromMapId
-         );
-       }
-
-       // 2. なければ、設定なし(fromMapがnullまたは空文字列)の初期値を探す
-       if (!startEvent) {
-         startEvent = this.mapData.events?.find(
-           (e: any) => e.type === 'start_point' && (!e.data || e.data.fromMap === null || e.data.fromMap === '')
-         );
-       }
-
-       // 3. それでもなければ、何かしらの最初の start_point を使用
-       if (!startEvent) {
-         startEvent = this.mapData.events?.find((e: any) => e.type === 'start_point');
-       }
-
-       if (startEvent) {
-          this.currentGridX = startEvent.x;
-          this.currentGridY = startEvent.y;
-       } else {
-          this.currentGridX = 0;
-          this.currentGridY = 0;
-       }
-    } else {
-       this.currentGridX = 7;
-       this.currentGridY = 7;
-    }
-    this.currentCamGridX = Math.max(0, Math.min(this.currentGridX - Math.floor(GridMovementScene.VIEWPORT_COLS / 2), this.gridCols - GridMovementScene.VIEWPORT_COLS));
-    this.currentCamGridY = Math.max(0, Math.min(this.currentGridY - Math.floor(GridMovementScene.VIEWPORT_ROWS / 2), this.gridRows - GridMovementScene.VIEWPORT_ROWS));
-    
-    const { GRID_SIZE } = GridMovementScene;
-    if (this.hero) {
-      this.hero.setPosition(this.currentGridX * GRID_SIZE + GRID_SIZE / 2, this.currentGridY * GRID_SIZE + GRID_SIZE / 2);
-    }
-    if (this.cameras && this.cameras.main) {
-      this.cameras.main.scrollX = this.currentCamGridX * GRID_SIZE;
-      this.cameras.main.scrollY = this.currentCamGridY * GRID_SIZE;
-    }
-    if (this.hero) {
-      this.hero.play(this.getAnimKey('idle-down'));
-    }
-    this.currentDirection = 'idle';
-    this.spawnMapItems();
-    this.spawnMapObstacles();
-    this.spawnInitialEnemies();
-    this.notifyStateChange(false);
-
-    // Initial check (start_point, custom_event, monologue)
-    if (this.mapData && this.mapData.events) {
-      const customEvent = this.mapData.events.find((e: any) => e.type === 'custom_event' && e.x === this.currentGridX && e.y === this.currentGridY);
-      const startPointEvent = this.mapData.events.find((e: any) => e.type === 'start_point' && e.x === this.currentGridX && e.y === this.currentGridY);
-      
-      const activeEvent = customEvent || startPointEvent;
-      
-      if (activeEvent && activeEvent.data?.eventId && this.onCustomEventCallback && this.canPlayEvent(activeEvent)) {
-        this.isShowingMonologue = true;
-        this.markEventPlayed(activeEvent);
-        this.onCustomEventCallback(activeEvent.data.eventId, () => {
-          this.isShowingMonologue = false;
-        });
-        return;
-      }
-
-      const monologueEvent = this.mapData.events.find((e: any) => e.type === 'monologue' && e.x === this.currentGridX && e.y === this.currentGridY);
-      if (monologueEvent && this.canPlayEvent(monologueEvent)) {
-        this.markEventPlayed(monologueEvent);
-        this.showMonologue(monologueEvent.data?.text || '');
-      }
-    }
-  }
-
-  private findScatteredSpawnPosition(minHeroDist: number = 4, minEnemyDist: number = 3): { x: number; y: number } | null {
+  private findScatteredSpawnPosition(minHeroDist: number = 4, minEnemyDist: number = 3, isBoss: boolean = false): { x: number; y: number } | null {
     // 候補地選定プロセス（複数パスで徐々に制約を緩和）
     const maxPasses = 5;
     for (let pass = 0; pass < maxPasses; pass++) {
@@ -3016,7 +3126,25 @@ export class GridMovementScene extends Phaser.Scene {
       // マップ全体の移動可能な範囲から選定（外周1タイルは壁などの設置を考慮して内側を優先）
       for (let x = 1; x < this.gridCols - 1; x++) {
         for (let y = 1; y < this.gridRows - 1; y++) {
-          if (this.isTileOccupiedByAnything(x, y)) {
+          let isOccupied = false;
+          if (isBoss) {
+            // ボスは2x2がマップ内かつ空いているかチェック
+            if (x + 1 >= this.gridCols || y + 1 >= this.gridRows) {
+              continue;
+            }
+            for (let ox = 0; ox < 2; ox++) {
+              for (let oy = 0; oy < 2; oy++) {
+                if (this.isTileOccupiedByAnything(x + ox, y + oy)) {
+                  isOccupied = true;
+                  break;
+                }
+              }
+            }
+          } else {
+            isOccupied = this.isTileOccupiedByAnything(x, y);
+          }
+
+          if (isOccupied) {
             continue;
           }
 
@@ -3061,7 +3189,24 @@ export class GridMovementScene extends Phaser.Scene {
     const fallbackCandidates: { x: number; y: number }[] = [];
     for (let x = 0; x < this.gridCols; x++) {
       for (let y = 0; y < this.gridRows; y++) {
-        if (!this.isTileOccupiedByAnything(x, y)) {
+        let isOccupied = false;
+        if (isBoss) {
+          if (x + 1 >= this.gridCols || y + 1 >= this.gridRows) {
+            continue;
+          }
+          for (let ox = 0; ox < 2; ox++) {
+            for (let oy = 0; oy < 2; oy++) {
+              if (this.isTileOccupiedByAnything(x + ox, y + oy)) {
+                isOccupied = true;
+                break;
+              }
+            }
+          }
+        } else {
+          isOccupied = this.isTileOccupiedByAnything(x, y);
+        }
+
+        if (!isOccupied) {
           fallbackCandidates.push({ x, y });
         }
       }
@@ -3109,18 +3254,23 @@ export class GridMovementScene extends Phaser.Scene {
     if (this.mapData.boss) {
       const bossConfig = getEnemyAssetById(this.mapData.boss);
       if (bossConfig) {
-        const pos = this.findScatteredSpawnPosition(4, 3);
+        const pos = this.findScatteredSpawnPosition(4, 3, true);
         if (pos) {
           const sx = pos.x;
           const sy = pos.y;
+          const isLargeBoss = ['gray_boss', 'color_demon_king', 'color_dragon'].includes(bossConfig.id);
+          
+          // ボスは2x2グリッドの中心点にスライムを表示する
+          const bossX = isLargeBoss ? sx * GRID_SIZE + GRID_SIZE : sx * GRID_SIZE + GRID_SIZE / 2;
+          const bossY = isLargeBoss ? sy * GRID_SIZE + GRID_SIZE : sy * GRID_SIZE + GRID_SIZE / 2;
+
           // Use a default texture first, playMonsterAnim will instantly load and resolve the custom textures
-          const bossSprite = this.add.sprite(sx * GRID_SIZE + GRID_SIZE / 2, sy * GRID_SIZE + GRID_SIZE / 2, defaultTex, 0);
+          const bossSprite = this.add.sprite(bossX, bossY, defaultTex, 0);
           bossSprite.setDepth(9);
           
-          const isLargeBoss = ['gray_boss', 'color_demon_king', 'color_dragon'].includes(bossConfig.id);
           if (isLargeBoss) {
             bossSprite.setScale(1.0);
-            bossSprite.setOrigin(0.5, 0.875);
+            bossSprite.setOrigin(0.5, 0.5); // 中央。128x128ピクセルが2x2（128x128ピクセル）を綺麗に覆います。
           } else {
             bossSprite.setScale(1.4);
           }
@@ -3681,12 +3831,29 @@ export class GridMovementScene extends Phaser.Scene {
     const hx = this.hero.x;
     const hy = this.hero.y;
 
-    // 1. 周囲8マスの敵（スライム）を探す (ゲーム上の攻撃判定は8マスのまま)
+    // 1. 周囲8マスの敵を探す (ボス考慮)
     const hitSlimes = this.slimes.filter(slime => {
       if (!slime.sprite || !slime.sprite.active) return false;
-      const dx = Math.abs(slime.gridX - this.currentGridX);
-      const dy = Math.abs(slime.gridY - this.currentGridY);
-      return dx <= 1 && dy <= 1 && !(dx === 0 && dy === 0);
+      const isBoss = this.isBossEnemy(slime.enemyId);
+      if (isBoss) {
+        // 2x2マスのいずれかが勇者の周囲8マス(dx <= 1 かつ dy <= 1)に含まれるか、ただし勇者自身のマスは除く
+        for (let ox = 0; ox < 2; ox++) {
+          for (let oy = 0; oy < 2; oy++) {
+            const tx = slime.gridX + ox;
+            const ty = slime.gridY + oy;
+            const dx = Math.abs(tx - this.currentGridX);
+            const dy = Math.abs(ty - this.currentGridY);
+            if (dx <= 1 && dy <= 1 && !(dx === 0 && dy === 0)) {
+              return true;
+            }
+          }
+        }
+        return false;
+      } else {
+        const dx = Math.abs(slime.gridX - this.currentGridX);
+        const dy = Math.abs(slime.gridY - this.currentGridY);
+        return dx <= 1 && dy <= 1 && !(dx === 0 && dy === 0);
+      }
     });
 
     // 2. 精細な「氷の円（アイシクル・サークル）」演出用コンテナ

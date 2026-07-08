@@ -438,7 +438,7 @@ export async function saveScenariosToFirestore(scenarios: Scenario[]): Promise<v
 }
 
 /**
- * Save game progress (level, hp, maps, position, items) for a given scenario.
+ * Save game progress (level, hp, maps, position, items) for a given scenario locally.
  */
 export async function saveScenarioProgress(
   scenarioId: string,
@@ -469,44 +469,35 @@ export async function saveScenarioProgress(
   }
 ): Promise<void> {
   try {
-    // 1. Save position under specific scenario
-    const positionDocRef = doc(db, 'saves', scenarioId);
-    
-    // 2. If statusMode is individual, save heroState under scenario save doc.
-    // If statusMode is shared, save heroState under 'shared_status' doc.
-    if (statusMode === 'individual') {
-      await setDoc(positionDocRef, {
-        position: progress.position,
+    const saveData = {
+      position: progress.position,
+      heroState: statusMode === 'individual' ? progress.heroState : undefined,
+      timestamp: Date.now()
+    };
+    localStorage.setItem(`save_${scenarioId}`, JSON.stringify(saveData));
+
+    if (statusMode === 'shared') {
+      const sharedData = {
         heroState: progress.heroState,
         timestamp: Date.now()
-      });
-    } else {
-      await setDoc(positionDocRef, {
-        position: progress.position,
-        timestamp: Date.now()
-      });
-      const sharedStatusRef = doc(db, 'saves', 'shared_status');
-      await setDoc(sharedStatusRef, {
-        heroState: progress.heroState,
-        timestamp: Date.now()
-      });
+      };
+      localStorage.setItem('save_shared_status', JSON.stringify(sharedData));
     }
 
-    // 3. Update last played scenario
-    const metaRef = doc(db, 'saves', 'metadata');
-    await setDoc(metaRef, {
+    const metaData = {
       lastPlayedScenarioId: scenarioId,
       timestamp: Date.now()
-    });
-    console.log(`Saved scenario progress for ${scenarioId} (${statusMode})`);
+    };
+    localStorage.setItem('save_metadata', JSON.stringify(metaData));
+    
+    console.log(`Saved scenario progress (local) for ${scenarioId} (${statusMode})`);
   } catch (error) {
-    console.error('Error saving scenario progress:', error);
-    handleFirestoreError(error, OperationType.WRITE, 'saves/' + scenarioId);
+    console.error('Error saving scenario progress locally:', error);
   }
 }
 
 /**
- * Load game progress for a given scenario.
+ * Load game progress for a given scenario locally.
  */
 export async function loadScenarioProgress(
   scenarioId: string,
@@ -536,14 +527,12 @@ export async function loadScenarioProgress(
   } | null;
 }> {
   try {
-    const positionDocRef = doc(db, 'saves', scenarioId);
-    const posSnap = await getDoc(positionDocRef);
-    
+    const localSaveStr = localStorage.getItem(`save_${scenarioId}`);
     let position = null;
     let heroState = null;
 
-    if (posSnap.exists()) {
-      const data = posSnap.data();
+    if (localSaveStr) {
+      const data = JSON.parse(localSaveStr);
       position = data.position || null;
       if (statusMode === 'individual') {
         heroState = data.heroState || null;
@@ -551,35 +540,32 @@ export async function loadScenarioProgress(
     }
 
     if (statusMode === 'shared') {
-      const sharedStatusRef = doc(db, 'saves', 'shared_status');
-      const sharedSnap = await getDoc(sharedStatusRef);
-      if (sharedSnap.exists()) {
-        const data = sharedSnap.data();
+      const sharedSaveStr = localStorage.getItem('save_shared_status');
+      if (sharedSaveStr) {
+        const data = JSON.parse(sharedSaveStr);
         heroState = data.heroState || null;
       }
     }
 
     return { position, heroState };
   } catch (error) {
-    console.error('Error loading scenario progress:', error);
-    handleFirestoreError(error, OperationType.GET, 'saves/' + scenarioId);
+    console.error('Error loading scenario progress locally:', error);
     return { position: null, heroState: null };
   }
 }
 
 /**
- * Fetch the last played scenario ID from Firestore metadata.
+ * Fetch the last played scenario ID from LocalStorage metadata.
  */
 export async function fetchLastPlayedScenarioId(): Promise<string | null> {
   try {
-    const metaRef = doc(db, 'saves', 'metadata');
-    const snap = await getDoc(metaRef);
-    if (snap.exists()) {
-      return snap.data().lastPlayedScenarioId || null;
+    const metaStr = localStorage.getItem('save_metadata');
+    if (metaStr) {
+      const data = JSON.parse(metaStr);
+      return data.lastPlayedScenarioId || null;
     }
   } catch (e) {
-    console.error('Error fetching last played scenario ID:', e);
-    handleFirestoreError(e, OperationType.GET, 'saves/metadata');
+    console.error('Error fetching last played scenario ID locally:', e);
   }
   return null;
 }

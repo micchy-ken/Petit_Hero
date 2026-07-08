@@ -266,6 +266,21 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
     }
   }, [cumulativeLogs, showSettings]);
 
+  // 設定画面を開いている間はゲームの進行を止める
+  useEffect(() => {
+    const game = gameInstanceRef.current;
+    if (game) {
+      const scene = game.scene.getScene('GridMovementScene');
+      if (scene) {
+        if (showSettings) {
+          scene.scene.pause();
+        } else {
+          scene.scene.resume();
+        }
+      }
+    }
+  }, [showSettings]);
+
   const clearCumulativeLogs = () => {
     setCumulativeLogs([]);
     try {
@@ -410,6 +425,10 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
         scene.magics = magicsRef.current;
         lastLevelRef.current = 1;
         
+        if (showSettings) {
+          scene.scene.pause();
+        }
+        
         scene.setOnCustomItemsChange?.((updatedItems) => {
           setCustomItems(updatedItems);
           customItemsRef.current = updatedItems;
@@ -516,7 +535,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
             scene.setSpeed(targetSpeed);
 
             // Start from the correct initial position
-            scene.resetPosition();
+            scene.resetPosition(null, initialPosition);
 
             // Apply custom initial hero status or starting position from loaded save if present
             if (initialHeroState || initialPosition) {

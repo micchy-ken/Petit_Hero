@@ -566,177 +566,415 @@ export function generateDemonKingSpritesheet(scene: Phaser.Scene, mode: 'normal'
   canvas.width = frameWidth * cols;
   canvas.height = frameHeight * rows;
   const ctx = canvas.getContext('2d')!;
-  ctx.imageSmoothingEnabled = false;
-
-  const tempCanvas = document.createElement('canvas');
-  tempCanvas.width = 64;
-  tempCanvas.height = 64;
-  const tCtx = tempCanvas.getContext('2d')!;
-  tCtx.imageSmoothingEnabled = false;
-
-  const gp = (x: number, y: number, w: number, h: number, color: string) => {
-    tCtx.fillStyle = color;
-    tCtx.fillRect(x, y, w, h);
-  };
+  ctx.imageSmoothingEnabled = true;
 
   // Colors
-  const cBody = isGray ? '#555555' : '#1e1b4b'; // 深い紺
-  const cCape = isGray ? '#333333' : '#4c1d95'; // 紫マント
-  const cCapeDark = isGray ? '#222222' : '#2e1065';
-  const cSkin = isGray ? '#999999' : '#e0e7ff'; // 青白い肌
-  const cSkinDark = isGray ? '#666666' : '#818cf8';
-  const cCrown = isGray ? '#cccccc' : '#fbbf24'; // 金の王冠
-  const cCrownDark = isGray ? '#777777' : '#d97706';
-  const cEye = isGray ? '#ffffff' : '#ef4444'; // 赤目
+  const cBodyGradStart = isGray ? '#555555' : '#1e1b4b'; // 深い紺
+  const cBodyGradEnd = isGray ? '#1e1e1e' : '#090514';
+  const cCapeStart = isGray ? '#444444' : '#4c1d95'; // 紫マント
+  const cCapeEnd = isGray ? '#1a1a1a' : '#1e0a3b';
+  const cCapeInnerStart = isGray ? '#333333' : '#991b1b'; // 内側の赤
+  const cCapeInnerEnd = isGray ? '#111111' : '#2d0606';
+  const cSkinStart = isGray ? '#cbd5e1' : '#cbd5e1'; // 威厳ある青白い肌
+  const cSkinEnd = isGray ? '#64748b' : '#64748b';
+  const cCrownStart = isGray ? '#e2e8f0' : '#fbbf24'; // ゴールド
+  const cCrownEnd = isGray ? '#94a3b8' : '#d97706';
+  const cEye = isGray ? '#ffffff' : '#ef4444'; // 赤い目
+  const cEyeGlow = isGray ? 'rgba(255,255,255,0.4)' : 'rgba(239,68,68,0.5)';
 
   for (let dir = 0; dir < rows; dir++) {
     for (let frame = 0; frame < cols; frame++) {
       const ox = frame * frameWidth;
       const oy = dir * frameHeight;
 
-      tCtx.clearRect(0, 0, 64, 64);
-      tCtx.save();
+      ctx.save();
+      ctx.translate(ox, oy);
 
       const isStep1 = frame === 1;
       const isStep2 = frame === 3;
-      const bobY = (isStep1 || isStep2) ? -2 : 0;
-      const legOffset = isStep1 ? 2 : (isStep2 ? -2 : 0);
+      const bobY = (isStep1 || isStep2) ? -4 : 0;
+      const legOffset = isStep1 ? 4 : (isStep2 ? -4 : 0);
 
-      tCtx.translate(0, bobY);
+      ctx.translate(0, bobY);
 
-      // 床の影 (巨大)
-      tCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-      tCtx.beginPath();
-      tCtx.ellipse(32, 56, 18, 5, 0, 0, Math.PI * 2);
-      tCtx.fill();
+      // 床の影 (巨大ぼかし)
+      const shadowGrad = ctx.createRadialGradient(64, 112, 5, 64, 112, 36);
+      shadowGrad.addColorStop(0, 'rgba(0, 0, 0, 0.6)');
+      shadowGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = shadowGrad;
+      ctx.beginPath();
+      ctx.ellipse(64, 112, 36, 10, 0, 0, Math.PI * 2);
+      ctx.fill();
 
-      if (dir === 0) { // DOWN (Front)
-        // ツノ
-        gp(18, 12, 4, 8, cCrownDark);
-        gp(14, 8, 4, 6, cCrownDark);
-        gp(42, 12, 4, 8, cCrownDark);
-        gp(46, 8, 4, 6, cCrownDark);
+      const getGradY = (y1: number, y2: number, c1: string, c2: string) => {
+        const grad = ctx.createLinearGradient(0, y1, 0, y2);
+        grad.addColorStop(0, c1);
+        grad.addColorStop(1, c2);
+        return grad;
+      };
 
-        // マント (後ろ)
-        gp(14, 26, 36, 26, cCape);
-        gp(12, 32, 40, 18, cCapeDark);
+      if (dir === 0) { // DOWN (正面)
+        // 1. ツノ
+        ctx.fillStyle = getGradY(16, 48, isGray ? '#777777' : '#312e81', isGray ? '#222222' : '#0f172a');
+        ctx.beginPath();
+        ctx.moveTo(36, 24);
+        ctx.bezierCurveTo(28, 16, 24, 12, 28, 6);
+        ctx.bezierCurveTo(34, 10, 38, 18, 42, 26);
+        ctx.closePath();
+        ctx.fill();
 
-        // 体
-        gp(20, 24, 24, 26, cBody);
+        ctx.beginPath();
+        ctx.moveTo(92, 24);
+        ctx.bezierCurveTo(100, 16, 104, 12, 100, 6);
+        ctx.bezierCurveTo(94, 10, 90, 18, 86, 26);
+        ctx.closePath();
+        ctx.fill();
 
-        // 肩当
-        gp(16, 24, 6, 6, cCrown);
-        gp(42, 24, 6, 6, cCrown);
+        // 2. マント
+        ctx.fillStyle = getGradY(50, 110, cCapeStart, cCapeEnd);
+        ctx.beginPath();
+        ctx.moveTo(32, 52);
+        ctx.bezierCurveTo(20, 60, 16, 80, 16, 104);
+        ctx.bezierCurveTo(30, 108, 50, 100, 64, 100);
+        ctx.bezierCurveTo(78, 100, 98, 108, 112, 104);
+        ctx.bezierCurveTo(112, 80, 108, 60, 96, 52);
+        ctx.closePath();
+        ctx.fill();
 
-        // 頭/顔
-        gp(22, 14, 20, 12, cSkin);
-        gp(20, 18, 2, 6, cSkinDark);
-        gp(42, 18, 2, 6, cSkinDark);
+        ctx.fillStyle = getGradY(52, 100, cCapeInnerStart, cCapeInnerEnd);
+        ctx.beginPath();
+        ctx.moveTo(38, 52);
+        ctx.lineTo(64, 96);
+        ctx.lineTo(90, 52);
+        ctx.closePath();
+        ctx.fill();
 
-        // 髪の毛
-        gp(22, 12, 20, 3, isGray ? '#222222' : '#0f172a');
+        // 3. 体 / 鎧
+        ctx.fillStyle = getGradY(50, 102, cBodyGradStart, cBodyGradEnd);
+        ctx.beginPath();
+        ctx.roundRect(40, 50, 48, 52, [10, 10, 4, 4]);
+        ctx.fill();
 
-        // 王冠
-        gp(24, 8, 16, 4, cCrown);
-        gp(24, 5, 2, 3, cCrown);
-        gp(31, 3, 2, 5, cCrown);
-        gp(38, 5, 2, 3, cCrown);
-        gp(31, 4, 2, 2, cEye); // 宝石
+        // 4. 肩当 (真鍮ゴールド)
+        ctx.fillStyle = getGradY(50, 64, cCrownStart, cCrownEnd);
+        ctx.beginPath();
+        ctx.roundRect(32, 48, 14, 14, 4);
+        ctx.roundRect(82, 48, 14, 14, 4);
+        ctx.fill();
 
-        // 目
-        gp(26, 19, 3, 2, cEye);
-        gp(35, 19, 3, 2, cEye);
-        gp(27, 19, 1, 1, '#ffffff');
-        gp(36, 19, 1, 1, '#ffffff');
+        // 5. 頭部・顔
+        ctx.fillStyle = getGradY(26, 52, cSkinStart, cSkinEnd);
+        ctx.beginPath();
+        ctx.roundRect(44, 26, 40, 26, [14, 14, 8, 8]);
+        ctx.fill();
+
+        // 6. 王冠
+        ctx.fillStyle = getGradY(12, 28, cCrownStart, cCrownEnd);
+        ctx.beginPath();
+        ctx.moveTo(48, 26);
+        ctx.lineTo(48, 14);
+        ctx.lineTo(54, 20);
+        ctx.lineTo(64, 10);
+        ctx.lineTo(74, 20);
+        ctx.lineTo(80, 14);
+        ctx.lineTo(80, 26);
+        ctx.closePath();
+        ctx.fill();
+
+        // 王冠の宝石
+        ctx.fillStyle = isGray ? '#ffffff' : '#ef4444';
+        ctx.beginPath();
+        ctx.arc(64, 20, 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 7. 髪
+        ctx.fillStyle = isGray ? '#222222' : '#0f172a';
+        ctx.beginPath();
+        ctx.roundRect(42, 38, 4, 16, 2);
+        ctx.roundRect(82, 38, 4, 16, 2);
+        ctx.fill();
+
+        // 8. 輝く赤目
+        ctx.fillStyle = cEye;
+        ctx.beginPath();
+        ctx.arc(54, 38, 3.5, 0, Math.PI * 2);
+        ctx.arc(74, 38, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(55, 37, 1, 0, Math.PI * 2);
+        ctx.arc(75, 37, 1, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = cEyeGlow;
+        ctx.beginPath();
+        ctx.arc(54, 38, 7, 0, Math.PI * 2);
+        ctx.arc(74, 38, 7, 0, Math.PI * 2);
+        ctx.fill();
 
         // 口
-        gp(30, 23, 4, 1, '#000000');
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(60, 46);
+        ctx.lineTo(68, 46);
+        ctx.stroke();
 
-        // 足
-        gp(24, 50 + legOffset, 5, 6, isGray ? '#444444' : '#1e293b');
-        gp(35, 50 - legOffset, 5, 6, isGray ? '#444444' : '#1e293b');
+        // 9. 足
+        ctx.fillStyle = isGray ? '#444444' : '#1e293b';
+        ctx.beginPath();
+        ctx.roundRect(48, 100 + legOffset, 10, 12, 3);
+        ctx.roundRect(70, 100 - legOffset, 10, 12, 3);
+        ctx.fill();
 
-        // 巨大な杖
-        const staffY = 16 + (isStep2 ? -2 : 0);
-        gp(48, staffY, 3, 34, isGray ? '#777777' : '#78350f');
-        gp(46, staffY - 4, 7, 5, cCrown);
-        gp(48, staffY - 7, 3, 3, cEye);
+        // 10. 巨大な魔法の杖
+        const staffY = 32 + (isStep2 ? -4 : 0);
+        ctx.fillStyle = getGradY(staffY, staffY + 70, isGray ? '#888888' : '#78350f', isGray ? '#333333' : '#451a03');
+        ctx.beginPath();
+        ctx.roundRect(96, staffY, 6, 76, 3);
+        ctx.fill();
 
-        // 手
-        gp(46, staffY + 18, 4, 4, cSkin);
+        ctx.fillStyle = getGradY(staffY - 14, staffY, cCrownStart, cCrownEnd);
+        ctx.beginPath();
+        ctx.arc(99, staffY - 2, 9, 0, Math.PI * 2);
+        ctx.fill();
 
-      } else if (dir === 1) { // UP (Back)
-        gp(18, 12, 4, 8, cCrownDark);
-        gp(14, 8, 4, 6, cCrownDark);
-        gp(42, 12, 4, 8, cCrownDark);
-        gp(46, 8, 4, 6, cCrownDark);
+        const coreGrad = ctx.createRadialGradient(99, staffY - 14, 1, 99, staffY - 14, 12);
+        coreGrad.addColorStop(0, '#ffffff');
+        coreGrad.addColorStop(0.3, '#ef4444');
+        coreGrad.addColorStop(1, 'rgba(239, 68, 68, 0)');
+        ctx.fillStyle = coreGrad;
+        ctx.beginPath();
+        ctx.arc(99, staffY - 14, 12, 0, Math.PI * 2);
+        ctx.fill();
 
-        gp(12, 24, 40, 28, cCape);
-        gp(10, 28, 44, 22, cCapeDark);
+        ctx.fillStyle = getGradY(staffY + 36, staffY + 46, cSkinStart, cSkinEnd);
+        ctx.beginPath();
+        ctx.roundRect(92, staffY + 32, 10, 10, 3);
+        ctx.fill();
 
-        gp(22, 14, 20, 11, isGray ? '#222222' : '#0f172a'); // 後ろ髪
-        gp(24, 8, 16, 4, cCrownDark);
+      } else if (dir === 1) { // UP (後ろ姿)
+        ctx.fillStyle = getGradY(16, 48, isGray ? '#666666' : '#2d1e54', isGray ? '#1e1a3a' : '#08051a');
+        ctx.beginPath();
+        ctx.moveTo(36, 24);
+        ctx.bezierCurveTo(28, 16, 24, 12, 28, 6);
+        ctx.bezierCurveTo(34, 10, 38, 18, 42, 26);
+        ctx.closePath();
+        ctx.fill();
 
-        gp(24, 51 - legOffset, 5, 5, isGray ? '#333333' : '#0f172a');
-        gp(35, 51 + legOffset, 5, 5, isGray ? '#333333' : '#0f172a');
+        ctx.beginPath();
+        ctx.moveTo(92, 24);
+        ctx.bezierCurveTo(100, 16, 104, 12, 100, 6);
+        ctx.bezierCurveTo(94, 10, 90, 18, 86, 26);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = getGradY(48, 108, cCapeStart, cCapeEnd);
+        ctx.beginPath();
+        ctx.moveTo(30, 48);
+        ctx.bezierCurveTo(14, 56, 12, 80, 12, 104);
+        ctx.bezierCurveTo(30, 108, 50, 102, 64, 102);
+        ctx.bezierCurveTo(78, 102, 98, 108, 116, 104);
+        ctx.bezierCurveTo(116, 80, 114, 56, 98, 48);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = isGray ? '#111111' : '#090d16';
+        ctx.beginPath();
+        ctx.roundRect(44, 26, 40, 24, [10, 10, 2, 2]);
+        ctx.fill();
+
+        ctx.fillStyle = getGradY(14, 28, cCrownEnd, '#5b21b6');
+        ctx.beginPath();
+        ctx.moveTo(48, 26);
+        ctx.lineTo(48, 16);
+        ctx.lineTo(54, 22);
+        ctx.lineTo(64, 14);
+        ctx.lineTo(74, 22);
+        ctx.lineTo(80, 16);
+        ctx.lineTo(80, 26);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = isGray ? '#222222' : '#0f172a';
+        ctx.beginPath();
+        ctx.roundRect(48, 102 - legOffset, 10, 10, 2);
+        ctx.roundRect(70, 102 + legOffset, 10, 10, 2);
+        ctx.fill();
 
       } else if (dir === 2) { // LEFT
-        gp(22, 12, 4, 8, cCrownDark);
-        gp(18, 8, 4, 6, cCrownDark);
+        ctx.fillStyle = getGradY(16, 48, isGray ? '#777777' : '#312e81', isGray ? '#222222' : '#0f172a');
+        ctx.beginPath();
+        ctx.moveTo(44, 24);
+        ctx.bezierCurveTo(34, 16, 28, 12, 34, 6);
+        ctx.bezierCurveTo(40, 10, 46, 18, 50, 26);
+        ctx.closePath();
+        ctx.fill();
 
-        gp(26, 24, 22, 28, cCape);
-        gp(22, 24, 18, 26, cBody);
+        ctx.fillStyle = getGradY(50, 110, cCapeStart, cCapeEnd);
+        ctx.beginPath();
+        ctx.moveTo(52, 50);
+        ctx.bezierCurveTo(34, 58, 28, 80, 28, 104);
+        ctx.bezierCurveTo(45, 108, 65, 100, 80, 100);
+        ctx.bezierCurveTo(86, 80, 88, 60, 80, 50);
+        ctx.closePath();
+        ctx.fill();
 
-        gp(20, 14, 18, 12, cSkin);
-        gp(36, 14, 4, 12, isGray ? '#222222' : '#0f172a');
+        ctx.fillStyle = getGradY(50, 102, cBodyGradStart, cBodyGradEnd);
+        ctx.beginPath();
+        ctx.roundRect(44, 50, 36, 52, [8, 8, 4, 4]);
+        ctx.fill();
 
-        gp(22, 19, 3, 2, cEye);
-        gp(23, 19, 1, 1, '#ffffff');
+        ctx.fillStyle = getGradY(26, 52, cSkinStart, cSkinEnd);
+        ctx.beginPath();
+        ctx.roundRect(40, 26, 36, 26, [14, 14, 8, 8]);
+        ctx.fill();
 
-        gp(22, 8, 12, 4, cCrown);
-        gp(25, 4, 2, 4, cCrown);
+        ctx.fillStyle = isGray ? '#222222' : '#0f172a';
+        ctx.beginPath();
+        ctx.roundRect(66, 28, 10, 24, 4);
+        ctx.fill();
 
-        gp(24, 50 + legOffset, 5, 6, isGray ? '#444444' : '#1e293b');
-        gp(31, 50 - legOffset, 5, 6, isGray ? '#333333' : '#0f172a');
+        ctx.fillStyle = getGradY(12, 28, cCrownStart, cCrownEnd);
+        ctx.beginPath();
+        ctx.moveTo(44, 26);
+        ctx.lineTo(44, 14);
+        ctx.lineTo(52, 20);
+        ctx.lineTo(60, 10);
+        ctx.lineTo(68, 22);
+        ctx.lineTo(68, 26);
+        ctx.closePath();
+        ctx.fill();
 
-        const staffY = 16 + (isStep1 ? -2 : 0);
-        gp(12, staffY, 3, 34, isGray ? '#777777' : '#78350f');
-        gp(10, staffY - 4, 7, 5, cCrown);
-        gp(12, staffY - 7, 3, 3, cEye);
+        ctx.fillStyle = cEye;
+        ctx.beginPath();
+        ctx.arc(48, 38, 3.5, 0, Math.PI * 2);
+        ctx.fill();
 
-        gp(14, staffY + 18, 4, 4, cSkin);
+        ctx.fillStyle = cEyeGlow;
+        ctx.beginPath();
+        ctx.arc(48, 38, 7, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = isGray ? '#444444' : '#1e293b';
+        ctx.beginPath();
+        ctx.roundRect(48, 100 + legOffset, 10, 12, 3);
+        ctx.roundRect(62, 100 - legOffset, 10, 12, 3);
+        ctx.fill();
+
+        const staffY = 32 + (isStep1 ? -4 : 0);
+        ctx.fillStyle = getGradY(staffY, staffY + 70, isGray ? '#888888' : '#78350f', isGray ? '#333333' : '#451a03');
+        ctx.beginPath();
+        ctx.roundRect(24, staffY, 6, 76, 3);
+        ctx.fill();
+
+        ctx.fillStyle = getGradY(staffY - 14, staffY, cCrownStart, cCrownEnd);
+        ctx.beginPath();
+        ctx.arc(27, staffY - 2, 9, 0, Math.PI * 2);
+        ctx.fill();
+
+        const coreGrad = ctx.createRadialGradient(27, staffY - 14, 1, 27, staffY - 14, 12);
+        coreGrad.addColorStop(0, '#ffffff');
+        coreGrad.addColorStop(0.3, '#ef4444');
+        coreGrad.addColorStop(1, 'rgba(239, 68, 68, 0)');
+        ctx.fillStyle = coreGrad;
+        ctx.beginPath();
+        ctx.arc(27, staffY - 14, 12, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = getGradY(staffY + 36, staffY + 46, cSkinStart, cSkinEnd);
+        ctx.beginPath();
+        ctx.roundRect(26, staffY + 32, 10, 10, 3);
+        ctx.fill();
 
       } else if (dir === 3) { // RIGHT
-        gp(38, 12, 4, 8, cCrownDark);
-        gp(42, 8, 4, 6, cCrownDark);
+        ctx.fillStyle = getGradY(16, 48, isGray ? '#777777' : '#312e81', isGray ? '#222222' : '#0f172a');
+        ctx.beginPath();
+        ctx.moveTo(84, 24);
+        ctx.bezierCurveTo(94, 16, 100, 12, 94, 6);
+        ctx.bezierCurveTo(88, 10, 82, 18, 78, 26);
+        ctx.closePath();
+        ctx.fill();
 
-        gp(16, 24, 22, 28, cCape);
-        gp(24, 24, 18, 26, cBody);
+        ctx.fillStyle = getGradY(50, 110, cCapeStart, cCapeEnd);
+        ctx.beginPath();
+        ctx.moveTo(48, 50);
+        ctx.bezierCurveTo(42, 60, 40, 80, 48, 104);
+        ctx.bezierCurveTo(63, 108, 83, 100, 100, 104);
+        ctx.bezierCurveTo(100, 80, 94, 58, 76, 50);
+        ctx.closePath();
+        ctx.fill();
 
-        gp(26, 14, 18, 12, cSkin);
-        gp(24, 14, 4, 12, isGray ? '#222222' : '#0f172a');
+        ctx.fillStyle = getGradY(50, 102, cBodyGradStart, cBodyGradEnd);
+        ctx.beginPath();
+        ctx.roundRect(48, 50, 36, 52, [8, 8, 4, 4]);
+        ctx.fill();
 
-        gp(39, 19, 3, 2, cEye);
-        gp(40, 19, 1, 1, '#ffffff');
+        ctx.fillStyle = getGradY(26, 52, cSkinStart, cSkinEnd);
+        ctx.beginPath();
+        ctx.roundRect(52, 26, 36, 26, [14, 14, 8, 8]);
+        ctx.fill();
 
-        gp(30, 8, 12, 4, cCrown);
-        gp(37, 4, 2, 4, cCrown);
+        ctx.fillStyle = isGray ? '#222222' : '#0f172a';
+        ctx.beginPath();
+        ctx.roundRect(52, 28, 10, 24, 4);
+        ctx.fill();
 
-        gp(28, 50 - legOffset, 5, 6, isGray ? '#333333' : '#0f172a');
-        gp(35, 50 + legOffset, 5, 6, isGray ? '#444444' : '#1e293b');
+        ctx.fillStyle = getGradY(12, 28, cCrownStart, cCrownEnd);
+        ctx.beginPath();
+        ctx.moveTo(60, 26);
+        ctx.lineTo(60, 22);
+        ctx.lineTo(68, 10);
+        ctx.lineTo(76, 20);
+        ctx.lineTo(84, 14);
+        ctx.lineTo(84, 26);
+        ctx.closePath();
+        ctx.fill();
 
-        const staffY = 16 + (isStep2 ? -2 : 0);
-        gp(49, staffY, 3, 34, isGray ? '#777777' : '#78350f');
-        gp(47, staffY - 4, 7, 5, cCrown);
-        gp(49, staffY - 7, 3, 3, cEye);
+        ctx.fillStyle = cEye;
+        ctx.beginPath();
+        ctx.arc(80, 38, 3.5, 0, Math.PI * 2);
+        ctx.fill();
 
-        gp(46, staffY + 18, 4, 4, cSkin);
+        ctx.fillStyle = cEyeGlow;
+        ctx.beginPath();
+        ctx.arc(80, 38, 7, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = isGray ? '#444444' : '#1e293b';
+        ctx.beginPath();
+        ctx.roundRect(56, 100 - legOffset, 10, 12, 3);
+        ctx.roundRect(70, 100 + legOffset, 10, 12, 3);
+        ctx.fill();
+
+        const staffY = 32 + (isStep2 ? -4 : 0);
+        ctx.fillStyle = getGradY(staffY, staffY + 70, isGray ? '#888888' : '#78350f', isGray ? '#333333' : '#451a03');
+        ctx.beginPath();
+        ctx.roundRect(98, staffY, 6, 76, 3);
+        ctx.fill();
+
+        ctx.fillStyle = getGradY(staffY - 14, staffY, cCrownStart, cCrownEnd);
+        ctx.beginPath();
+        ctx.arc(101, staffY - 2, 9, 0, Math.PI * 2);
+        ctx.fill();
+
+        const coreGrad = ctx.createRadialGradient(101, staffY - 14, 1, 101, staffY - 14, 12);
+        coreGrad.addColorStop(0, '#ffffff');
+        coreGrad.addColorStop(0.3, '#ef4444');
+        coreGrad.addColorStop(1, 'rgba(239, 68, 68, 0)');
+        ctx.fillStyle = coreGrad;
+        ctx.beginPath();
+        ctx.arc(101, staffY - 14, 12, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = getGradY(staffY + 36, staffY + 46, cSkinStart, cSkinEnd);
+        ctx.beginPath();
+        ctx.roundRect(92, staffY + 32, 10, 10, 3);
+        ctx.fill();
       }
 
-      tCtx.restore();
-
-      // Upscale 2x
-      ctx.drawImage(tempCanvas, 0, 0, 64, 64, ox, oy, 128, 128);
+      ctx.restore();
     }
   }
 
@@ -764,145 +1002,322 @@ export function generateDragonSpritesheet(scene: Phaser.Scene): string {
   canvas.width = frameWidth * cols;
   canvas.height = frameHeight * rows;
   const ctx = canvas.getContext('2d')!;
-  ctx.imageSmoothingEnabled = false;
-
-  const tempCanvas = document.createElement('canvas');
-  tempCanvas.width = 64;
-  tempCanvas.height = 64;
-  const tCtx = tempCanvas.getContext('2d')!;
-  tCtx.imageSmoothingEnabled = false;
-
-  const gp = (x: number, y: number, w: number, h: number, color: string) => {
-    tCtx.fillStyle = color;
-    tCtx.fillRect(x, y, w, h);
-  };
+  ctx.imageSmoothingEnabled = true;
 
   // Colors
   const cBody = '#dc2626'; // 赤
-  const cBodyDark = '#991b1b'; // 深い赤
-  const cChest = '#fbbf24'; // 金色のお腹
-  const cWing = '#7f1d1d'; // 暗い赤の翼
+  const cBodyDark = '#7f1d1d'; // 深赤
+  const cChestStart = '#fbbf24'; // 金色のお腹
+  const cChestEnd = '#d97706';
+  const cWingStart = '#7f1d1d'; // 暗い赤の翼
+  const cWingEnd = '#450a0a';
   const cWingHi = '#b91c1c'; // 翼の骨格
   const cHorn = '#f3f4f6'; // 白い角
   const cEye = '#10b981'; // 緑目
+  const cEyeGlow = 'rgba(16, 185, 129, 0.4)';
 
   for (let dir = 0; dir < rows; dir++) {
     for (let frame = 0; frame < cols; frame++) {
       const ox = frame * frameWidth;
       const oy = dir * frameHeight;
 
-      tCtx.clearRect(0, 0, 64, 64);
-      tCtx.save();
+      ctx.save();
+      ctx.translate(ox, oy);
 
       const isStep1 = frame === 1;
       const isStep2 = frame === 3;
-      const bobY = (isStep1 || isStep2) ? -2 : 0;
-      const wingFlap = (isStep1 || isStep2) ? -4 : 0; // 羽ばたき
-      const legOffset = isStep1 ? 2 : (isStep2 ? -2 : 0);
+      const bobY = (isStep1 || isStep2) ? -4 : 0;
+      const wingFlap = (isStep1 || isStep2) ? -8 : 0; // 羽ばたき
+      const legOffset = isStep1 ? 4 : (isStep2 ? -4 : 0);
 
-      tCtx.translate(0, bobY);
+      ctx.translate(0, bobY);
 
-      // 床の影 (巨大)
-      tCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-      tCtx.beginPath();
-      tCtx.ellipse(32, 56, 20, 6, 0, 0, Math.PI * 2);
-      tCtx.fill();
+      // 床の影 (巨大ぼかし)
+      const shadowGrad = ctx.createRadialGradient(64, 112, 5, 64, 112, 40);
+      shadowGrad.addColorStop(0, 'rgba(0, 0, 0, 0.5)');
+      shadowGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = shadowGrad;
+      ctx.beginPath();
+      ctx.ellipse(64, 112, 40, 12, 0, 0, Math.PI * 2);
+      ctx.fill();
 
-      if (dir === 0) { // DOWN (Front)
-        // 翼
-        gp(6, 16 + wingFlap, 14, 18, cWing);
-        gp(4, 14 + wingFlap, 18, 4, cWingHi);
-        gp(44, 16 + wingFlap, 14, 18, cWing);
-        gp(42, 14 + wingFlap, 18, 4, cWingHi);
+      const getGradY = (y1: number, y2: number, c1: string, c2: string) => {
+        const grad = ctx.createLinearGradient(0, y1, 0, y2);
+        grad.addColorStop(0, c1);
+        grad.addColorStop(1, c2);
+        return grad;
+      };
 
-        gp(14, 46, 6, 8, cBodyDark);
+      if (dir === 0) { // DOWN (正面)
+        // 1. 巨大な翼 (はためき)
+        ctx.fillStyle = getGradY(32 + wingFlap, 80 + wingFlap, cWingStart, cWingEnd);
+        ctx.beginPath();
+        ctx.moveTo(48, 52);
+        ctx.bezierCurveTo(24, 28 + wingFlap, 8, 32 + wingFlap, 8, 68 + wingFlap);
+        ctx.bezierCurveTo(24, 76 + wingFlap, 36, 68 + wingFlap, 48, 64);
+        ctx.closePath();
+        ctx.fill();
 
-        gp(20, 26, 24, 24, cBody);
-        gp(24, 30, 16, 16, cChest);
+        ctx.strokeStyle = cWingHi;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(48, 52);
+        ctx.lineTo(12, 36 + wingFlap);
+        ctx.lineTo(8, 68 + wingFlap);
+        ctx.stroke();
 
-        gp(26, 20, 12, 8, cBody);
-        gp(20, 10, 24, 14, cBody);
-        gp(24, 20, 16, 6, cBodyDark);
+        ctx.fillStyle = getGradY(32 + wingFlap, 80 + wingFlap, cWingStart, cWingEnd);
+        ctx.beginPath();
+        ctx.moveTo(80, 52);
+        ctx.bezierCurveTo(104, 28 + wingFlap, 120, 32 + wingFlap, 120, 68 + wingFlap);
+        ctx.bezierCurveTo(104, 76 + wingFlap, 92, 68 + wingFlap, 80, 64);
+        ctx.closePath();
+        ctx.fill();
 
-        gp(16, 4, 4, 8, cHorn);
-        gp(12, 2, 4, 4, cHorn);
-        gp(44, 4, 4, 8, cHorn);
-        gp(48, 2, 4, 4, cHorn);
+        ctx.strokeStyle = cWingHi;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(80, 52);
+        ctx.lineTo(116, 36 + wingFlap);
+        ctx.lineTo(120, 68 + wingFlap);
+        ctx.stroke();
 
-        gp(24, 14, 3, 2, cEye);
-        gp(37, 14, 3, 2, cEye);
-        gp(25, 14, 1, 1, '#ffffff');
-        gp(38, 14, 1, 1, '#ffffff');
+        // 2. ドラゴンの体
+        ctx.fillStyle = getGradY(52, 104, cBody, cBodyDark);
+        ctx.beginPath();
+        ctx.roundRect(40, 52, 48, 48, [24, 24, 12, 12]);
+        ctx.fill();
 
-        gp(26, 25, 2, 2, '#ffffff');
-        gp(36, 25, 2, 2, '#ffffff');
+        // 3. 黄金のお腹
+        ctx.fillStyle = getGradY(60, 96, cChestStart, cChestEnd);
+        ctx.beginPath();
+        ctx.roundRect(48, 60, 32, 34, 10);
+        ctx.fill();
 
-        gp(16, 44 + legOffset, 6, 8, cBodyDark);
-        gp(42, 44 - legOffset, 6, 8, cBodyDark);
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)';
+        ctx.lineWidth = 2;
+        for (let lY = 68; lY <= 88; lY += 6) {
+          ctx.beginPath();
+          ctx.moveTo(52, lY);
+          ctx.lineTo(76, lY);
+          ctx.stroke();
+        }
 
-      } else if (dir === 1) { // UP (Back)
-        gp(6, 16 + wingFlap, 14, 18, cWing);
-        gp(4, 14 + wingFlap, 18, 4, cWingHi);
-        gp(44, 16 + wingFlap, 14, 18, cWing);
-        gp(42, 14 + wingFlap, 18, 4, cWingHi);
+        // 4. 首と頭
+        ctx.fillStyle = getGradY(20, 56, cBody, cBodyDark);
+        ctx.beginPath();
+        ctx.roundRect(44, 20, 40, 36, [14, 14, 8, 8]);
+        ctx.fill();
 
-        gp(28, 48, 8, 10, cBodyDark);
-        gp(20, 24, 24, 26, cBodyDark);
+        // 5. 白い角
+        ctx.fillStyle = cHorn;
+        ctx.beginPath();
+        ctx.moveTo(48, 20);
+        ctx.bezierCurveTo(36, 8, 32, 4, 36, 0);
+        ctx.bezierCurveTo(42, 4, 46, 12, 52, 20);
+        ctx.closePath();
+        ctx.fill();
 
-        gp(20, 10, 24, 15, cBodyDark);
-        gp(16, 4, 4, 8, cHorn);
-        gp(44, 4, 4, 8, cHorn);
+        ctx.beginPath();
+        ctx.moveTo(80, 20);
+        ctx.bezierCurveTo(92, 8, 96, 4, 92, 0);
+        ctx.bezierCurveTo(86, 4, 82, 12, 76, 20);
+        ctx.closePath();
+        ctx.fill();
 
-        gp(16, 46 - legOffset, 6, 7, cBodyDark);
-        gp(42, 46 + legOffset, 6, 7, cBodyDark);
+        // 6. 緑の目
+        ctx.fillStyle = cEye;
+        ctx.beginPath();
+        ctx.arc(54, 32, 4, 0, Math.PI * 2);
+        ctx.arc(74, 32, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(55, 31, 1.2, 0, Math.PI * 2);
+        ctx.arc(75, 31, 1.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = cEyeGlow;
+        ctx.beginPath();
+        ctx.arc(54, 32, 8, 0, Math.PI * 2);
+        ctx.arc(74, 32, 8, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 牙
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(52, 46); ctx.lineTo(55, 52); ctx.lineTo(58, 46);
+        ctx.moveTo(70, 46); ctx.lineTo(73, 52); ctx.lineTo(76, 46);
+        ctx.closePath();
+        ctx.fill();
+
+        // 7. 足
+        ctx.fillStyle = getGradY(92, 106, cBody, cBodyDark);
+        ctx.beginPath();
+        ctx.roundRect(36, 92 + legOffset, 14, 16, 4);
+        ctx.roundRect(78, 92 - legOffset, 14, 16, 4);
+        ctx.fill();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(40, 108 + legOffset); ctx.lineTo(43, 112 + legOffset); ctx.lineTo(46, 108 + legOffset);
+        ctx.moveTo(82, 108 - legOffset); ctx.lineTo(85, 112 - legOffset); ctx.lineTo(88, 108 - legOffset);
+        ctx.fill();
+
+      } else if (dir === 1) { // UP
+        ctx.fillStyle = getGradY(32 + wingFlap, 80 + wingFlap, cWingStart, cWingEnd);
+        ctx.beginPath();
+        ctx.moveTo(48, 52); ctx.bezierCurveTo(24, 28 + wingFlap, 8, 32 + wingFlap, 8, 68 + wingFlap); ctx.bezierCurveTo(24, 76 + wingFlap, 36, 68 + wingFlap, 48, 64); ctx.closePath(); ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(80, 52); ctx.bezierCurveTo(104, 28 + wingFlap, 120, 32 + wingFlap, 120, 68 + wingFlap); ctx.bezierCurveTo(104, 76 + wingFlap, 92, 68 + wingFlap, 80, 64); ctx.closePath(); ctx.fill();
+
+        ctx.strokeStyle = cWingHi; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(48, 52); ctx.lineTo(12, 36 + wingFlap); ctx.lineTo(8, 68 + wingFlap); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(80, 52); ctx.lineTo(116, 36 + wingFlap); ctx.lineTo(120, 68 + wingFlap); ctx.stroke();
+
+        ctx.fillStyle = getGradY(52, 104, cBodyDark, '#581c1c');
+        ctx.beginPath();
+        ctx.roundRect(40, 52, 48, 48, [24, 24, 12, 12]);
+        ctx.fill();
+
+        ctx.fillStyle = getGradY(92, 112, cBodyDark, '#450a0a');
+        ctx.beginPath();
+        ctx.moveTo(60, 100);
+        ctx.bezierCurveTo(64, 116, 76, 120, 84, 116);
+        ctx.lineTo(84, 110);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = getGradY(20, 56, cBodyDark, '#581c1c');
+        ctx.beginPath();
+        ctx.roundRect(44, 20, 40, 36, [14, 14, 4, 4]);
+        ctx.fill();
+
+        ctx.fillStyle = cHorn;
+        ctx.beginPath();
+        ctx.moveTo(48, 20); ctx.bezierCurveTo(36, 8, 32, 4, 36, 0); ctx.bezierCurveTo(42, 4, 46, 12, 52, 20); ctx.closePath(); ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(80, 20); ctx.bezierCurveTo(92, 8, 96, 4, 92, 0); ctx.bezierCurveTo(86, 4, 82, 12, 76, 20); ctx.closePath(); ctx.fill();
+
+        ctx.fillStyle = getGradY(92, 106, cBodyDark, '#450a0a');
+        ctx.beginPath();
+        ctx.roundRect(36, 92 - legOffset, 14, 14, 4);
+        ctx.roundRect(78, 92 + legOffset, 14, 14, 4);
+        ctx.fill();
 
       } else if (dir === 2) { // LEFT
-        gp(40, 14 + wingFlap, 14, 18, cWing);
-        gp(38, 12 + wingFlap, 16, 4, cWingHi);
+        ctx.fillStyle = getGradY(32 + wingFlap, 80 + wingFlap, cWingStart, cWingEnd);
+        ctx.beginPath();
+        ctx.moveTo(76, 52);
+        ctx.bezierCurveTo(96, 24 + wingFlap, 112, 28 + wingFlap, 112, 64 + wingFlap);
+        ctx.bezierCurveTo(96, 72 + wingFlap, 86, 64 + wingFlap, 76, 60);
+        ctx.closePath();
+        ctx.fill();
 
-        gp(42, 42, 12, 8, cBodyDark);
-        gp(22, 26, 22, 24, cBody);
-        gp(22, 30, 6, 14, cChest);
+        ctx.strokeStyle = cWingHi; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(76, 52); ctx.lineTo(108, 32 + wingFlap); ctx.lineTo(112, 64 + wingFlap); ctx.stroke();
 
-        gp(18, 20, 10, 8, cBody);
-        gp(12, 10, 20, 14, cBody);
-        gp(8, 16, 10, 8, cBodyDark);
+        ctx.fillStyle = getGradY(52, 104, cBody, cBodyDark);
+        ctx.beginPath();
+        ctx.roundRect(44, 52, 44, 48, [20, 20, 10, 10]);
+        ctx.fill();
 
-        gp(28, 4, 4, 8, cHorn);
-        gp(32, 2, 4, 4, cHorn);
+        ctx.fillStyle = getGradY(60, 96, cChestStart, cChestEnd);
+        ctx.beginPath();
+        ctx.roundRect(44, 60, 12, 34, [8, 0, 0, 8]);
+        ctx.fill();
 
-        gp(16, 14, 3, 2, cEye);
-        gp(17, 14, 1, 1, '#ffffff');
+        ctx.fillStyle = getGradY(20, 56, cBody, cBodyDark);
+        ctx.beginPath();
+        ctx.roundRect(28, 20, 44, 36, [14, 14, 8, 8]);
+        ctx.fill();
 
-        gp(20, 44 + legOffset, 6, 8, cBodyDark);
-        gp(34, 44 - legOffset, 6, 8, cBodyDark);
+        ctx.fillStyle = cHorn;
+        ctx.beginPath();
+        ctx.moveTo(56, 20);
+        ctx.bezierCurveTo(48, 8, 44, 4, 48, 0);
+        ctx.bezierCurveTo(54, 4, 58, 12, 64, 20);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = cEye;
+        ctx.beginPath();
+        ctx.arc(38, 32, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = cEyeGlow;
+        ctx.beginPath();
+        ctx.arc(38, 32, 8, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(32, 46); ctx.lineTo(34, 52); ctx.lineTo(38, 46); ctx.fill();
+
+        ctx.fillStyle = getGradY(92, 106, cBody, cBodyDark);
+        ctx.beginPath();
+        ctx.roundRect(40, 92 + legOffset, 14, 16, 4);
+        ctx.roundRect(64, 92 - legOffset, 14, 16, 4);
+        ctx.fill();
 
       } else if (dir === 3) { // RIGHT
-        gp(10, 14 + wingFlap, 14, 18, cWing);
-        gp(10, 12 + wingFlap, 16, 4, cWingHi);
+        ctx.fillStyle = getGradY(32 + wingFlap, 80 + wingFlap, cWingStart, cWingEnd);
+        ctx.beginPath();
+        ctx.moveTo(52, 52);
+        ctx.bezierCurveTo(32, 24 + wingFlap, 16, 28 + wingFlap, 16, 64 + wingFlap);
+        ctx.bezierCurveTo(32, 72 + wingFlap, 42, 64 + wingFlap, 52, 60);
+        ctx.closePath();
+        ctx.fill();
 
-        gp(10, 42, 12, 8, cBodyDark);
-        gp(20, 26, 22, 24, cBody);
-        gp(36, 30, 6, 14, cChest);
+        ctx.strokeStyle = cWingHi; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(52, 52); ctx.lineTo(20, 32 + wingFlap); ctx.lineTo(16, 64 + wingFlap); ctx.stroke();
 
-        gp(36, 20, 10, 8, cBody);
-        gp(32, 10, 20, 14, cBody);
-        gp(46, 16, 10, 8, cBodyDark);
+        ctx.fillStyle = getGradY(52, 104, cBody, cBodyDark);
+        ctx.beginPath();
+        ctx.roundRect(40, 52, 44, 48, [20, 20, 10, 10]);
+        ctx.fill();
 
-        gp(32, 4, 4, 8, cHorn);
-        gp(28, 2, 4, 4, cHorn);
+        ctx.fillStyle = getGradY(60, 96, cChestStart, cChestEnd);
+        ctx.beginPath();
+        ctx.roundRect(72, 60, 12, 34, [0, 8, 8, 0]);
+        ctx.fill();
 
-        gp(45, 14, 3, 2, cEye);
-        gp(46, 14, 1, 1, '#ffffff');
+        ctx.fillStyle = getGradY(20, 56, cBody, cBodyDark);
+        ctx.beginPath();
+        ctx.roundRect(56, 20, 44, 36, [14, 14, 8, 8]);
+        ctx.fill();
 
-        gp(24, 44 - legOffset, 6, 8, cBodyDark);
-        gp(38, 44 + legOffset, 6, 8, cBodyDark);
+        ctx.fillStyle = cHorn;
+        ctx.beginPath();
+        ctx.moveTo(72, 20);
+        ctx.bezierCurveTo(80, 8, 84, 4, 80, 0);
+        ctx.bezierCurveTo(74, 4, 70, 12, 64, 20);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = cEye;
+        ctx.beginPath();
+        ctx.arc(90, 32, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = cEyeGlow;
+        ctx.beginPath();
+        ctx.arc(90, 32, 8, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(96, 46); ctx.lineTo(94, 52); ctx.lineTo(90, 46); ctx.fill();
+
+        ctx.fillStyle = getGradY(92, 106, cBody, cBodyDark);
+        ctx.beginPath();
+        ctx.roundRect(50, 92 - legOffset, 14, 16, 4);
+        ctx.roundRect(74, 92 + legOffset, 14, 16, 4);
+        ctx.fill();
       }
 
-      tCtx.restore();
-
-      // Upscale 2x
-      ctx.drawImage(tempCanvas, 0, 0, 64, 64, ox, oy, 128, 128);
+      ctx.restore();
     }
   }
 

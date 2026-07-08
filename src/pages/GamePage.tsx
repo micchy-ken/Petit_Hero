@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { PhaserGameContainer } from '../components/PhaserGameContainer';
-import { Gamepad2, Layers, Cpu, ShieldCheck, Loader2, Play, RotateCcw, Plus, ArrowLeft, Settings, Trash2, Heart, Sword, Star, ChevronDown, ChevronUp, Map, Ghost, Package, Sparkles } from 'lucide-react';
+import { Gamepad2, Layers, Cpu, ShieldCheck, Loader2, Play, RotateCcw, Plus, ArrowLeft, Settings, Trash2, Heart, Sword, Star, ChevronDown, ChevronUp, Map, Ghost, Package, Sparkles, Download, Upload } from 'lucide-react';
 import { MapData } from '../types/MapData';
 import { 
   fetchMapsFromFirestore, 
@@ -41,6 +41,86 @@ export default function GamePage() {
   const [showEditorMenu, setShowEditorMenu] = useState(false);
   const [newScenarioName, setNewScenarioName] = useState('');
   const [newScenarioMode, setNewScenarioMode] = useState<'individual' | 'shared'>('individual');
+
+  const handleExportSaveData = () => {
+    try {
+      const exportData: Record<string, string> = {};
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('save_')) {
+          const val = localStorage.getItem(key);
+          if (val) {
+            exportData[key] = val;
+          }
+        }
+      }
+
+      const jsonStr = JSON.stringify({
+        type: 'petit-hero-save-data',
+        version: 1,
+        timestamp: Date.now(),
+        data: exportData
+      }, null, 2);
+
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `petit_hero_save_${new Date().toISOString().slice(0,10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showAlert('セーブデータ(JSON)をエクスポートしました。', 'エクスポート完了');
+    } catch (e) {
+      console.error(e);
+      showAlert('セーブデータのエクスポート中にエラーが発生しました。', 'エラー');
+    }
+  };
+
+  const handleImportSaveData = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+
+      if (parsed.type !== 'petit-hero-save-data' || !parsed.data) {
+        showAlert('無効なセーブデータファイルです。', 'インポート失敗');
+        return;
+      }
+
+      const confirmed = await showConfirm(
+        'セーブデータをインポートします。現在のセーブデータは上書きされます。よろしいですか？',
+        'データのインポート'
+      );
+      if (!confirmed) return;
+
+      // 古い save_ データを削除
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('save_')) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+
+      // 新しいデータをセット
+      Object.entries(parsed.data).forEach(([key, val]) => {
+        localStorage.setItem(key, val as string);
+      });
+
+      showAlert('セーブデータ(JSON)を正常に読み込みました。ゲームを再ロードします。', 'インポート完了');
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    } catch (e) {
+      console.error(e);
+      showAlert('セーブデータのインポート中にエラーが発生しました。ファイルが破損している可能性があります。', 'エラー');
+    }
+  };
 
   const loadAllConfig = async () => {
     setIsLoading(true);
@@ -346,6 +426,32 @@ export default function GamePage() {
                   </button>
                 </div>
               )}
+            </div>
+
+            <div className="w-full mt-4 flex flex-col gap-2">
+              <div className="border-t border-slate-800/60 my-2" />
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center mb-1">
+                セーブデータ管理 (ローカル保存のみ)
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleExportSaveData}
+                  className="flex-1 py-3 px-4 bg-slate-800/40 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-md hover:scale-[1.01] active:scale-[0.99]"
+                >
+                  <Download className="w-3.5 h-3.5 text-blue-400" />
+                  JSONエクスポート
+                </button>
+                <label className="flex-1 py-3 px-4 bg-slate-800/40 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md hover:scale-[1.01] active:scale-[0.99] text-center">
+                  <Upload className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>JSONインポート</span>
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={handleImportSaveData}
+                    className="hidden"
+                  />
+                </label>
+              </div>
             </div>
           </div>
         )}

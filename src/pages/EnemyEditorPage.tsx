@@ -16,12 +16,20 @@ function EnemyGraphicPreview({ bgMode, enemyId }: { bgMode: BgMode, enemyId: str
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     
-    ctx.imageSmoothingEnabled = false;
+    ctx.imageSmoothingEnabled = true;
     
     let frame = 0;
     const frames = 4;
-    const frameWidth = 64;
-    const frameHeight = 64;
+    
+    // ボス判定
+    const isBoss = ['color_demon_king', 'gray_boss', 'color_dragon', 'text_boss'].includes(enemyId);
+    const frameWidth = isBoss ? 128 : 64;
+    const frameHeight = isBoss ? 128 : 64;
+    
+    // Canvasの解像度を動的に更新
+    canvas.width = frameWidth;
+    canvas.height = frameHeight;
+    
     let animationId: number;
     let lastTime = 0;
     
@@ -39,14 +47,15 @@ function EnemyGraphicPreview({ bgMode, enemyId }: { bgMode: BgMode, enemyId: str
           ctx.fillStyle = '#ffffff';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.font = 'bold 32px "Inter", sans-serif';
           
           let char = '敵';
           if (enemyId === 'color_bat') char = '蝙';
           else if (enemyId === 'color_goblin') char = 'ゴ';
-          else if (enemyId === 'text_boss') char = '魔';
+          else if (enemyId === 'color_demon_king' || enemyId === 'gray_boss' || enemyId === 'text_boss') char = '魔';
+          else if (enemyId === 'color_dragon') char = '竜';
           else if (enemyId === 'text_teki') char = '敵';
           
+          ctx.font = isBoss ? 'bold 64px "Inter", sans-serif' : 'bold 32px "Inter", sans-serif';
           ctx.fillText(char, frameWidth / 2, frameHeight / 2);
         } else {
           // 2. グラフィックモード (カラー or グレイスケール)
@@ -54,152 +63,494 @@ function EnemyGraphicPreview({ bgMode, enemyId }: { bgMode: BgMode, enemyId: str
           ctx.fillStyle = isGray ? '#f1f5f9' : '#ecfdf5';
           ctx.fillRect(0, 0, frameWidth, frameHeight);
           
-          const tempCanvas = document.createElement('canvas');
-          tempCanvas.width = 32;
-          tempCanvas.height = 32;
-          const tCtx = tempCanvas.getContext('2d')!;
-          tCtx.imageSmoothingEnabled = false;
-          
-          const gp = (x: number, y: number, w: number, h: number, color: string) => {
-            tCtx.fillStyle = color;
-            tCtx.fillRect(x, y, w, h);
-          };
-
-          // ----------------- コウモリ -----------------
-          if (enemyId === 'color_bat') {
-            const cBody = isGray ? '#666666' : '#2e1065';
-            const cWing = isGray ? '#444444' : '#4c1d95';
-            const cWingDark = isGray ? '#222222' : '#1e1b4b';
-            const cEye = isGray ? '#ffffff' : '#f43f5e';
-            const cMouth = '#ffffff';
-
-            tCtx.save();
-            const bounceY = Math.sin((frame / frames) * Math.PI * 2) * 2;
-            tCtx.translate(0, bounceY);
-
-            // 影
-            tCtx.fillStyle = isGray ? 'rgba(0, 0, 0, 0.2)' : 'rgba(15, 23, 42, 0.15)';
-            tCtx.beginPath();
-            tCtx.ellipse(16, 28, 5 - Math.abs(bounceY) * 0.3, 1.5, 0, 0, Math.PI * 2);
-            tCtx.fill();
-
-            // 耳
-            gp(13, 9, 2, 3, cBody);
-            gp(17, 9, 2, 3, cBody);
-            // 頭/体
-            gp(12, 11, 8, 8, cBody);
-            gp(13, 19, 6, 2, cBody);
-
-            // 翼 (羽ばたき)
-            if (frame === 0) {
-              gp(5, 11, 7, 3, cWing); gp(20, 11, 7, 3, cWing);
-              gp(3, 13, 9, 2, cWingDark); gp(20, 13, 9, 2, cWingDark);
-              gp(2, 15, 6, 2, cWingDark); gp(24, 15, 6, 2, cWingDark);
-            } else if (frame === 1 || frame === 3) {
-              gp(6, 8, 6, 3, cWing); gp(20, 8, 6, 3, cWing);
-              gp(8, 11, 4, 4, cWingDark); gp(20, 11, 4, 4, cWingDark);
-              gp(10, 15, 2, 3, cWingDark); gp(20, 15, 2, 3, cWingDark);
-            } else if (frame === 2) {
-              gp(10, 13, 2, 7, cWing); gp(20, 13, 2, 7, cWing);
-              gp(9, 14, 1, 5, cWingDark); gp(22, 14, 1, 5, cWingDark);
-            }
-
-            // 目 / キバ
-            gp(14, 13, 1, 2, cEye); gp(17, 13, 1, 2, cEye);
-            gp(15, 16, 2, 1, cBody);
-            gp(15, 17, 1, 1, cMouth); gp(16, 17, 1, 1, cMouth);
-
-            tCtx.restore();
-
-          // ----------------- ゴブリン -----------------
-          } else if (enemyId === 'color_goblin') {
-            const cSkin = isGray ? '#777777' : '#16a34a';
-            const cSkinDark = isGray ? '#444444' : '#14532d';
-            const cCloth = isGray ? '#555555' : '#854d0e';
-            const cClothDark = isGray ? '#333333' : '#451a03';
-            const cWeapon = isGray ? '#888888' : '#71717a';
-            const cEye = isGray ? '#ffffff' : '#facc15';
-            const cHair = isGray ? '#666666' : '#27272a';
-
-            tCtx.save();
+          if (enemyId === 'color_demon_king' || enemyId === 'gray_boss') {
+            // ----------------- 魔王 128x128 -----------------
+            ctx.save();
             const isStep1 = frame === 1;
             const isStep2 = frame === 3;
-            const bobY = (isStep1 || isStep2) ? -1 : 0;
-            const legOffset = isStep1 ? 1 : (isStep2 ? -1 : 0);
+            const bobY = (isStep1 || isStep2) ? -4 : 0;
+            const legOffset = isStep1 ? 4 : (isStep2 ? -4 : 0);
 
-            tCtx.translate(0, bobY);
+            ctx.translate(0, bobY);
 
-            // 影
-            tCtx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-            tCtx.beginPath();
-            tCtx.ellipse(16, 28, 6, 2, 0, 0, Math.PI * 2);
-            tCtx.fill();
+            // 床の影 (巨大ぼかし)
+            const shadowGrad = ctx.createRadialGradient(64, 112, 5, 64, 112, 36);
+            shadowGrad.addColorStop(0, 'rgba(0, 0, 0, 0.6)');
+            shadowGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            ctx.fillStyle = shadowGrad;
+            ctx.beginPath();
+            ctx.ellipse(64, 112, 36, 10, 0, 0, Math.PI * 2);
+            ctx.fill();
 
-            // 正面向き
-            gp(7, 13, 3, 2, cSkinDark); gp(22, 13, 3, 2, cSkinDark);
-            gp(10, 10, 12, 9, cSkin);
-            gp(11, 9, 10, 1, cHair); gp(14, 7, 4, 2, cHair);
-            gp(12, 13, 2, 2, cEye); gp(18, 13, 2, 2, cEye);
-            gp(13, 14, 1, 1, '#000000'); gp(18, 14, 1, 1, '#000000');
-            gp(14, 16, 4, 1, cSkinDark); gp(14, 17, 1, 1, '#ffffff'); gp(17, 17, 1, 1, '#ffffff');
-            gp(10, 19, 12, 6, cCloth); gp(12, 25, 8, 2, cClothDark);
-            gp(11, 25 + (legOffset > 0 ? -1 : 0), 2, 4, cSkin); gp(19, 25 + (legOffset < 0 ? -1 : 0), 2, 4, cSkin);
-
-            const wpY = 17 + (isStep2 ? -1 : 0);
-            gp(23, wpY, 2, 6, cWeapon); gp(22, wpY - 2, 4, 3, cWeapon); gp(21, wpY + 4, 2, 2, cClothDark);
-
-            tCtx.restore();
-
-          // ----------------- スライム系 -----------------
-          } else {
-            const palette = {
-              highlight: '#a5f3fc', bodyHi: '#38bdf8', body: '#0284c7', bodyDark: '#0369a1',
-              shadow: '#0c4a6e', eye: '#ffffff', pupil: '#0f172a', mouth: '#0f172a'
+            const getGradY = (y1: number, y2: number, c1: string, c2: string) => {
+              const grad = ctx.createLinearGradient(0, y1, 0, y2);
+              grad.addColorStop(0, c1);
+              grad.addColorStop(1, c2);
+              return grad;
             };
 
-            if (isGray) {
-              palette.highlight = '#dddddd'; palette.bodyHi = '#aaaaaa'; palette.body = '#888888';
-              palette.bodyDark = '#666666'; palette.shadow = '#444444';
-            } else if (enemyId === 'color_slime_green') {
-              palette.highlight = '#bbf7d0'; palette.bodyHi = '#4ade80'; palette.body = '#22c55e';
-              palette.bodyDark = '#16a34a'; palette.shadow = '#14532d';
-            } else if (enemyId === 'color_slime_red') {
-              palette.highlight = '#fecdd3'; palette.bodyHi = '#fb7185'; palette.body = '#f43f5e';
-              palette.bodyDark = '#e11d48'; palette.shadow = '#881337';
+            const forceGray = enemyId === 'gray_boss' || isGray;
+            const cBodyGradStart = forceGray ? '#555555' : '#1e1b4b'; 
+            const cBodyGradEnd = forceGray ? '#1e1e1e' : '#090514';
+            const cCapeStart = forceGray ? '#444444' : '#4c1d95'; 
+            const cCapeEnd = forceGray ? '#1a1a1a' : '#1e0a3b';
+            const cCapeInnerStart = forceGray ? '#333333' : '#991b1b'; 
+            const cCapeInnerEnd = forceGray ? '#111111' : '#2d0606';
+            const cSkinStart = forceGray ? '#cbd5e1' : '#cbd5e1'; 
+            const cSkinEnd = forceGray ? '#64748b' : '#64748b';
+            const cCrownStart = forceGray ? '#e2e8f0' : '#fbbf24'; 
+            const cCrownEnd = forceGray ? '#94a3b8' : '#d97706';
+            const cEye = forceGray ? '#ffffff' : '#ef4444'; 
+            const cEyeGlow = forceGray ? 'rgba(255,255,255,0.4)' : 'rgba(239,68,68,0.5)';
+
+            // 1. ツノ
+            ctx.fillStyle = getGradY(16, 48, forceGray ? '#777777' : '#312e81', forceGray ? '#222222' : '#0f172a');
+            ctx.beginPath();
+            ctx.moveTo(36, 24);
+            ctx.bezierCurveTo(28, 16, 24, 12, 28, 6);
+            ctx.bezierCurveTo(34, 10, 38, 18, 42, 26);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.moveTo(92, 24);
+            ctx.bezierCurveTo(100, 16, 104, 12, 100, 6);
+            ctx.bezierCurveTo(94, 10, 90, 18, 86, 26);
+            ctx.closePath();
+            ctx.fill();
+
+            // 2. マント
+            ctx.fillStyle = getGradY(50, 110, cCapeStart, cCapeEnd);
+            ctx.beginPath();
+            ctx.moveTo(32, 52);
+            ctx.bezierCurveTo(20, 60, 16, 80, 16, 104);
+            ctx.bezierCurveTo(30, 108, 50, 100, 64, 100);
+            ctx.bezierCurveTo(78, 100, 98, 108, 112, 104);
+            ctx.bezierCurveTo(112, 80, 108, 60, 96, 52);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = getGradY(52, 100, cCapeInnerStart, cCapeInnerEnd);
+            ctx.beginPath();
+            ctx.moveTo(38, 52);
+            ctx.lineTo(64, 96);
+            ctx.lineTo(90, 52);
+            ctx.closePath();
+            ctx.fill();
+
+            // 3. 体 / 鎧
+            ctx.fillStyle = getGradY(50, 102, cBodyGradStart, cBodyGradEnd);
+            ctx.beginPath();
+            ctx.roundRect(40, 50, 48, 52, [10, 10, 4, 4]);
+            ctx.fill();
+
+            // 4. 肩当
+            ctx.fillStyle = getGradY(50, 64, cCrownStart, cCrownEnd);
+            ctx.beginPath();
+            ctx.roundRect(32, 48, 14, 14, 4);
+            ctx.roundRect(82, 48, 14, 14, 4);
+            ctx.fill();
+
+            // 5. 頭部・顔
+            ctx.fillStyle = getGradY(26, 52, cSkinStart, cSkinEnd);
+            ctx.beginPath();
+            ctx.roundRect(44, 26, 40, 26, [14, 14, 8, 8]);
+            ctx.fill();
+
+            // 6. 王冠
+            ctx.fillStyle = getGradY(12, 28, cCrownStart, cCrownEnd);
+            ctx.beginPath();
+            ctx.moveTo(48, 26);
+            ctx.lineTo(48, 14);
+            ctx.lineTo(54, 20);
+            ctx.lineTo(64, 10);
+            ctx.lineTo(74, 20);
+            ctx.lineTo(80, 14);
+            ctx.lineTo(80, 26);
+            ctx.closePath();
+            ctx.fill();
+
+            // 宝石
+            ctx.fillStyle = forceGray ? '#ffffff' : '#ef4444';
+            ctx.beginPath();
+            ctx.arc(64, 20, 3, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 7. 髪
+            ctx.fillStyle = forceGray ? '#222222' : '#0f172a';
+            ctx.beginPath();
+            ctx.roundRect(42, 38, 4, 16, 2);
+            ctx.roundRect(82, 38, 4, 16, 2);
+            ctx.fill();
+
+            // 8. 赤目
+            ctx.fillStyle = cEye;
+            ctx.beginPath();
+            ctx.arc(54, 38, 3.5, 0, Math.PI * 2);
+            ctx.arc(74, 38, 3.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(55, 37, 1, 0, Math.PI * 2);
+            ctx.arc(75, 37, 1, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = cEyeGlow;
+            ctx.beginPath();
+            ctx.arc(54, 38, 7, 0, Math.PI * 2);
+            ctx.arc(74, 38, 7, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 口
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(60, 46);
+            ctx.lineTo(68, 46);
+            ctx.stroke();
+
+            // 9. 足
+            ctx.fillStyle = forceGray ? '#444444' : '#1e293b';
+            ctx.beginPath();
+            ctx.roundRect(48, 100 + legOffset, 10, 12, 3);
+            ctx.roundRect(70, 100 - legOffset, 10, 12, 3);
+            ctx.fill();
+
+            // 10. 杖
+            const staffY = 32 + (isStep2 ? -4 : 0);
+            ctx.fillStyle = getGradY(staffY, staffY + 70, forceGray ? '#888888' : '#78350f', forceGray ? '#333333' : '#451a03');
+            ctx.beginPath();
+            ctx.roundRect(96, staffY, 6, 76, 3);
+            ctx.fill();
+
+            ctx.fillStyle = getGradY(staffY - 14, staffY, cCrownStart, cCrownEnd);
+            ctx.beginPath();
+            ctx.arc(99, staffY - 2, 9, 0, Math.PI * 2);
+            ctx.fill();
+
+            const coreGrad = ctx.createRadialGradient(99, staffY - 14, 1, 99, staffY - 14, 12);
+            coreGrad.addColorStop(0, '#ffffff');
+            coreGrad.addColorStop(0.3, forceGray ? '#ffffff' : '#ef4444');
+            coreGrad.addColorStop(1, forceGray ? 'rgba(255, 255, 255, 0)' : 'rgba(239, 68, 68, 0)');
+            ctx.fillStyle = coreGrad;
+            ctx.beginPath();
+            ctx.arc(99, staffY - 14, 12, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = getGradY(staffY + 36, staffY + 46, cSkinStart, cSkinEnd);
+            ctx.beginPath();
+            ctx.roundRect(92, staffY + 32, 10, 10, 3);
+            ctx.fill();
+
+            ctx.restore();
+
+          } else if (enemyId === 'color_dragon') {
+            // ----------------- ドラゴン 128x128 -----------------
+            ctx.save();
+            const isStep1 = frame === 1;
+            const isStep2 = frame === 3;
+            const bobY = (isStep1 || isStep2) ? -4 : 0;
+            const wingFlap = (isStep1 || isStep2) ? -8 : 0;
+            const legOffset = isStep1 ? 4 : (isStep2 ? -4 : 0);
+
+            ctx.translate(0, bobY);
+
+            // 床の影 (巨大ぼかし)
+            const shadowGrad = ctx.createRadialGradient(64, 112, 5, 64, 112, 40);
+            shadowGrad.addColorStop(0, 'rgba(0, 0, 0, 0.5)');
+            shadowGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            ctx.fillStyle = shadowGrad;
+            ctx.beginPath();
+            ctx.ellipse(64, 112, 40, 12, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            const getGradY = (y1: number, y2: number, c1: string, c2: string) => {
+              const grad = ctx.createLinearGradient(0, y1, 0, y2);
+              grad.addColorStop(0, c1);
+              grad.addColorStop(1, c2);
+              return grad;
+            };
+
+            const forceGray = isGray;
+            const cBody = forceGray ? '#888888' : '#dc2626'; 
+            const cBodyDark = forceGray ? '#444444' : '#7f1d1d'; 
+            const cChestStart = forceGray ? '#dddddd' : '#fbbf24'; 
+            const cChestEnd = forceGray ? '#999999' : '#d97706';
+            const cWingStart = forceGray ? '#555555' : '#7f1d1d'; 
+            const cWingEnd = forceGray ? '#333333' : '#450a0a';
+            const cWingHi = forceGray ? '#777777' : '#b91c1c'; 
+            const cHorn = '#f3f4f6'; 
+            const cEye = forceGray ? '#ffffff' : '#10b981'; 
+            const cEyeGlow = forceGray ? 'rgba(255, 255, 255, 0.3)' : 'rgba(16, 185, 129, 0.4)';
+
+            // 1. 巨大な翼
+            ctx.fillStyle = getGradY(32 + wingFlap, 80 + wingFlap, cWingStart, cWingEnd);
+            ctx.beginPath();
+            ctx.moveTo(48, 52);
+            ctx.bezierCurveTo(24, 28 + wingFlap, 8, 32 + wingFlap, 8, 68 + wingFlap);
+            ctx.bezierCurveTo(24, 76 + wingFlap, 36, 68 + wingFlap, 48, 64);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.strokeStyle = cWingHi;
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(48, 52);
+            ctx.lineTo(12, 36 + wingFlap);
+            ctx.lineTo(8, 68 + wingFlap);
+            ctx.stroke();
+
+            ctx.fillStyle = getGradY(32 + wingFlap, 80 + wingFlap, cWingStart, cWingEnd);
+            ctx.beginPath();
+            ctx.moveTo(80, 52);
+            ctx.bezierCurveTo(104, 28 + wingFlap, 120, 32 + wingFlap, 120, 68 + wingFlap);
+            ctx.bezierCurveTo(104, 76 + wingFlap, 92, 68 + wingFlap, 80, 64);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.strokeStyle = cWingHi;
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(80, 52);
+            ctx.lineTo(116, 36 + wingFlap);
+            ctx.lineTo(120, 68 + wingFlap);
+            ctx.stroke();
+
+            // 2. ドラゴンの体
+            ctx.fillStyle = getGradY(52, 104, cBody, cBodyDark);
+            ctx.beginPath();
+            ctx.roundRect(40, 52, 48, 48, [24, 24, 12, 12]);
+            ctx.fill();
+
+            // 3. お腹
+            ctx.fillStyle = getGradY(60, 96, cChestStart, cChestEnd);
+            ctx.beginPath();
+            ctx.roundRect(48, 60, 32, 34, 10);
+            ctx.fill();
+
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)';
+            ctx.lineWidth = 2;
+            for (let lY = 68; lY <= 88; lY += 6) {
+              ctx.beginPath();
+              ctx.moveTo(52, lY);
+              ctx.lineTo(76, lY);
+              ctx.stroke();
             }
 
-            tCtx.save();
-            let scaleX = 1; let scaleY = 1; let offsetY = 0;
-            if (frame === 1) { scaleX = 1.2; scaleY = 0.8; offsetY = 3; }
-            else if (frame === 2) { scaleX = 0.8; scaleY = 1.2; offsetY = -1; }
-            else if (frame === 3) { scaleX = 0.9; scaleY = 1.1; offsetY = -4; }
+            // 4. 首と頭
+            ctx.fillStyle = getGradY(20, 56, cBody, cBodyDark);
+            ctx.beginPath();
+            ctx.roundRect(44, 20, 40, 36, [14, 14, 8, 8]);
+            ctx.fill();
 
-            tCtx.translate(16, 26);
-            tCtx.scale(scaleX, scaleY);
-            tCtx.translate(-16, -26 + offsetY);
+            // 5. 白い角
+            ctx.fillStyle = cHorn;
+            ctx.beginPath();
+            ctx.moveTo(48, 20);
+            ctx.bezierCurveTo(36, 8, 32, 4, 36, 0);
+            ctx.bezierCurveTo(42, 4, 46, 12, 52, 20);
+            ctx.closePath();
+            ctx.fill();
 
-            // 影
-            if (frame !== 3) {
-              tCtx.fillStyle = 'rgba(15, 23, 42, 0.4)';
-              tCtx.beginPath(); tCtx.ellipse(16, 27, 8, 2, 0, 0, Math.PI * 2); tCtx.fill();
+            ctx.beginPath();
+            ctx.moveTo(80, 20);
+            ctx.bezierCurveTo(92, 8, 96, 4, 92, 0);
+            ctx.bezierCurveTo(86, 4, 82, 12, 76, 20);
+            ctx.closePath();
+            ctx.fill();
+
+            // 6. 目
+            ctx.fillStyle = cEye;
+            ctx.beginPath();
+            ctx.arc(54, 32, 4, 0, Math.PI * 2);
+            ctx.arc(74, 32, 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(55, 31, 1.2, 0, Math.PI * 2);
+            ctx.arc(75, 31, 1.2, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = cEyeGlow;
+            ctx.beginPath();
+            ctx.arc(54, 32, 8, 0, Math.PI * 2);
+            ctx.arc(74, 32, 8, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 牙
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.moveTo(52, 46); ctx.lineTo(55, 52); ctx.lineTo(58, 46);
+            ctx.moveTo(70, 46); ctx.lineTo(73, 52); ctx.lineTo(76, 46);
+            ctx.closePath();
+            ctx.fill();
+
+            // 7. 足
+            ctx.fillStyle = getGradY(92, 106, cBody, cBodyDark);
+            ctx.beginPath();
+            ctx.roundRect(36, 92 + legOffset, 14, 16, 4);
+            ctx.roundRect(78, 92 - legOffset, 14, 16, 4);
+            ctx.fill();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.moveTo(40, 108 + legOffset); ctx.lineTo(43, 112 + legOffset); ctx.lineTo(46, 108 + legOffset);
+            ctx.moveTo(82, 108 - legOffset); ctx.lineTo(85, 112 - legOffset); ctx.lineTo(88, 108 - legOffset);
+            ctx.fill();
+
+            ctx.restore();
+
+          } else {
+            // ----------------- 一般 64x64 グラフィック -----------------
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = 32;
+            tempCanvas.height = 32;
+            const tCtx = tempCanvas.getContext('2d')!;
+            tCtx.imageSmoothingEnabled = false;
+            
+            const gp = (x: number, y: number, w: number, h: number, color: string) => {
+              tCtx.fillStyle = color;
+              tCtx.fillRect(x, y, w, h);
+            };
+            
+            // ----------------- コウモリ -----------------
+            if (enemyId === 'color_bat') {
+              const cBody = isGray ? '#666666' : '#2e1065';
+              const cWing = isGray ? '#444444' : '#4c1d95';
+              const cWingDark = isGray ? '#222222' : '#1e1b4b';
+              const cEye = isGray ? '#ffffff' : '#f43f5e';
+              const cMouth = '#ffffff';
+
+              tCtx.save();
+              const bounceY = Math.sin((frame / frames) * Math.PI * 2) * 2;
+              tCtx.translate(0, bounceY);
+
+              // 影
+              tCtx.fillStyle = isGray ? 'rgba(0, 0, 0, 0.2)' : 'rgba(15, 23, 42, 0.15)';
+              tCtx.beginPath();
+              tCtx.ellipse(16, 28, 5 - Math.abs(bounceY) * 0.3, 1.5, 0, 0, Math.PI * 2);
+              tCtx.fill();
+
+              // 耳
+              gp(13, 9, 2, 3, cBody);
+              gp(17, 9, 2, 3, cBody);
+              // 頭/体
+              gp(12, 11, 8, 8, cBody);
+              gp(13, 19, 6, 2, cBody);
+
+              // 翼 (羽ばたき)
+              if (frame === 0) {
+                gp(5, 11, 7, 3, cWing); gp(20, 11, 7, 3, cWing);
+                gp(3, 13, 9, 2, cWingDark); gp(20, 13, 9, 2, cWingDark);
+                gp(2, 15, 6, 2, cWingDark); gp(24, 15, 6, 2, cWingDark);
+              } else if (frame === 1 || frame === 3) {
+                gp(6, 8, 6, 3, cWing); gp(20, 8, 6, 3, cWing);
+                gp(8, 11, 4, 4, cWingDark); gp(20, 11, 4, 4, cWingDark);
+                gp(10, 15, 2, 3, cWingDark); gp(20, 15, 2, 3, cWingDark);
+              } else if (frame === 2) {
+                gp(10, 13, 2, 7, cWing); gp(20, 13, 2, 7, cWing);
+                gp(9, 14, 1, 5, cWingDark); gp(22, 14, 1, 5, cWingDark);
+              }
+
+              // 目 / キバ
+              gp(14, 13, 1, 2, cEye); gp(17, 13, 1, 2, cEye);
+              gp(15, 16, 2, 1, cBody);
+              gp(15, 17, 1, 1, cMouth); gp(16, 17, 1, 1, cMouth);
+
+              tCtx.restore();
+
+            // ----------------- ゴブリン -----------------
+            } else if (enemyId === 'color_goblin') {
+              const cSkin = isGray ? '#777777' : '#16a34a';
+              const cSkinDark = isGray ? '#444444' : '#14532d';
+              const cCloth = isGray ? '#555555' : '#854d0e';
+              const cClothDark = isGray ? '#333333' : '#451a03';
+              const cWeapon = isGray ? '#888888' : '#71717a';
+              const cEye = isGray ? '#ffffff' : '#facc15';
+              const cHair = isGray ? '#666666' : '#27272a';
+
+              tCtx.save();
+              const isStep1 = frame === 1;
+              const isStep2 = frame === 3;
+              const bobY = (isStep1 || isStep2) ? -1 : 0;
+              const legOffset = isStep1 ? 1 : (isStep2 ? -1 : 0);
+
+              tCtx.translate(0, bobY);
+
+              // 影
+              tCtx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+              tCtx.beginPath();
+              tCtx.ellipse(16, 28, 6, 2, 0, 0, Math.PI * 2);
+              tCtx.fill();
+
+              // 正面向き
+              gp(7, 13, 3, 2, cSkinDark); gp(22, 13, 3, 2, cSkinDark);
+              gp(10, 10, 12, 9, cSkin);
+              gp(11, 9, 10, 1, cHair); gp(14, 7, 4, 2, cHair);
+              gp(12, 13, 2, 2, cEye); gp(18, 13, 2, 2, cEye);
+              gp(13, 14, 1, 1, '#000000'); gp(18, 14, 1, 1, '#000000');
+              gp(14, 16, 4, 1, cSkinDark); gp(14, 17, 1, 1, '#ffffff'); gp(17, 17, 1, 1, '#ffffff');
+              gp(10, 19, 12, 6, cCloth); gp(12, 25, 8, 2, cClothDark);
+              gp(11, 25 + (legOffset > 0 ? -1 : 0), 2, 4, cSkin); gp(19, 25 + (legOffset < 0 ? -1 : 0), 2, 4, cSkin);
+
+              const wpY = 17 + (isStep2 ? -1 : 0);
+              gp(23, wpY, 2, 6, cWeapon); gp(22, wpY - 2, 4, 3, cWeapon); gp(21, wpY + 4, 2, 2, cClothDark);
+
+              tCtx.restore();
+
+            // ----------------- スライム系 -----------------
             } else {
-              tCtx.fillStyle = 'rgba(15, 23, 42, 0.2)';
-              tCtx.beginPath(); tCtx.ellipse(16, 29, 5, 1, 0, 0, Math.PI * 2); tCtx.fill();
+              const palette = {
+                highlight: '#a5f3fc', bodyHi: '#38bdf8', body: '#0284c7', bodyDark: '#0369a1',
+                shadow: '#0c4a6e', eye: '#ffffff', pupil: '#0f172a', mouth: '#0f172a'
+              };
+
+              if (isGray) {
+                palette.highlight = '#dddddd'; palette.bodyHi = '#aaaaaa'; palette.body = '#888888';
+                palette.bodyDark = '#666666'; palette.shadow = '#444444';
+              } else if (enemyId === 'color_slime_green') {
+                palette.highlight = '#bbf7d0'; palette.bodyHi = '#4ade80'; palette.body = '#22c55e';
+                palette.bodyDark = '#16a34a'; palette.shadow = '#14532d';
+              } else if (enemyId === 'color_slime_red') {
+                palette.highlight = '#fecdd3'; palette.bodyHi = '#fb7185'; palette.body = '#f43f5e';
+                palette.bodyDark = '#e11d48'; palette.shadow = '#881337';
+              }
+
+              tCtx.save();
+              let scaleX = 1; let scaleY = 1; let offsetY = 0;
+              if (frame === 1) { scaleX = 1.2; scaleY = 0.8; offsetY = 3; }
+              else if (frame === 2) { scaleX = 0.8; scaleY = 1.2; offsetY = -1; }
+              else if (frame === 3) { scaleX = 0.9; scaleY = 1.1; offsetY = -4; }
+
+              tCtx.translate(16, 26);
+              tCtx.scale(scaleX, scaleY);
+              tCtx.translate(-16, -26 + offsetY);
+
+              // 影
+              if (frame !== 3) {
+                tCtx.fillStyle = 'rgba(15, 23, 42, 0.4)';
+                tCtx.beginPath(); tCtx.ellipse(16, 27, 8, 2, 0, 0, Math.PI * 2); tCtx.fill();
+              } else {
+                tCtx.fillStyle = 'rgba(15, 23, 42, 0.2)';
+                tCtx.beginPath(); tCtx.ellipse(16, 29, 5, 1, 0, 0, Math.PI * 2); tCtx.fill();
+              }
+
+              gp(12, 14, 8, 12, palette.shadow); gp(10, 16, 12, 10, palette.shadow); gp(8, 19, 16, 7, palette.shadow);
+              gp(13, 15, 6, 10, palette.bodyDark); gp(11, 17, 10, 8, palette.bodyDark); gp(9, 20, 14, 5, palette.bodyDark);
+              gp(14, 16, 4, 8, palette.body); gp(12, 18, 8, 6, palette.body); gp(10, 21, 12, 3, palette.body);
+              gp(15, 17, 2, 4, palette.bodyHi); gp(13, 19, 4, 2, palette.bodyHi);
+              gp(13, 17, 1, 2, palette.highlight); gp(11, 20, 1, 1, palette.highlight);
+              gp(11, 20, 2, 3, palette.eye); gp(12, 21, 1, 2, palette.pupil);
+              gp(19, 20, 2, 3, palette.eye); gp(19, 21, 1, 2, palette.pupil);
+              gp(15, 23, 2, 1, palette.mouth);
+
+              tCtx.restore();
             }
-
-            gp(12, 14, 8, 12, palette.shadow); gp(10, 16, 12, 10, palette.shadow); gp(8, 19, 16, 7, palette.shadow);
-            gp(13, 15, 6, 10, palette.bodyDark); gp(11, 17, 10, 8, palette.bodyDark); gp(9, 20, 14, 5, palette.bodyDark);
-            gp(14, 16, 4, 8, palette.body); gp(12, 18, 8, 6, palette.body); gp(10, 21, 12, 3, palette.body);
-            gp(15, 17, 2, 4, palette.bodyHi); gp(13, 19, 4, 2, palette.bodyHi);
-            gp(13, 17, 1, 2, palette.highlight); gp(11, 20, 1, 1, palette.highlight);
-            gp(11, 20, 2, 3, palette.eye); gp(12, 21, 1, 2, palette.pupil);
-            gp(19, 20, 2, 3, palette.eye); gp(19, 21, 1, 2, palette.pupil);
-            gp(15, 23, 2, 1, palette.mouth);
-
-            tCtx.restore();
+            
+            ctx.drawImage(tempCanvas, 0, 0, 32, 32, 0, 0, 64, 64);
           }
-          
-          ctx.drawImage(tempCanvas, 0, 0, 32, 32, 0, 0, 64, 64);
         }
       }
       animationId = requestAnimationFrame(draw);
