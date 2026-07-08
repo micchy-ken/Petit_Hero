@@ -68,6 +68,27 @@ export default function ItemEditorPage() {
     loadData();
   }, []);
 
+  const syncIcon = (targetItem: CustomItem) => {
+    if (targetItem.type === 'equipment') {
+      if (targetItem.equipmentType === 'weapon') targetItem.chestGraphic = '⚔️';
+      else if (targetItem.equipmentType === 'armor') targetItem.chestGraphic = '🛡️';
+      else if (targetItem.equipmentType === 'accessory') targetItem.chestGraphic = '💍';
+      else targetItem.chestGraphic = '⚔️';
+    } else if (targetItem.type === 'magic') {
+      targetItem.chestGraphic = '🔮';
+    } else if (targetItem.type === 'move_asset') {
+      targetItem.chestGraphic = '🥾';
+    } else if (targetItem.type === 'event') {
+      targetItem.chestGraphic = '🗝️';
+    } else if (targetItem.type === 'drop') {
+      targetItem.chestGraphic = '🏺';
+    } else if (targetItem.type === 'artifact') {
+      targetItem.chestGraphic = '💎';
+    } else {
+      targetItem.chestGraphic = '📦';
+    }
+  };
+
   const loadData = async () => {
     setIsLoading(true);
     const [data, magicsData] = await Promise.all([
@@ -76,18 +97,23 @@ export default function ItemEditorPage() {
     ]);
     
     // Seed default items if empty
+    let loadedItems: CustomItem[] = [];
     if (data.length === 0) {
-      const defaultItems: CustomItem[] = [
+      loadedItems = [
         { id: 'item_iron_sword', name: '鋼鉄の剣', type: 'equipment', equipmentType: 'weapon', chestGraphic: '⚔️', description: '攻撃力が上昇する頑丈な剣。', attack: 10 },
-        { id: 'item_fire_scroll', name: 'ファイアボルト', type: 'magic', chestGraphic: '🔥', description: '炎の弾を撃ち出す古代の呪文書。', targetMagicId: 'magic_fire' },
-        { id: 'item_ice_scroll', name: 'アイスブラスト', type: 'magic', chestGraphic: '❄️', description: '冷たい吹雪を巻き起こす呪文書。', targetMagicId: 'magic_ice' },
-        { id: 'item_teleport_boots', name: 'エルメスの靴', type: 'move_asset', chestGraphic: '💎', description: 'すばやく移動できるようになる不思議な靴。' },
+        { id: 'item_fire_scroll', name: 'ファイアボルト', type: 'magic', chestGraphic: '🔮', description: '炎の弾を撃ち出す古代の呪文書。', targetMagicId: 'magic_fire' },
+        { id: 'item_ice_scroll', name: 'アイスブラスト', type: 'magic', chestGraphic: '🔮', description: '冷たい吹雪を巻き起こす呪文書。', targetMagicId: 'magic_ice' },
+        { id: 'item_teleport_boots', name: 'エルメスの靴', type: 'move_asset', chestGraphic: '🥾', description: 'すばやく移動できるようになる不思議な靴。' },
         { id: 'item_gate_key', name: '古びた真鍮の鍵', type: 'event', chestGraphic: '🗝️', description: 'ゲートを開くために必要な古い鍵。' },
       ];
-      setItems(defaultItems);
     } else {
-      setItems(data);
+      loadedItems = data.map(item => {
+        const copy = { ...item };
+        syncIcon(copy);
+        return copy;
+      });
     }
+    setItems(loadedItems);
     setMagics(magicsData);
     setIsLoading(false);
   };
@@ -132,15 +158,10 @@ export default function ItemEditorPage() {
       if (!item.equipmentType) {
         item.equipmentType = 'weapon';
       }
-      if (!item.chestGraphic || item.chestGraphic === '📦') {
-        item.chestGraphic = '⚔️';
-      }
-    } else if (field === 'equipmentType') {
-      if (!item.chestGraphic || ['📦', '⚔️', '🛡️', '💍'].includes(item.chestGraphic)) {
-        if (value === 'weapon') item.chestGraphic = '⚔️';
-        else if (value === 'armor') item.chestGraphic = '🛡️';
-        else if (value === 'accessory') item.chestGraphic = '💍';
-      }
+    }
+
+    if (field === 'type' || field === 'equipmentType') {
+      syncIcon(item);
     }
 
     newItems[index] = item;
@@ -249,23 +270,17 @@ export default function ItemEditorPage() {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                    {/* 宝箱のグラフィック */}
+                    {/* アイテムアイコン (種類に準拠) */}
                     <div className="md:col-span-3">
-                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">宝箱のグラフィック</label>
-                      <div className="flex gap-2">
-                        <div className="w-12 h-12 bg-slate-100 border border-slate-200 rounded-lg flex items-center justify-center text-2xl shadow-inner">
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">アイテムアイコン</label>
+                      <div className="flex items-center gap-2">
+                        <div className="w-12 h-12 bg-indigo-50 border border-indigo-100 rounded-lg flex items-center justify-center text-2xl shadow-inner">
                           {item.chestGraphic || '📦'}
                         </div>
-                        <select
-                          value={item.chestGraphic || '📦'}
-                          onChange={(e) => updateItem(index, 'chestGraphic', e.target.value)}
-                          className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
-                        >
-                          {CHEST_GRAPHICS.map((g) => (
-                            <option key={g.key} value={g.key}>{g.label}</option>
-                          ))}
-                          {/* 自由な文字・絵文字を入力できるように追加用のプレースホルダや直接入力項目を足すとさらに親切 */}
-                        </select>
+                        <div className="text-xs text-slate-400">
+                          <div>種類に準拠して自動設定</div>
+                          <div className="font-mono mt-0.5 text-[10px]">({item.chestGraphic || '📦'})</div>
+                        </div>
                       </div>
                     </div>
 

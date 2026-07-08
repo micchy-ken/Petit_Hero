@@ -229,6 +229,8 @@ export class GridMovementScene extends Phaser.Scene {
   private enemiesDefeated: number = 0;
   private bossSpawned: boolean = false;
   private bossDefeated: boolean = false;
+  private bossAnnouncementSent: boolean = false;
+  public isSettingsPaused: boolean = false;
   
   public gridCols: number = 16;
   public gridRows: number = 16;
@@ -685,9 +687,6 @@ export class GridMovementScene extends Phaser.Scene {
     this.hero.setDepth(10);
     this.hero.play(this.getAnimKey('idle-down'));
 
-    // 5.5. スライムの配置
-    this.spawnInitialEnemies();
-
     // 6. HD-2D マナ粒子（ホタル風パーティクル）の生成（カメラ固定領域内で生成）
     this.particleMotes = [];
     for (let i = 0; i < 20; i++) {
@@ -755,9 +754,25 @@ export class GridMovementScene extends Phaser.Scene {
 
     // Initial stats trigger
     this.updateStats(this.currentGridX, this.currentGridY, this.currentCamGridX, this.currentCamGridY);
+
+    if (this.isSettingsPaused) {
+      if (this.anims) {
+        this.anims.pauseAll();
+      }
+    }
   }
 
   public update(time: number, delta: number) {
+    if (this.isSettingsPaused) {
+      if (this.anims && !this.anims.paused) {
+        this.anims.pauseAll();
+      }
+      return;
+    } else {
+      if (this.anims && this.anims.paused) {
+        this.anims.resumeAll();
+      }
+    }
     if (this.isShowingMonologue) return;
     
     // 魔法自動詠唱
@@ -1451,6 +1466,7 @@ export class GridMovementScene extends Phaser.Scene {
   }
 
   private checkAndMoveRandomly() {
+    if (this.isSettingsPaused) return;
     if (this.isShowingMonologue) return;
     if (this.autoMode === 'none') {
       if (this.pointerTargetGridX !== null && this.pointerTargetGridY !== null) {
@@ -2858,9 +2874,10 @@ export class GridMovementScene extends Phaser.Scene {
           }
         } else {
           const typeLabel = customItem.type === 'magic' ? '魔法' : customItem.type === 'move_asset' ? 'ムーブアセット' : customItem.type === 'event' ? 'イベント' : customItem.type === 'drop' ? 'ドロップ' : 'アーティファクト';
+          const itemIcon = customItem.chestGraphic || '✨';
           const descText = customItem.description ? `\n${customItem.description}` : '';
-          const msg = `『${customItem.name}』(${typeLabel})を手に入れた！ ✨ (Exp +5)${descText}`;
-          this.sendLog(`『${customItem.name}』を手に入れた！ ✨`, 'info');
+          const msg = `『${customItem.name}』(${typeLabel})を手に入れた！ ${itemIcon} (Exp +5)${descText}`;
+          this.sendLog(`『${customItem.name}』を手に入れた！ ${itemIcon}`, 'info');
           this.enqueueMessage('item', msg);
         }
         this.heroExp += 5;
@@ -3053,13 +3070,20 @@ export class GridMovementScene extends Phaser.Scene {
       this.tweens.killAll();
     }
 
-    this.totalEnemiesSpawned = 0;
-    this.enemiesDefeated = 0;
-    this.bossSpawned = false;
-    this.bossDefeated = false;
+    const isMapChanging = fromMapId !== undefined && fromMapId !== this.mapData?.id;
+    if (isMapChanging) {
+      this.totalEnemiesSpawned = 0;
+      this.enemiesDefeated = 0;
+      this.bossSpawned = false;
+      this.bossDefeated = false;
+      this.bossAnnouncementSent = false;
+    } else {
+      // 同一マップでのリセット時はボス再生成のためにspawnフラグだけ落とすが、アナウンスや討伐状況はリセットしない
+      this.bossSpawned = false;
+    }
     
     // マップ切り替え時の処理
-    if (fromMapId !== undefined && fromMapId !== this.mapData?.id) {
+    if (isMapChanging) {
        this.playedMapEvents.clear();
      }
     
@@ -3366,11 +3390,6 @@ export class GridMovementScene extends Phaser.Scene {
       if (s.sprite && s.sprite.active) s.sprite.destroy();
     });
     this.slimes = [];
-    
-    this.totalEnemiesSpawned = 0;
-    this.enemiesDefeated = 0;
-    this.bossSpawned = false;
-    this.bossDefeated = false;
 
     if (!this.mapData) return;
 
@@ -3383,8 +3402,8 @@ export class GridMovementScene extends Phaser.Scene {
     const mode = this.displayMode; // 'text' | 'grayscale' | 'normal'
     const defaultTex = mode === 'grayscale' ? 'slime_spritesheet_gray' : 'slime_spritesheet';
 
-    // 1. Spawn Boss if configured
-    if (this.mapData.boss) {
+    // 1. Spawn Boss if configured and not yet defeated
+    if (this.mapData.boss && !this.bossDefeated) {
       const bossConfig = getEnemyAssetById(this.mapData.boss);
       if (bossConfig) {
         const pos = this.findScatteredSpawnPosition(4, 3, true);
@@ -3433,7 +3452,10 @@ export class GridMovementScene extends Phaser.Scene {
           this.bossSpawned = true;
           this.playMonsterAnim(newBoss, 'idle', 'down');
           this.totalEnemiesSpawned++;
-          this.sendLog(`エリアボス【${bossConfig.name}】が現れた！ 👑`, 'system');
+          if (!this.bossAnnouncementSent) {
+            this.sendLog(`エリアボス【${bossConfig.name}】が現れた！ 👑`, 'system');
+            this.bossAnnouncementSent = true;
+          }
         }
       }
     }
@@ -3569,7 +3591,7 @@ export class GridMovementScene extends Phaser.Scene {
         // Normal mode
         const isDefault = item.itemId === 'treasure_text';
         const customItem = this.customItems.find((it: any) => it.id === item.itemId);
-        const graphic = isDefault ? '宝' : (customItem ? customItem.chestGraphic : '🎁');
+        const graphic = item.graphic || (isDefault ? '宝' : '📦');
 
         const textObj = this.add.text(
           item.x * GRID_SIZE + GRID_SIZE / 2, 

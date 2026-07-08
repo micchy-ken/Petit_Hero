@@ -20,39 +20,28 @@ export interface PhaserGameContainerProps {
   scenarioStatusMode?: 'individual' | 'shared';
   initialHeroState?: any;
   initialPosition?: any;
+  initialShowSettings?: boolean;
 }
 
 const getEquipmentIcon = (item: any) => {
   if (!item) return '🎁';
-  if (item.type !== 'equipment') return item.chestGraphic || '🎁';
-  
-  // equipmentTypeを推測または取得
-  let eqType = item.equipmentType;
-  if (!eqType) {
-    const name = item.name || '';
-    if (name.includes('剣') || name.includes('ブレード') || name.includes('ソード') || name.includes('刀') || name.includes('斧') || name.includes('弓') || name.includes('杖') || name.includes('ハンマー') || name.includes('ウェポン') || name.includes('アクス') || name.includes('ダガー')) {
-      eqType = 'weapon';
-    } else if (name.includes('鎧') || name.includes('盾') || name.includes('シールド') || name.includes('アーマー') || name.includes('兜') || name.includes('ヘルム') || name.includes('ローブ') || name.includes('ベスト') || name.includes('プレート')) {
-      eqType = 'armor';
-    } else if (name.includes('指輪') || name.includes('リング') || name.includes('ネックレス') || name.includes('アンクレット') || name.includes('オーブ') || name.includes('アミュレット') || name.includes('靴') || name.includes('ブーツ') || name.includes('ベルト')) {
-      eqType = 'accessory';
-    } else if (item.attack > 0 && (!item.defense || item.attack > item.defense)) {
-      eqType = 'weapon';
-    } else if (item.defense > 0) {
-      eqType = 'armor';
-    } else {
-      eqType = 'accessory';
-    }
+  if (item.type === 'equipment') {
+    if (item.equipmentType === 'weapon') return '⚔️';
+    if (item.equipmentType === 'armor') return '🛡️';
+    if (item.equipmentType === 'accessory') return '💍';
+    return '⚔️';
+  } else if (item.type === 'magic') {
+    return '🔮';
+  } else if (item.type === 'move_asset') {
+    return '🥾';
+  } else if (item.type === 'event') {
+    return '🗝️';
+  } else if (item.type === 'drop') {
+    return '🏺';
+  } else if (item.type === 'artifact') {
+    return '💎';
   }
-
-  const chestIcons = ['📦', '🎁', '💎', '⭐', '💀', '🔔', '💰', '👑', '🏺'];
-  const currentGraphic = item.chestGraphic || '';
-  if (!currentGraphic || chestIcons.includes(currentGraphic)) {
-    if (eqType === 'weapon') return '⚔️';
-    if (eqType === 'armor') return '🛡️';
-    if (eqType === 'accessory') return '💍';
-  }
-  return currentGraphic;
+  return item.chestGraphic || '📦';
 };
 
 const HeroGraphic = ({ scene, displayMode }: { scene: any, displayMode?: string }) => {
@@ -110,7 +99,8 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
   scenarioId,
   scenarioStatusMode,
   initialHeroState,
-  initialPosition
+  initialPosition,
+  initialShowSettings
 }) => {
   const gameContainerRef = useRef<HTMLDivElement>(null);
   const gameInstanceRef = useRef<Phaser.Game | null>(null);
@@ -188,7 +178,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
   }, []);
 
   // UIステータス
-  const [showSettings, setShowSettings] = useState(showSettingsOnInit);
+  const [showSettings, setShowSettings] = useState(initialShowSettings || showSettingsOnInit);
   const [isTurbo, setIsTurbo] = useState(false);
   const [heroState, setHeroState] = useState<HeroState>(() => {
     const defaultState: HeroState = {
@@ -270,8 +260,9 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
   useEffect(() => {
     const game = gameInstanceRef.current;
     if (game) {
-      const scene = game.scene.getScene('GridMovementScene');
+      const scene = game.scene.getScene('GridMovementScene') as any;
       if (scene) {
+        scene.isSettingsPaused = showSettings;
         if (showSettings) {
           scene.scene.pause();
         } else {
@@ -289,6 +280,13 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
       console.error(e);
     }
   };
+
+  // ゲームスタート（続きからではなく一番最初）にログをリセット
+  useEffect(() => {
+    if (!initialPosition && !initialHeroState) {
+      clearCumulativeLogs();
+    }
+  }, []);
 
   const exportCumulativeLogs = () => {
     try {
@@ -391,6 +389,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
 
   useEffect(() => {
     if (!gameContainerRef.current) return;
+    if (!isEventsLoaded) return;
 
     // ゲームコンフィグ (トータル576x576px = 9 x 64px)
     const config: Phaser.Types.Core.GameConfig = {
@@ -421,6 +420,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
       const scene = game.scene.getScene('GridMovementScene') as GridMovementScene;
       if (scene) {
         sceneRef.current = scene;
+        scene.isSettingsPaused = showSettings;
         scene.customItems = customItemsRef.current;
         scene.magics = magicsRef.current;
         lastLevelRef.current = 1;
@@ -501,6 +501,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
         if (maps && initialMapId) {
           const startMap = maps.find(m => m.id === initialMapId);
           if (startMap) {
+            scene.isSettingsPaused = showSettings;
             scene.mapData = startMap;
             scene.customItems = customItemsRef.current;
             scene.gridCols = startMap.width;

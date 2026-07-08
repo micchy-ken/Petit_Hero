@@ -9,6 +9,7 @@ export interface MapItem {
   x: number;
   y: number;
   itemId: string;
+  graphic?: string;
 }
 
 export interface MapObstacle {
