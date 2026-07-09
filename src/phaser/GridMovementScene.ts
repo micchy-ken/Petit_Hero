@@ -5013,7 +5013,9 @@ export class GridMovementScene extends Phaser.Scene {
             ease: 'Back.easeOut'
           });
 
-          if (!forceRebuild) {
+          if (!forceRebuild && this.canPlayEvent(event)) {
+            this.markEventPlayed(event);
+
             const targetMapId = eventData.targetMap;
             let targetMapName = '';
             if (this.allScenarioMaps && targetMapId) {
