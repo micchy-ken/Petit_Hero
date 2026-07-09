@@ -17,6 +17,7 @@ import { getEnemyAssetById, EnemyAsset, getAvailableEnemies } from '../data/Enem
 import { getHeroStatusByLevel, getAllHeroStatus } from '../data/HeroStatusAssets';
 
 // Import background images from src/assets/images to resolve via Vite
+import grassBg from '../assets/images/grass_bg_1782776475818.jpg';
 import caveBg1024 from '../assets/images/cave_bg_1024_1783554724524.jpg';
 import desertBg1024 from '../assets/images/desert_bg_1024_1783554709282.jpg';
 import vastCaveBg from '../assets/images/vast_cave_bg_1783555031253.jpg';
@@ -297,19 +298,15 @@ export class GridMovementScene extends Phaser.Scene {
   }
 
   preload() {
-    const base = import.meta.env.BASE_URL || '/';
-    const cleanBase = base.endsWith('/') ? base : `${base}/`;
-    const grassBgUrl = `${cleanBase}grass_bg_1782776475818.jpg`;
-
     // Load clean texture keys without file extensions (prevents Phaser texture key issues with dots)
-    this.load.image('grass_bg', grassBgUrl);
+    this.load.image('grass_bg', grassBg);
     this.load.image('desert_bg', desertBg1024);
     this.load.image('cave_bg', caveBg1024);
     this.load.image('vast_desert_bg', vastDesertBg);
     this.load.image('vast_cave_bg', vastCaveBg);
 
     // Also load with full file name extensions as keys for full backwards-compatibility
-    this.load.image('grass_bg_1782776475818.jpg', grassBgUrl);
+    this.load.image('grass_bg_1782776475818.jpg', grassBg);
     this.load.image('desert_bg_1024.jpg', desertBg1024);
     this.load.image('cave_bg_1024.jpg', caveBg1024);
     this.load.image('vast_desert_bg.jpg', vastDesertBg);
@@ -1684,7 +1681,8 @@ export class GridMovementScene extends Phaser.Scene {
             const dRate = this.getDefeatRate();
 
             const activeGoals = this.mapData.events.filter((event: any) => {
-              if (event.type !== 'teleport') return false;
+              const isTeleportGate = event.type === 'teleport' || (event.type === 'start_point' && event.data?.fromMap);
+              if (!isTeleportGate) return false;
               const eventData = event.data || {};
               let met = true;
               if (eventData.requiredExplorationRate && expRate < eventData.requiredExplorationRate) met = false;
@@ -3071,15 +3069,18 @@ export class GridMovementScene extends Phaser.Scene {
     // 初期値 (元マップ指定有り) への接触判定による元マップへの帰還
     const startPointEvent = eventsHere.find((e: any) => e.type === 'start_point');
     if (startPointEvent && startPointEvent.data?.fromMap) {
-      const targetMapId = startPointEvent.data.fromMap;
-      this.isTurboActive = false;
-      if (this.onTestPlayClear) {
-        this.onTestPlayClear();
-      } else if (this.onTeleport) {
-        this.sendLog(`元マップへ戻ります。`, 'system');
-        this.onTeleport(targetMapId);
+      const isUnlocked = this.teleportPortals.some(p => p.x === startPointEvent.x && p.y === startPointEvent.y && p.met);
+      if (isUnlocked) {
+        const targetMapId = startPointEvent.data.fromMap;
+        this.isTurboActive = false;
+        if (this.onTestPlayClear) {
+          this.onTestPlayClear();
+        } else if (this.onTeleport) {
+          this.sendLog(`元マップへ戻ります。`, 'system');
+          this.onTeleport(targetMapId);
+        }
+        return;
       }
-      return;
     }
 
     const teleportEvent = eventsHere.find((e: any) => e.type === 'teleport');

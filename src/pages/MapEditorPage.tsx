@@ -12,13 +12,32 @@ import { CustomEvent, ConversationNode } from '../types/CustomEvent';
 import { CustomItem } from '../types/CustomItem';
 import { MagicData } from '../types/MagicData';
 import { PORTRAITS } from '../data/portraits';
+
+// Import background images from assets directory to resolve via Vite
+import grassBg from '../assets/images/grass_bg_1782776475818.jpg';
+import caveBg1024 from '../assets/images/cave_bg_1024_1783554724524.jpg';
+import desertBg1024 from '../assets/images/desert_bg_1024_1783554709282.jpg';
+import vastCaveBg from '../assets/images/vast_cave_bg_1783555031253.jpg';
+import vastDesertBg from '../assets/images/vast_desert_bg_1783555019080.jpg';
+
+const BG_MAPPING: Record<string, string> = {
+  'grass_bg_1782776475818.jpg': grassBg,
+  'grass_bg': grassBg,
+  'desert_bg_1024.jpg': desertBg1024,
+  'desert_bg': desertBg1024,
+  'cave_bg_1024.jpg': caveBg1024,
+  'cave_bg': caveBg1024,
+  'vast_desert_bg.jpg': vastDesertBg,
+  'vast_desert_bg': vastDesertBg,
+  'vast_cave_bg.jpg': vastCaveBg,
+  'vast_cave_bg': vastCaveBg,
+};
+
 const getMapBgUrl = (bgImageName: string) => {
-  const base = import.meta.env.BASE_URL || '/';
-  const cleanBase = base.endsWith('/') ? base : `${base}/`;
-  if (!bgImageName) return `${cleanBase}grass_bg_1782776475818.jpg`;
+  if (!bgImageName) return grassBg;
   if (bgImageName.startsWith('http')) return bgImageName;
   const cleanName = bgImageName.startsWith('/') ? bgImageName.substring(1) : bgImageName;
-  return `${cleanBase}${cleanName}`;
+  return BG_MAPPING[cleanName] || BG_MAPPING[bgImageName] || grassBg;
 };
 
 const getEquipmentIcon = (item: any) => {
