@@ -48,6 +48,7 @@ export interface HeroState {
   baseAttack?: number;
   baseDefense?: number;
   displayMode?: 'normal' | 'text' | 'grayscale';
+  isTurboActive?: boolean;
 }
 
 interface SlimeData {
@@ -1688,20 +1689,27 @@ export class GridMovementScene extends Phaser.Scene {
               if (eventData.requiredExplorationRate && expRate < eventData.requiredExplorationRate) met = false;
               if (eventData.requiredSearchRate && sRate < eventData.requiredSearchRate) met = false;
               if (eventData.requiredDefeatRate && dRate < eventData.requiredDefeatRate) met = false;
-              if (!met) return false;
-
-              // 画面に映っている (現在のカメラビューポート内)
-              const onScreen = (
-                event.x >= this.currentCamGridX &&
-                event.x < this.currentCamGridX + GridMovementScene.VIEWPORT_COLS &&
-                event.y >= this.currentCamGridY &&
-                event.y < this.currentCamGridY + GridMovementScene.VIEWPORT_ROWS
-              );
-              return onScreen;
+              
+              if (event.type === 'start_point') {
+                const isUnlocked = this.teleportPortals.some(p => p.x === event.x && p.y === event.y && p.met);
+                if (!isUnlocked) met = false;
+              }
+              
+              return met;
             });
 
             if (activeGoals.length > 0) {
-              targetGoal = activeGoals[0];
+              // Find the closest active goal anywhere on the map (even off-screen)
+              let minGoalDist = Infinity;
+              let closestGoal = activeGoals[0];
+              activeGoals.forEach((goal: any) => {
+                const dist = Math.abs(goal.x - this.currentGridX) + Math.abs(goal.y - this.currentGridY);
+                if (dist < minGoalDist) {
+                  minGoalDist = dist;
+                  closestGoal = goal;
+                }
+              });
+              targetGoal = closestGoal;
             }
           }
         }
@@ -2537,6 +2545,20 @@ export class GridMovementScene extends Phaser.Scene {
       case 'down-right': targetGridY += 1; targetGridX += 1; break;
     }
 
+    // --- FORCE TURBO OFF BEFORE GOAL ---
+    if (this.mapData && this.mapData.events) {
+      const targetEvents = this.mapData.events.filter((e: any) => e.x === targetGridX && e.y === targetGridY);
+      const hasTeleport = targetEvents.some((e: any) => e.type === 'teleport');
+      const startPointEvent = targetEvents.find((e: any) => e.type === 'start_point');
+      const hasUnlockedStartPoint = startPointEvent && startPointEvent.data?.fromMap && 
+        this.teleportPortals.some(p => p.x === startPointEvent.x && p.y === startPointEvent.y && p.met);
+        
+      if (hasTeleport || hasUnlockedStartPoint) {
+        this.isTurboActive = false;
+        this.notifyStateChange(false);
+      }
+    }
+
     if (
       targetGridX < 0 || targetGridX >= this.gridCols ||
       targetGridY < 0 || targetGridY >= this.gridRows
@@ -3073,6 +3095,10 @@ export class GridMovementScene extends Phaser.Scene {
       if (isUnlocked) {
         const targetMapId = startPointEvent.data.fromMap;
         this.isTurboActive = false;
+        this.autoMode = 'none';
+        this.pointerTargetGridX = null;
+        this.pointerTargetGridY = null;
+        this.notifyStateChange(false);
         if (this.onTestPlayClear) {
           this.onTestPlayClear();
         } else if (this.onTeleport) {
@@ -3128,6 +3154,10 @@ export class GridMovementScene extends Phaser.Scene {
     if (met) {
       const doTransition = () => {
         this.isTurboActive = false;
+        this.autoMode = 'none';
+        this.pointerTargetGridX = null;
+        this.pointerTargetGridY = null;
+        this.notifyStateChange(false);
         if (this.onTestPlayClear) {
           this.onTestPlayClear();
         } else if (this.onTeleport && eventData.targetMap) {
@@ -3206,6 +3236,8 @@ export class GridMovementScene extends Phaser.Scene {
   public resetPosition(fromMapId?: string | null, overridePosition?: { gridX: number; gridY: number; camGridX: number; camGridY: number } | null) {
     // マップ切り替え時は強制的に移動 animation 等をクリアしてリセットする
     this.isMoving = false;
+    this.pointerTargetGridX = null;
+    this.pointerTargetGridY = null;
     if (this.tweens) {
       this.tweens.killAll();
     }
@@ -3271,10 +3303,32 @@ export class GridMovementScene extends Phaser.Scene {
 
        // 1. 指定された移行元のマップID(fromMapId)に合致するスタート地点を優先検索
        let startEvent = null;
+       let returnPortalPos = null;
        if (fromMapId) {
          startEvent = this.mapData.events?.find(
            (e: any) => e.type === 'start_point' && e.data?.fromMap === fromMapId
          );
+       }
+
+       // 1.5. 移行元マップへの移動イベント(teleport)の位置を優先
+       if (!startEvent && fromMapId) {
+         const teleportEvent = this.mapData.events?.find(
+           (e: any) => e.type === 'teleport' && e.data?.targetMap === fromMapId
+         );
+         if (teleportEvent) {
+           startEvent = teleportEvent;
+         }
+       }
+       if (false) {
+       if (!startEvent && fromMapId) {
+         const teleportEvent = this.mapData.events?.find(
+           (e: any) => e.type === 'teleport' && e.data?.targetMap === fromMapId
+         );
+         if (teleportEvent) {
+           returnPortalPos = { x: teleportEvent.x, y: teleportEvent.y };
+         }
+       }
+
        }
 
        // 2. なければ、設定なし(fromMapがnullまたは空文字列)の初期値を探す
@@ -3289,16 +3343,26 @@ export class GridMovementScene extends Phaser.Scene {
          startEvent = this.mapData.events?.find((e: any) => e.type === 'start_point');
        }
 
-        let returnPortalPos = null;
-        if (!startEvent && fromMapId) {
+        /* // returnPortalPos is already calculated above
+        if (false) {
           const teleportEvent = this.mapData.events?.find(
             (e: any) => e.type === 'teleport' && e.data?.targetMap === fromMapId
+          );
+          if (teleportEvent) {
+            returnPortalPos = { x: teleportEvent.x, y: teleportEvent.y };
+            startEvent = teleportEvent;
+          }
+        }
+        if (false) {
+          const dummy = this.mapData.events?.find(
+            (e: any) => false
           );
           if (teleportEvent) {
             returnPortalPos = { x: teleportEvent.x, y: teleportEvent.y };
           }
         }
 
+         */
        if (startEvent) {
           this.currentGridX = startEvent.x;
           this.currentGridY = startEvent.y;
@@ -3419,7 +3483,8 @@ export class GridMovementScene extends Phaser.Scene {
         equippedAccessoryId: this.equippedAccessoryId,
         baseAttack: this.baseHeroAttack,
         baseDefense: this.baseHeroDefense,
-        displayMode: this.displayMode
+        displayMode: this.displayMode,
+        isTurboActive: this.isTurboActive
       });
     }
   }

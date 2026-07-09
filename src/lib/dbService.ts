@@ -547,12 +547,14 @@ export async function saveScenarioProgress(
       baseAttack: number;
       baseDefense: number;
     };
+    customItems?: any[];
   }
 ): Promise<void> {
   try {
     const saveData = {
       position: progress.position,
       heroState: statusMode === 'individual' ? progress.heroState : undefined,
+      customItems: progress.customItems,
       timestamp: Date.now()
     };
     localStorage.setItem(`save_${scenarioId}`, JSON.stringify(saveData));
@@ -560,6 +562,7 @@ export async function saveScenarioProgress(
     if (statusMode === 'shared') {
       const sharedData = {
         heroState: progress.heroState,
+        customItems: progress.customItems,
         timestamp: Date.now()
       };
       localStorage.setItem('save_shared_status', JSON.stringify(sharedData));
@@ -606,15 +609,18 @@ export async function loadScenarioProgress(
     baseAttack: number;
     baseDefense: number;
   } | null;
+  customItems: any[] | null;
 }> {
   try {
     const localSaveStr = localStorage.getItem(`save_${scenarioId}`);
     let position = null;
     let heroState = null;
+    let customItems = null;
 
     if (localSaveStr) {
       const data = JSON.parse(localSaveStr);
       position = data.position || null;
+      customItems = data.customItems || null;
       if (statusMode === 'individual') {
         heroState = data.heroState || null;
       }
@@ -625,13 +631,14 @@ export async function loadScenarioProgress(
       if (sharedSaveStr) {
         const data = JSON.parse(sharedSaveStr);
         heroState = data.heroState || null;
+        customItems = data.customItems || customItems || null;
       }
     }
 
-    return { position, heroState };
+    return { position, heroState, customItems };
   } catch (error) {
     console.error('Error loading scenario progress locally:', error);
-    return { position: null, heroState: null };
+    return { position: null, heroState: null, customItems: null };
   }
 }
 

@@ -21,6 +21,7 @@ export interface PhaserGameContainerProps {
   initialHeroState?: any;
   initialPosition?: any;
   initialShowSettings?: boolean;
+  initialCustomItems?: any[];
 }
 
 const getEquipmentIcon = (item: any) => {
@@ -116,7 +117,8 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
   scenarioStatusMode,
   initialHeroState,
   initialPosition,
-  initialShowSettings
+  initialShowSettings,
+  initialCustomItems
 }) => {
   const gameContainerRef = useRef<HTMLDivElement>(null);
   const gameInstanceRef = useRef<Phaser.Game | null>(null);
@@ -181,17 +183,25 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
     ]).then(([eventsData, itemsData, magicsData]) => {
       setCustomEvents(eventsData);
       customEventsRef.current = eventsData;
-      setCustomItems(itemsData);
-      customItemsRef.current = itemsData;
+      
+      let mergedItems = [...itemsData];
+      if (initialCustomItems && initialCustomItems.length > 0) {
+        const existingIds = new Set(itemsData.map(it => it.id));
+        const savedDynamicItems = initialCustomItems.filter(it => !existingIds.has(it.id));
+        mergedItems = [...mergedItems, ...savedDynamicItems];
+      }
+
+      setCustomItems(mergedItems);
+      customItemsRef.current = mergedItems;
       magicsRef.current = magicsData;
       setIsEventsLoaded(true);
 
       if (sceneRef.current) {
-        sceneRef.current.customItems = itemsData;
+        sceneRef.current.customItems = mergedItems;
         sceneRef.current.magics = magicsData;
       }
     });
-  }, []);
+  }, [initialCustomItems]);
 
   // UIステータス
   const [showSettings, setShowSettings] = useState(initialShowSettings || showSettingsOnInit);
@@ -259,6 +269,113 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
   });
 
   const cumulativeLogsContainerRef = useRef<HTMLDivElement>(null);
+
+  // --- ROBUST PROGRESS SYNC SAVE ---
+  const latestHeroStateRef = useRef<HeroState | null>(null);
+  const latestScenarioIdRef = useRef<string | undefined>(undefined);
+  const latestStatusModeRef = useRef<string | undefined>(undefined);
+  const latestMapIdRef = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    latestHeroStateRef.current = heroState;
+  }, [heroState]);
+
+  useEffect(() => {
+    latestScenarioIdRef.current = scenarioId;
+  }, [scenarioId]);
+
+  useEffect(() => {
+    latestStatusModeRef.current = scenarioStatusMode;
+  }, [scenarioStatusMode]);
+
+  useEffect(() => {
+    latestMapIdRef.current = initialMapId;
+  }, [initialMapId]);
+
+  const saveProgressNow = () => {
+    const sId = latestScenarioIdRef.current;
+    const sMode = latestStatusModeRef.current;
+    const scene = sceneRef.current;
+    const hState = latestHeroStateRef.current;
+    
+    const mapId = scene?.mapData?.id || latestMapIdRef.current || 'map_beginning';
+
+    if (!sId || isTestPlay || !hState) return;
+
+    try {
+      const saveData = {
+        position: {
+          mapId: mapId,
+          gridX: hState.gridX,
+          gridY: hState.gridY,
+          camGridX: hState.camGridX,
+          camGridY: hState.camGridY
+        },
+        heroState: sMode === 'shared' ? undefined : {
+          hp: hState.hp,
+          maxHp: hState.maxHp,
+          attack: hState.attack,
+          defense: hState.defense,
+          level: hState.level,
+          exp: hState.exp,
+          requiredExp: hState.requiredExp,
+          acquiredItems: hState.acquiredItems || [],
+          equippedWeaponId: hState.equippedWeaponId || null,
+          equippedArmorId: hState.equippedArmorId || null,
+          equippedAccessoryId: hState.equippedAccessoryId || null,
+          baseAttack: hState.baseAttack || 5,
+          baseDefense: hState.baseDefense || 0
+        },
+        customItems: customItemsRef.current || [],
+        timestamp: Date.now()
+      };
+      localStorage.setItem(`save_${sId}`, JSON.stringify(saveData));
+
+      if (sMode === 'shared') {
+        const sharedData = {
+          heroState: {
+            hp: hState.hp,
+            maxHp: hState.maxHp,
+            attack: hState.attack,
+            defense: hState.defense,
+            level: hState.level,
+            exp: hState.exp,
+            requiredExp: hState.requiredExp,
+            acquiredItems: hState.acquiredItems || [],
+            equippedWeaponId: hState.equippedWeaponId || null,
+            equippedArmorId: hState.equippedArmorId || null,
+            equippedAccessoryId: hState.equippedAccessoryId || null,
+            baseAttack: hState.baseAttack || 5,
+            baseDefense: hState.baseDefense || 0
+          },
+          customItems: customItemsRef.current || [],
+          timestamp: Date.now()
+        };
+        localStorage.setItem('save_shared_status', JSON.stringify(sharedData));
+      }
+
+      const metaData = {
+        lastPlayedScenarioId: sId,
+        timestamp: Date.now()
+      };
+      localStorage.setItem('save_metadata', JSON.stringify(metaData));
+      console.log(`[Sync Save] Succeeded saving scenario progress for ${sId}`);
+    } catch (error) {
+      console.error('[Sync Save] Error saving scenario progress:', error);
+    }
+  };
+
+  // Trigger save when showSettings changes
+  useEffect(() => {
+    saveProgressNow();
+  }, [showSettings]);
+
+  // Synchronously save progress on component unmount
+  useEffect(() => {
+    return () => {
+      saveProgressNow();
+    };
+  }, []);
 
   // オートスクロール：最新ログが一番下なので、追加時や設定タブを開いた時に最下部までスクロールする
   useEffect(() => {
@@ -457,6 +574,9 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
           if (newState.level !== lastLevelRef.current) {
             lastLevelRef.current = newState.level;
           }
+          if (newState.isTurboActive !== undefined) {
+            setIsTurbo(newState.isTurboActive);
+          }
         });
         
         scene.setOnLog((newLog) => {
@@ -537,11 +657,15 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
             scene.onTestPlayClear = onTestPlayClear ? () => {
               setIsTurbo(false);
               scene.isTurboActive = false;
+              scene.setAutoMode('none');
+              setAutoMode('none');
               onTestPlayClear();
             } : undefined;
             scene.onTeleport = onTeleport ? (targetMapId) => {
               setIsTurbo(false);
               scene.isTurboActive = false;
+              scene.setAutoMode('none');
+              setAutoMode('none');
               onTeleport(targetMapId);
             } : undefined;
             
@@ -745,6 +869,8 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
       scene.onTestPlayClear = onTestPlayClear ? () => {
         setIsTurbo(false);
         scene.isTurboActive = false;
+        scene.setAutoMode('none');
+        setAutoMode('none');
         onTestPlayClear();
       } : undefined;
     }
@@ -756,6 +882,8 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
       scene.onTeleport = onTeleport ? (targetMapId) => {
         setIsTurbo(false);
         scene.isTurboActive = false;
+        scene.setAutoMode('none');
+        setAutoMode('none');
         onTeleport(targetMapId);
       } : undefined;
     }
@@ -932,30 +1060,21 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
               {autoMode !== 'none' ? (
                 <div className="absolute bottom-4 left-4 z-20 flex flex-col gap-2">
                   <button
-                    onPointerDown={() => {
-                      setIsTurbo(true);
-                      if (sceneRef.current) sceneRef.current.isTurboActive = true;
-                    }}
-                    onPointerUp={() => {
-                      setIsTurbo(false);
-                      if (sceneRef.current) sceneRef.current.isTurboActive = false;
-                    }}
-                    onPointerLeave={() => {
-                      setIsTurbo(false);
-                      if (sceneRef.current) sceneRef.current.isTurboActive = false;
-                    }}
-                    onPointerCancel={() => {
-                      setIsTurbo(false);
-                      if (sceneRef.current) sceneRef.current.isTurboActive = false;
+                    onClick={() => {
+                      const nextTurbo = !isTurbo;
+                      setIsTurbo(nextTurbo);
+                      if (sceneRef.current) {
+                        sceneRef.current.isTurboActive = nextTurbo;
+                        sceneRef.current.notifyStateChange(false);
+                      }
                     }}
                     className={`px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-black rounded-xl shadow-lg border border-orange-400/50 flex items-center justify-center gap-1.5 select-none transition-all duration-150 active:scale-95 ${
-                      isTurbo ? 'brightness-125 scale-105 animate-pulse border-orange-300' : 'hover:brightness-110'
+                      isTurbo ? 'brightness-125 scale-105 animate-pulse ring-2 ring-amber-300 border-orange-300' : 'opacity-80 hover:opacity-100 hover:brightness-110'
                     }`}
-                    style={{ touchAction: 'none' }}
-                    title="押している間だけ0msで自動行動します"
+                    title="自動行動のスピードを爆速(0ms)に切り替えます"
                   >
-                    <Flame className={`w-4 h-4 ${isTurbo ? 'animate-bounce' : ''}`} />
-                    TURBO
+                    <Flame className={`w-4 h-4 ${isTurbo ? 'animate-bounce text-yellow-200' : 'text-orange-200'}`} />
+                    TURBO {isTurbo ? 'ON' : 'OFF'}
                   </button>
                   <button
                     onClick={() => {

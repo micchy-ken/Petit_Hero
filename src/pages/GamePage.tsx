@@ -34,6 +34,7 @@ export default function GamePage() {
   const [activeScenario, setActiveScenario] = useState<Scenario | null>(null);
   const [loadedHeroState, setLoadedHeroState] = useState<any | null>(null);
   const [loadedPosition, setLoadedPosition] = useState<any | null>(null);
+  const [loadedCustomItems, setLoadedCustomItems] = useState<any[] | null>(null);
   const [initialShowSettings, setInitialShowSettings] = useState(false);
 
   // New Scenario Modal
@@ -193,6 +194,7 @@ export default function GamePage() {
       if (continueGame && save && save.position) {
         setLoadedPosition(save.position);
         setLoadedHeroState(save.heroState || null);
+        setLoadedCustomItems(save.customItems || null);
         
         // Ensure starting map exists
         const mapExists = scenarioMaps.some(m => m.id === save.position.mapId);
@@ -200,6 +202,7 @@ export default function GamePage() {
       } else {
         setLoadedPosition(null);
         setLoadedHeroState(null);
+        setLoadedCustomItems(null);
         
         const beginningMap = scenarioMaps.find(m => m.id === 'map_beginning' || m.id.startsWith('map_beginning_')) || scenarioMaps[0];
         setCurrentMapId(beginningMap?.id || '');
@@ -304,6 +307,7 @@ export default function GamePage() {
             scenarioStatusMode={activeScenario.statusMode}
             initialHeroState={loadedHeroState}
             initialPosition={loadedPosition}
+            initialCustomItems={loadedCustomItems || undefined}
             onTeleport={(targetMapId) => setCurrentMapId(targetMapId)} 
           />
         </main>
