@@ -1661,9 +1661,13 @@ export default function MapEditorPage() {
                           if (nextGraphic === '🔮') {
                             const firstMagic = magics.find(m => m.acquisitionType === 'item');
                             if (firstMagic) nextItemId = firstMagic.id;
-                          } else {
-                            if (customItems.length > 0) {
+                          } else if (nextGraphic === '📦' || nextGraphic === '🏺' || nextGraphic === '💀') {
+                            if (customItems.length > 0 && (!nextItemId || nextItemId.startsWith('artifact_'))) {
                               nextItemId = customItems[0].id;
+                            }
+                          } else if (nextGraphic === '🎁' || nextGraphic === '💎' || nextGraphic === '⭐') {
+                            if (!nextItemId || !nextItemId.startsWith('artifact_')) {
+                              nextItemId = 'artifact_weapon_lvl1_3';
                             }
                           }
                           setNewItemParams({ ...newItemParams, graphic: nextGraphic, itemId: nextItemId });
@@ -1706,37 +1710,39 @@ export default function MapEditorPage() {
                           <>
                             {bgMode === 'text-black' && <option value="treasure_text">宝 (Text)</option>}
                             
-                            <optgroup label="✨ アーティファクト (ランダム生成)">
-                              <option value="artifact_weapon_lvl1_3">⚔️ 武器: 大剣 [Lv1-3]</option>
-                              <option value="artifact_armor_lvl1_3">🛡️ 防具: 全身鎧 [Lv1-3]</option>
-                              <option value="artifact_accessory_lvl1_3">💍 装飾: 指輪 [Lv1-3]</option>
-                              
-                              <option value="artifact_weapon_lvl4_6">⚔️ 武器: 勇者の剣 [Lv4-6]</option>
-                              <option value="artifact_armor_lvl4_6">🛡️ 防具: 勇者の鎧 [Lv4-6]</option>
-                              <option value="artifact_accessory_lvl4_6">💍 装飾: 勇者のネックレス [Lv4-6]</option>
-                              
-                              <option value="artifact_weapon_lvl7_9">⚔️ 武器: 伝説の剣 [Lv7-9]</option>
-                              <option value="artifact_armor_lvl7_9">🛡️ 防具: 伝説の鎧 [Lv7-9]</option>
-                              <option value="artifact_accessory_lvl7_9">💍 装飾: 伝説 of ネックレス [Lv7-9]</option>
-                              
-                              <option value="artifact_weapon_lvl10">⚔️ 武器: オリハルコンソード [Lv10]</option>
-                              <option value="artifact_armor_lvl10">🛡️ 防具: オリハルコンアーマー [Lv10]</option>
-                              <option value="artifact_accessory_lvl10">💍 装飾: ゴッドオーブ [Lv10]</option>
-                            </optgroup>
+                            {(newItemParams.graphic === '🎁' || newItemParams.graphic === '💎' || newItemParams.graphic === '⭐') && (
+                              <optgroup label="✨ アーティファクト (ランダム生成)">
+                                <option value="artifact_weapon_lvl1_3">⚔️ 武器: 大剣 [Lv1-3]</option>
+                                <option value="artifact_armor_lvl1_3">🛡️ 防具: 全身鎧 [Lv1-3]</option>
+                                <option value="artifact_accessory_lvl1_3">💍 装飾: 指輪 [Lv1-3]</option>
+                                
+                                <option value="artifact_weapon_lvl4_6">⚔️ 武器: 勇者の剣 [Lv4-6]</option>
+                                <option value="artifact_armor_lvl4_6">🛡️ 防具: 勇者の鎧 [Lv4-6]</option>
+                                <option value="artifact_accessory_lvl4_6">💍 装飾: 勇者のネックレス [Lv4-6]</option>
+                                
+                                <option value="artifact_weapon_lvl7_9">⚔️ 武器: 伝説の剣 [Lv7-9]</option>
+                                <option value="artifact_armor_lvl7_9">🛡️ 防具: 伝説の鎧 [Lv7-9]</option>
+                                <option value="artifact_accessory_lvl7_9">💍 装飾: 伝説 of ネックレス [Lv7-9]</option>
+                                
+                                <option value="artifact_weapon_lvl10">⚔️ 武器: オリハルコンソード [Lv10]</option>
+                                <option value="artifact_armor_lvl10">🛡️ 防具: オリハルコンアーマー [Lv10]</option>
+                                <option value="artifact_accessory_lvl10">💍 装飾: ゴッドオーブ [Lv10]</option>
+                              </optgroup>
+                            )}
 
-                            <optgroup label="📦 通常登録アイテム">
-                              {customItems.map((item) => (
-                                <option key={item.id} value={item.id}>
-                                  {getEquipmentIcon(item)} {item.name}
-                                </option>
-                              ))}
-                            </optgroup>
+                            {(newItemParams.graphic === '📦' || newItemParams.graphic === '🏺' || newItemParams.graphic === '💀') && (
+                              <optgroup label="📦 通常登録アイテム">
+                                {customItems.map((item) => (
+                                  <option key={item.id} value={item.id}>
+                                    {getEquipmentIcon(item)} {item.name}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )}
                           </>
                         )}
                       </select>
                     </div>
-
-                    {/* アーティファクト仕様表 */}
                     <div className="mt-3 bg-slate-800/90 p-3 rounded border border-slate-600 text-[11px] text-slate-300 shadow-inner">
                       <div className="font-bold text-slate-200 mb-2 flex items-center gap-1.5 border-b border-slate-700 pb-1">
                         <span className="text-amber-400">🏺</span> アーティファクト仕様一覧
@@ -2581,9 +2587,13 @@ export default function MapEditorPage() {
                     if (nextGraphic === '🔮') {
                       const firstMagic = magics.find(m => m.acquisitionType === 'item');
                       if (firstMagic) nextItemId = firstMagic.id;
-                    } else {
-                      if (customItems.length > 0) {
+                    } else if (nextGraphic === '📦' || nextGraphic === '🏺' || nextGraphic === '💀') {
+                      if (customItems.length > 0 && (!nextItemId || nextItemId.startsWith('artifact_'))) {
                         nextItemId = customItems[0].id;
+                      }
+                    } else if (nextGraphic === '🎁' || nextGraphic === '💎' || nextGraphic === '⭐') {
+                      if (!nextItemId || !nextItemId.startsWith('artifact_')) {
+                        nextItemId = 'artifact_weapon_lvl1_3';
                       }
                     }
                     setEditingItem({
@@ -2633,37 +2643,40 @@ export default function MapEditorPage() {
                     <>
                       {bgMode === 'text-black' && <option value="treasure_text">宝 (Text)</option>}
                       
-                      <optgroup label="✨ アーティファクト (ランダム生成)">
-                        <option value="artifact_weapon_lvl1_3">⚔️ 武器: 大剣 [Lv1-3]</option>
-                        <option value="artifact_armor_lvl1_3">🛡️ 防具: 全身鎧 [Lv1-3]</option>
-                        <option value="artifact_accessory_lvl1_3">💍 装飾: 指輪 [Lv1-3]</option>
-                        
-                        <option value="artifact_weapon_lvl4_6">⚔️ 武器: 勇者の剣 [Lv4-6]</option>
-                        <option value="artifact_armor_lvl4_6">🛡️ 防具: 勇者の鎧 [Lv4-6]</option>
-                        <option value="artifact_accessory_lvl4_6">💍 装飾: 勇者のネックレス [Lv4-6]</option>
-                        
-                        <option value="artifact_weapon_lvl7_9">⚔️ 武器: 伝説の剣 [Lv7-9]</option>
-                        <option value="artifact_armor_lvl7_9">🛡️ 防具: 伝説の鎧 [Lv7-9]</option>
-                        <option value="artifact_accessory_lvl7_9">💍 装飾: 伝説のアンクレット [Lv7-9]</option>
-                        
-                        <option value="artifact_weapon_lvl10">⚔️ 武器: オリハルコンソード [Lv10]</option>
-                        <option value="artifact_armor_lvl10">🛡️ 防具: オリハルコンアーマー [Lv10]</option>
-                        <option value="artifact_accessory_lvl10">💍 装飾: ゴッドオーブ [Lv10]</option>
-                      </optgroup>
+                      {(editingItem.graphic === '🎁' || editingItem.graphic === '💎' || editingItem.graphic === '⭐') && (
+                        <optgroup label="✨ アーティファクト (ランダム生成)">
+                          <option value="artifact_weapon_lvl1_3">⚔️ 武器: 大剣 [Lv1-3]</option>
+                          <option value="artifact_armor_lvl1_3">🛡️ 防具: 全身鎧 [Lv1-3]</option>
+                          <option value="artifact_accessory_lvl1_3">💍 装飾: 指輪 [Lv1-3]</option>
+                          
+                          <option value="artifact_weapon_lvl4_6">⚔️ 武器: 勇者の剣 [Lv4-6]</option>
+                          <option value="artifact_armor_lvl4_6">🛡️ 防具: 勇者の鎧 [Lv4-6]</option>
+                          <option value="artifact_accessory_lvl4_6">💍 装飾: 勇者のネックレス [Lv4-6]</option>
+                          
+                          <option value="artifact_weapon_lvl7_9">⚔️ 武器: 伝説の剣 [Lv7-9]</option>
+                          <option value="artifact_armor_lvl7_9">🛡️ 防具: 伝説の鎧 [Lv7-9]</option>
+                          <option value="artifact_accessory_lvl7_9">💍 装飾: 伝説のアンクレット [Lv7-9]</option>
+                          
+                          <option value="artifact_weapon_lvl10">⚔️ 武器: オリハルコンソード [Lv10]</option>
+                          <option value="artifact_armor_lvl10">🛡️ 防具: オリハルコンアーマー [Lv10]</option>
+                          <option value="artifact_accessory_lvl10">💍 装飾: ゴッドオーブ [Lv10]</option>
+                        </optgroup>
+                      )}
 
-                      <optgroup label="📦 通常登録アイテム">
-                        {customItems.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {getEquipmentIcon(item)} {item.name}
-                          </option>
-                        ))}
-                      </optgroup>
+                      {(editingItem.graphic === '📦' || editingItem.graphic === '🏺' || editingItem.graphic === '💀') && (
+                        <optgroup label="📦 通常登録アイテム">
+                          {customItems.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {getEquipmentIcon(item)} {item.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
                     </>
                   )}
                 </select>
               </div>
             </div>
-
             <div className="flex justify-between items-center mt-4 pt-4 border-t border-slate-600 gap-2">
               <button 
                 onClick={handleDeleteItem}
