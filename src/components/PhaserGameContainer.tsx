@@ -348,7 +348,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
   
   const [activeMenuTab, setActiveMenuTab] = useState<'settings' | 'status' | 'behavior'>('settings');
   const [movementBehavior, setMovementBehavior] = useState<string>('unvisited');
-  const [combatBehavior, setCombatBehavior] = useState<string>('closest_enemy');
+  const [combatBehavior, setCombatBehavior] = useState<string>('use_all_magics');
   const [goalBehavior, setGoalBehavior] = useState<string>('seek_visible');
   const [messageWaitMode, setMessageWaitMode] = useState<string>('none');
   const [messageAutoAdvanceSeconds, setMessageAutoAdvanceSeconds] = useState<number>(3);
@@ -379,7 +379,8 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
   ];
 
   const availableCombatBehaviors = [
-    { id: 'closest_enemy', label: '画面に写った敵に近づいて倒す', description: '画面内の敵を最優先で目指し、倒そうとします。' },
+    { id: 'use_all_magics', label: '使える魔法はすべて使う', description: '画面内の敵を最優先で目指し、習得している魔法もすべて使用して倒そうとします。' },
+    { id: 'no_magic', label: '魔法を使わない', description: '画面内の敵を最優先で目指しますが、魔法は一切使用しません。' },
   ];
 
   const availableGoalBehaviors = [
@@ -460,6 +461,15 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
         });
 
         scene.setOnCustomEvent((eventId, onComplete) => {
+          if (eventId === 'system_force_manual') {
+            setAutoMode('none');
+            scene.setAutoMode('none');
+            scene.isTurboActive = false;
+            setIsTurbo(false);
+            onComplete();
+            return;
+          }
+
           const ev = customEventsRef.current.find(e => e.id === eventId);
           if (ev && ev.nodes.length > 0) {
             setActiveMessageType('event');
@@ -534,6 +544,14 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
             const targetSpeed = isImg ? 500 : isGrass ? 600 : isText ? 1000 : 800;
             setSpeed(targetSpeed);
             scene.setSpeed(targetSpeed);
+
+            if (startMap.forceManualMode) {
+              setAutoMode('none');
+              scene.setAutoMode('none');
+            } else {
+              setAutoMode('seek');
+              scene.setAutoMode('seek');
+            }
 
             // Start from the correct initial position
             scene.resetPosition(null, initialPosition);
@@ -635,6 +653,14 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
         setSpeed(targetSpeed);
         scene.setSpeed(targetSpeed);
 
+        if (targetMap.forceManualMode) {
+          setAutoMode('none');
+          scene.setAutoMode('none');
+        } else {
+          setAutoMode('seek');
+          scene.setAutoMode('seek');
+        }
+
         scene.resetPosition(fromMapId);
       }
     }
@@ -642,6 +668,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
 
   // UI操作ハンドラー
   const toggleAutoMode = () => {
+    if (sceneRef.current?.mapData?.forceManualMode) return;
     let nextMode: 'none' | 'random' | 'seek' = 'none';
     if (autoMode === 'none') nextMode = 'random';
     else if (autoMode === 'random') nextMode = 'seek';
@@ -798,6 +825,8 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
     sceneRef.current?.resetPosition();
   };
 
+  const currentMap = maps?.find(m => m.id === initialMapId);
+
   return (
     <>
       {!isGameReady && (
@@ -951,16 +980,20 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
                     ><ArrowRight className="w-6 h-6 text-white" /></button>
 
                     {/* Row 3: Return to Auto (✕), Down, Empty */}
-                    <button 
-                      onClick={() => {
-                        setAutoMode('seek');
-                        sceneRef.current?.setAutoMode('seek');
-                      }}
-                      className="bg-rose-600/85 hover:bg-rose-600 active:bg-rose-700 w-12 h-12 rounded-xl flex items-center justify-center transition-colors shadow-sm border border-rose-500/30"
-                      title="Return to Auto Mode"
-                    >
-                      <X className="w-5 h-5 text-white" />
-                    </button>
+                    {currentMap?.forceManualMode ? (
+                      <div />
+                    ) : (
+                      <button 
+                        onClick={() => {
+                          setAutoMode('seek');
+                          sceneRef.current?.setAutoMode('seek');
+                        }}
+                        className="bg-rose-600/85 hover:bg-rose-600 active:bg-rose-700 w-12 h-12 rounded-xl flex items-center justify-center transition-colors shadow-sm border border-rose-500/30"
+                        title="Return to Auto Mode"
+                      >
+                        <X className="w-5 h-5 text-white" />
+                      </button>
+                    )}
                     <button 
                       onPointerDown={() => sceneRef.current?.setVirtualInput('down', true)}
                       onPointerUp={() => sceneRef.current?.setVirtualInput('down', false)}
@@ -1117,8 +1150,11 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
                   </div>
                   <button
                     onClick={toggleAutoMode}
+                    disabled={currentMap?.forceManualMode}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all shadow-sm ${
-                      autoMode !== 'none'
+                      currentMap?.forceManualMode 
+                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                        : autoMode !== 'none'
                         ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20' 
                         : 'bg-slate-200 hover:bg-slate-300 text-slate-700'
                     }`}

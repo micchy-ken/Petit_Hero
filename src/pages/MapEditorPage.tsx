@@ -299,7 +299,7 @@ export default function MapEditorPage() {
   const currentMap = maps.find(m => m.id === currentMapId) || maps[0];
 
   const [bgMode, setBgMode] = useState<MapData['bgMode']>(currentMap?.bgMode || 'text-black');
-  const [placeMode, setPlaceMode] = useState<'obstacle' | 'item' | 'event'>('obstacle');
+  const [placeMode, setPlaceMode] = useState<'obstacle' | 'item' | 'event'>('event');
   
   // イベント配置用の状態（オブジェクト化）
   const [newEventParams, setNewEventParams] = useState({
@@ -1518,6 +1518,18 @@ export default function MapEditorPage() {
                       <option value="50">50体</option>
                     </select>
                   </div>
+                  
+                  <div className="flex flex-col gap-1 mt-2">
+                    <label className="flex items-center gap-2 cursor-pointer text-slate-300">
+                      <input 
+                        type="checkbox" 
+                        checked={currentMap.forceManualMode || false}
+                        onChange={(e) => handleUpdateCurrentMap({ forceManualMode: e.target.checked })}
+                        className="accent-indigo-500 w-4 h-4 rounded"
+                      />
+                      <span className="text-sm font-bold">オート操作を強制解除 (手動操作のみ)</span>
+                    </label>
+                  </div>
                 </div>
               </div>
 
@@ -1602,13 +1614,13 @@ export default function MapEditorPage() {
                 </h2>
                 <div className="flex flex-col gap-2">
                   <button 
-                    onClick={() => setPlaceMode('obstacle')}
+                    onClick={() => setPlaceMode('event')}
                     className={`flex items-center gap-2 w-full px-3 py-2 rounded text-sm transition-all ${
-                      placeMode === 'obstacle' ? 'bg-indigo-600 border border-indigo-500 shadow-inner text-white' : 'hover:bg-slate-600/50 text-slate-300'
+                      placeMode === 'event' ? 'bg-indigo-600 border border-indigo-500 shadow-inner text-white' : 'hover:bg-slate-600/50 text-slate-300'
                     }`}
                   >
-                    <Box className="w-4 h-4" />
-                    障害配置
+                    <Zap className="w-4 h-4" />
+                    イベント配置
                   </button>
                   <button 
                     onClick={() => setPlaceMode('item')}
@@ -1620,13 +1632,13 @@ export default function MapEditorPage() {
                     アイテム配置
                   </button>
                   <button 
-                    onClick={() => setPlaceMode('event')}
+                    onClick={() => setPlaceMode('obstacle')}
                     className={`flex items-center gap-2 w-full px-3 py-2 rounded text-sm transition-all ${
-                      placeMode === 'event' ? 'bg-indigo-600 border border-indigo-500 shadow-inner text-white' : 'hover:bg-slate-600/50 text-slate-300'
+                      placeMode === 'obstacle' ? 'bg-indigo-600 border border-indigo-500 shadow-inner text-white' : 'hover:bg-slate-600/50 text-slate-300'
                     }`}
                   >
-                    <Zap className="w-4 h-4" />
-                    イベント配置
+                    <Box className="w-4 h-4" />
+                    障害配置
                   </button>
                 </div>
               </div>
@@ -2211,7 +2223,7 @@ export default function MapEditorPage() {
                                 }`}
                                 title={`初期値 ${hasEvent.data?.fromMap ? `(from: ${hasEvent.data.fromMap})` : ''}`}
                               >
-                                {hasEvent.data?.fromMap ? 'S↩️' : 'S'}
+                                {hasEvent.data?.fromMap ? '🔙' : 'S'}
                               </div>
                            )}
                           {hasEvent && hasEvent.type === 'teleport' && (

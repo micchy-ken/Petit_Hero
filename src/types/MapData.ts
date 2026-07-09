@@ -40,4 +40,5 @@ export interface MapData {
   boss?: string;     // 最大1種類
   clearConditions?: MapClearConditions;
   scenarioId?: string;
+  forceManualMode?: boolean;
 }

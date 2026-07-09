@@ -186,7 +186,7 @@ export class GridMovementScene extends Phaser.Scene {
   private moveSpeedMs: number = 1000; // 1グリッド移動にかかる時間(ms)
   private autoMode: 'none' | 'random' | 'seek' = 'seek';
   public movementBehavior: string = 'unvisited';
-  public combatBehavior: string = 'closest_enemy';
+  public combatBehavior: string = 'use_all_magics';
   public goalBehavior: string = 'seek_visible';
   private showGridLines: boolean = true;
   private isHd2dEffectsEnabled: boolean = false;
@@ -268,6 +268,7 @@ export class GridMovementScene extends Phaser.Scene {
   public onCustomEventCallback?: (eventId: string, onComplete: () => void) => void;
   public onSystemMessageCallback?: (type: string, text: string, onComplete: () => void) => void;
   public onCustomItemsChangeCallback?: (items: any[]) => void;
+  public onAutoModeChangeCallback?: (mode: 'none' | 'random' | 'seek') => void;
 
   public setOnCustomItemsChange(callback: (items: any[]) => void) {
     this.onCustomItemsChangeCallback = callback;
@@ -803,7 +804,7 @@ export class GridMovementScene extends Phaser.Scene {
     if (this.isShowingMonologue) return;
     
     // 魔法自動詠唱
-    if (this.slimes.length > 0) {
+    if (this.autoMode !== 'none' && this.slimes.length > 0 && this.combatBehavior === 'use_all_magics') {
       this.magics.forEach(magic => {
         let hasMagic = false;
         if (magic.acquisitionType === 'item') {
@@ -1748,7 +1749,7 @@ export class GridMovementScene extends Phaser.Scene {
           // 索敵・戦闘モード (AIを使わないロジック)
           let targetSlime: SlimeData | null = null;
           
-          if (this.slimes.length > 0 && this.combatBehavior === 'closest_enemy') {
+          if (this.slimes.length > 0 && (this.combatBehavior === 'use_all_magics' || this.combatBehavior === 'no_magic')) {
             // 最も近いスライムを探す
             let minDistance = Infinity;
 
@@ -4804,7 +4805,7 @@ export class GridMovementScene extends Phaser.Scene {
       this.teleportPortals = [];
     }
 
-    const teleportEvents = this.mapData.events.filter((e: any) => e.type === 'teleport');
+    const teleportEvents = this.mapData.events.filter((e: any) => e.type === 'teleport' || (e.type === 'start_point' && e.data && e.data.fromMap));
 
     const expRate = (this.visitedGrids.size / this.totalGrids) * 100;
     const sRate = (this.viewedGrids.size / this.totalGrids) * 100;
@@ -4863,7 +4864,10 @@ export class GridMovementScene extends Phaser.Scene {
           portalG.closePath();
           portalG.strokePath();
 
-          const textStr = this.displayMode === 'text' ? '門' : '🌀';
+          const isReturn = event.type === 'start_point';
+          const textStr = isReturn
+            ? (this.displayMode === 'text' ? '帰' : '🔙')
+            : (this.displayMode === 'text' ? '門' : '🌀');
           const portalText = this.add.text(0, 0, textStr, {
             fontSize: '22px',
             fontStyle: 'bold',
