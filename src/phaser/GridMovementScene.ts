@@ -297,15 +297,19 @@ export class GridMovementScene extends Phaser.Scene {
   }
 
   preload() {
+    const base = import.meta.env.BASE_URL || '/';
+    const cleanBase = base.endsWith('/') ? base : `${base}/`;
+    const grassBgUrl = `${cleanBase}grass_bg_1782776475818.jpg`;
+
     // Load clean texture keys without file extensions (prevents Phaser texture key issues with dots)
-    this.load.image('grass_bg', '/grass_bg_1782776475818.jpg');
+    this.load.image('grass_bg', grassBgUrl);
     this.load.image('desert_bg', desertBg1024);
     this.load.image('cave_bg', caveBg1024);
     this.load.image('vast_desert_bg', vastDesertBg);
     this.load.image('vast_cave_bg', vastCaveBg);
 
     // Also load with full file name extensions as keys for full backwards-compatibility
-    this.load.image('grass_bg_1782776475818.jpg', '/grass_bg_1782776475818.jpg');
+    this.load.image('grass_bg_1782776475818.jpg', grassBgUrl);
     this.load.image('desert_bg_1024.jpg', desertBg1024);
     this.load.image('cave_bg_1024.jpg', caveBg1024);
     this.load.image('vast_desert_bg.jpg', vastDesertBg);

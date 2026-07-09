@@ -13,9 +13,12 @@ import { CustomItem } from '../types/CustomItem';
 import { MagicData } from '../types/MagicData';
 import { PORTRAITS } from '../data/portraits';
 const getMapBgUrl = (bgImageName: string) => {
-  if (!bgImageName) return '/grass_bg_1782776475818.jpg';
-  if (bgImageName.startsWith('/') || bgImageName.startsWith('http')) return bgImageName;
-  return `/${bgImageName}`;
+  const base = import.meta.env.BASE_URL || '/';
+  const cleanBase = base.endsWith('/') ? base : `${base}/`;
+  if (!bgImageName) return `${cleanBase}grass_bg_1782776475818.jpg`;
+  if (bgImageName.startsWith('http')) return bgImageName;
+  const cleanName = bgImageName.startsWith('/') ? bgImageName.substring(1) : bgImageName;
+  return `${cleanBase}${cleanName}`;
 };
 
 const getEquipmentIcon = (item: any) => {
