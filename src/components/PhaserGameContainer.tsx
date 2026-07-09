@@ -25,21 +25,37 @@ export interface PhaserGameContainerProps {
 
 const getEquipmentIcon = (item: any) => {
   if (!item) return '🎁';
-  if (item.type === 'equipment') {
-    if (item.equipmentType === 'weapon') return '⚔️';
-    if (item.equipmentType === 'armor') return '🛡️';
-    if (item.equipmentType === 'accessory') return '💍';
-    return '⚔️';
-  } else if (item.type === 'magic') {
+  const type = item.type;
+  if (type === 'equipment' || type === 'artifact') {
+    let slot = item.equipmentType;
+    if (!slot) {
+      const name = item.name || '';
+      if (name.includes('剣') || name.includes('ブレード') || name.includes('ソード') || name.includes('刀') || name.includes('斧') || name.includes('弓') || name.includes('杖') || name.includes('ハンマー') || name.includes('ウェポン') || name.includes('アクス') || name.includes('ダガー')) {
+        slot = 'weapon';
+      } else if (name.includes('鎧') || name.includes('盾') || name.includes('シールド') || name.includes('アーマー') || name.includes('兜') || name.includes('ヘルム') || name.includes('ローブ') || name.includes('ベスト') || name.includes('プレート')) {
+        slot = 'armor';
+      } else if (name.includes('指輪') || name.includes('リング') || name.includes('ネックレス') || name.includes('アンクレット') || name.includes('オーブ') || name.includes('アミュレット') || name.includes('靴') || name.includes('ブーツ') || name.includes('ベルト')) {
+        slot = 'accessory';
+      } else if ((item.attack || 0) > 0 && (!(item.defense || 0) || (item.attack || 0) > (item.defense || 0))) {
+        slot = 'weapon';
+      } else if ((item.defense || 0) > 0) {
+        slot = 'armor';
+      } else {
+        slot = 'accessory';
+      }
+    }
+    if (slot === 'weapon') return '⚔️';
+    if (slot === 'armor') return '🛡️';
+    if (slot === 'accessory') return '💍';
+    return item.chestGraphic || '🏺';
+  } else if (type === 'magic') {
     return '🔮';
-  } else if (item.type === 'move_asset') {
+  } else if (type === 'move_asset') {
     return '🥾';
-  } else if (item.type === 'event') {
+  } else if (type === 'event') {
     return '🗝️';
-  } else if (item.type === 'drop') {
+  } else if (type === 'drop') {
     return '🏺';
-  } else if (item.type === 'artifact') {
-    return '💎';
   }
   return item.chestGraphic || '📦';
 };
@@ -421,6 +437,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
       const scene = game.scene.getScene('GridMovementScene') as GridMovementScene;
       if (scene) {
         sceneRef.current = scene;
+        scene.allScenarioMaps = maps || [];
         scene.isSettingsPaused = showSettings;
         scene.customItems = customItemsRef.current;
         scene.magics = magicsRef.current;
@@ -511,6 +528,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
         if (maps && initialMapId) {
           const startMap = maps.find(m => m.id === initialMapId);
           if (startMap) {
+            scene.allScenarioMaps = maps || [];
             scene.isSettingsPaused = showSettings;
             scene.mapData = startMap;
             scene.customItems = customItemsRef.current;
@@ -631,6 +649,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
         setIsTurbo(false);
         scene.isTurboActive = false;
 
+        scene.allScenarioMaps = maps || [];
         const fromMapId = scene.mapData?.id || null;
         scene.mapData = targetMap;
         scene.customItems = customItemsRef.current;
@@ -951,14 +970,14 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
                 </div>
               ) : (
                 <div className="absolute bottom-4 left-4 z-20">
-                  <div className="grid grid-cols-3 gap-1 bg-slate-800/60 p-2.5 rounded-2xl backdrop-blur-sm border border-white/10 shadow-lg">
+                  <div className="grid grid-cols-3 gap-1 bg-transparent p-2.5 rounded-2xl">
                     {/* Row 1: Up */}
                     <div />
                     <button 
                       onPointerDown={() => sceneRef.current?.setVirtualInput('up', true)}
                       onPointerUp={() => sceneRef.current?.setVirtualInput('up', false)}
                       onPointerLeave={() => sceneRef.current?.setVirtualInput('up', false)}
-                      className="bg-white/20 hover:bg-white/30 active:bg-white/40 w-12 h-12 rounded-xl flex items-center justify-center transition-colors shadow-sm"
+                      className="bg-slate-900/60 hover:bg-slate-900/80 active:bg-slate-950/90 border border-white/15 w-12 h-12 rounded-xl flex items-center justify-center transition-all shadow-md"
                     ><ArrowUp className="w-6 h-6 text-white" /></button>
                     <div />
                     
@@ -967,16 +986,16 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
                       onPointerDown={() => sceneRef.current?.setVirtualInput('left', true)}
                       onPointerUp={() => sceneRef.current?.setVirtualInput('left', false)}
                       onPointerLeave={() => sceneRef.current?.setVirtualInput('left', false)}
-                      className="bg-white/20 hover:bg-white/30 active:bg-white/40 w-12 h-12 rounded-xl flex items-center justify-center transition-colors shadow-sm"
+                      className="bg-slate-900/60 hover:bg-slate-900/80 active:bg-slate-950/90 border border-white/15 w-12 h-12 rounded-xl flex items-center justify-center transition-all shadow-md"
                     ><ArrowLeft className="w-6 h-6 text-white" /></button>
-                    <div className="w-12 h-12 flex items-center justify-center opacity-30">
+                    <div className="w-12 h-12 flex items-center justify-center opacity-40">
                       <div className="w-2.5 h-2.5 rounded-full bg-white" />
                     </div>
                     <button 
                       onPointerDown={() => sceneRef.current?.setVirtualInput('right', true)}
                       onPointerUp={() => sceneRef.current?.setVirtualInput('right', false)}
                       onPointerLeave={() => sceneRef.current?.setVirtualInput('right', false)}
-                      className="bg-white/20 hover:bg-white/30 active:bg-white/40 w-12 h-12 rounded-xl flex items-center justify-center transition-colors shadow-sm"
+                      className="bg-slate-900/60 hover:bg-slate-900/80 active:bg-slate-950/90 border border-white/15 w-12 h-12 rounded-xl flex items-center justify-center transition-all shadow-md"
                     ><ArrowRight className="w-6 h-6 text-white" /></button>
 
                     {/* Row 3: Return to Auto (✕), Down, Empty */}
@@ -988,7 +1007,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
                           setAutoMode('seek');
                           sceneRef.current?.setAutoMode('seek');
                         }}
-                        className="bg-rose-600/85 hover:bg-rose-600 active:bg-rose-700 w-12 h-12 rounded-xl flex items-center justify-center transition-colors shadow-sm border border-rose-500/30"
+                        className="bg-rose-600/70 hover:bg-rose-600 active:bg-rose-700 w-12 h-12 rounded-xl flex items-center justify-center transition-all shadow-md border border-rose-500/30"
                         title="Return to Auto Mode"
                       >
                         <X className="w-5 h-5 text-white" />
@@ -998,7 +1017,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
                       onPointerDown={() => sceneRef.current?.setVirtualInput('down', true)}
                       onPointerUp={() => sceneRef.current?.setVirtualInput('down', false)}
                       onPointerLeave={() => sceneRef.current?.setVirtualInput('down', false)}
-                      className="bg-white/20 hover:bg-white/30 active:bg-white/40 w-12 h-12 rounded-xl flex items-center justify-center transition-colors shadow-sm"
+                      className="bg-slate-900/60 hover:bg-slate-900/80 active:bg-slate-950/90 border border-white/15 w-12 h-12 rounded-xl flex items-center justify-center transition-all shadow-md"
                     ><ArrowDown className="w-6 h-6 text-white" /></button>
                     <div />
                   </div>
@@ -1419,8 +1438,27 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
                         const item = customItems.find(it => it.id === itemId);
                         if (!item) return null;
                         const isEquipped = heroState.equippedWeaponId === itemId || heroState.equippedArmorId === itemId || heroState.equippedAccessoryId === itemId;
-                        const isEquipment = item.type === 'equipment';
-                        const slot = item.equipmentType || 'weapon';
+                        const isEquipment = item.type === 'equipment' || item.type === 'artifact';
+                        
+                        let slot = item.equipmentType;
+                        if (!slot) {
+                          const name = item.name || '';
+                          if (name.includes('剣') || name.includes('ブレード') || name.includes('ソード') || name.includes('刀') || name.includes('斧') || name.includes('弓') || name.includes('杖') || name.includes('ハンマー') || name.includes('ウェポン') || name.includes('アクス') || name.includes('ダガー')) {
+                            slot = 'weapon';
+                          } else if (name.includes('鎧') || name.includes('盾') || name.includes('シールド') || name.includes('アーマー') || name.includes('兜') || name.includes('ヘルム') || name.includes('ローブ') || name.includes('ベスト') || name.includes('プレート')) {
+                            slot = 'armor';
+                          } else if (name.includes('指輪') || name.includes('リング') || name.includes('ネックレス') || name.includes('アンクレット') || name.includes('オーブ') || name.includes('アミュレット') || name.includes('靴') || name.includes('ブーツ') || name.includes('ベルト')) {
+                            slot = 'accessory';
+                          } else if ((item.attack || 0) > 0 && (!(item.defense || 0) || (item.attack || 0) > (item.defense || 0))) {
+                            slot = 'weapon';
+                          } else if ((item.defense || 0) > 0) {
+                            slot = 'armor';
+                          } else {
+                            slot = 'accessory';
+                          }
+                        }
+                        if (!slot) slot = 'weapon';
+
                         const slotLabels = { weapon: '武器', armor: '防具', accessory: '装飾' };
 
                         return (

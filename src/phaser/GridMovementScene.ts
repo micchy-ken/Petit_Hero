@@ -15,16 +15,12 @@ import {
 import { generateObstacleTextures } from './ObstacleTextures';
 import { getEnemyAssetById, EnemyAsset, getAvailableEnemies } from '../data/EnemyAssets';
 import { getHeroStatusByLevel, getAllHeroStatus } from '../data/HeroStatusAssets';
-// @ts-ignore
-import grassBgUrl from '../../public/grass_bg_1782776475818.jpg';
-// @ts-ignore
-import desertBgUrl from '../../public/desert_bg_1024.jpg';
-// @ts-ignore
-import caveBgUrl from '../../public/cave_bg_1024.jpg';
-// @ts-ignore
-import vastDesertBgUrl from '../../public/vast_desert_bg.jpg';
-// @ts-ignore
-import vastCaveBgUrl from '../../public/vast_cave_bg.jpg';
+
+// Import background images from src/assets/images to resolve via Vite
+import caveBg1024 from '../assets/images/cave_bg_1024_1783554724524.jpg';
+import desertBg1024 from '../assets/images/desert_bg_1024_1783554709282.jpg';
+import vastCaveBg from '../assets/images/vast_cave_bg_1783555031253.jpg';
+import vastDesertBg from '../assets/images/vast_desert_bg_1783555019080.jpg';
 
 export type Direction = 'up' | 'down' | 'left' | 'right' | 'up-left' | 'up-right' | 'down-left' | 'down-right' | 'idle';
 
@@ -104,6 +100,8 @@ export class GridMovementScene extends Phaser.Scene {
   private allow8Way: boolean = false;
   private isTextMode: boolean = true;
   private displayMode: 'normal' | 'text' | 'grayscale' = 'text';
+  private currentBgMode: string = 'text-black';
+  private currentBgImage?: string;
 
   private get is8WayEnabled(): boolean {
     if (this.isHd2dEffectsEnabled || (this.displayMode === 'normal' && this.useGrassBg)) {
@@ -258,6 +256,7 @@ export class GridMovementScene extends Phaser.Scene {
   public gridCols: number = 16;
   public gridRows: number = 16;
   public mapData: any = null;
+  public allScenarioMaps: any[] = [];
 
   private totalGrids: number = 16 * 16;
 
@@ -298,11 +297,20 @@ export class GridMovementScene extends Phaser.Scene {
   }
 
   preload() {
-    this.load.image('grass_bg', grassBgUrl);
-    this.load.image('desert_bg_1024.jpg', desertBgUrl);
-    this.load.image('cave_bg_1024.jpg', caveBgUrl);
-    this.load.image('vast_desert_bg.jpg', vastDesertBgUrl);
-    this.load.image('vast_cave_bg.jpg', vastCaveBgUrl);
+    // Load clean texture keys without file extensions (prevents Phaser texture key issues with dots)
+    this.load.image('grass_bg', '/grass_bg_1782776475818.jpg');
+    this.load.image('desert_bg', desertBg1024);
+    this.load.image('cave_bg', caveBg1024);
+    this.load.image('vast_desert_bg', vastDesertBg);
+    this.load.image('vast_cave_bg', vastCaveBg);
+
+    // Also load with full file name extensions as keys for full backwards-compatibility
+    this.load.image('grass_bg_1782776475818.jpg', '/grass_bg_1782776475818.jpg');
+    this.load.image('desert_bg_1024.jpg', desertBg1024);
+    this.load.image('cave_bg_1024.jpg', caveBg1024);
+    this.load.image('vast_desert_bg.jpg', vastDesertBg);
+    this.load.image('vast_cave_bg.jpg', vastCaveBg);
+
     generateHeroSpritesheet(this, 'normal');
     generateHeroSpritesheet(this, 'text');
     generateHeroSpritesheet(this, 'grayscale');
@@ -358,6 +366,7 @@ export class GridMovementScene extends Phaser.Scene {
     // 1. 背景画像とグリッドの作成
     this.grassBgImage = this.add.tileSprite(0, 0, this.gridCols * GRID_SIZE, this.gridRows * GRID_SIZE, 'grass_bg').setOrigin(0, 0);
     this.grassBgImage.setDepth(-1);
+    this.applyMapSettings(this.currentBgMode, this.currentBgImage);
     this.createGridBackground();
 
     // 2. HD-2D 環境光＆ゴッドレイ風オーバーレイ (カメラ固定)
@@ -1382,6 +1391,10 @@ export class GridMovementScene extends Phaser.Scene {
   }
 
   public applyMapSettings(bgMode: string, bgImage?: string) {
+    this.currentBgMode = bgMode;
+    this.currentBgImage = bgImage;
+    console.log(`[applyMapSettings] Called with bgMode: "${bgMode}", bgImage: "${bgImage}". grassBgImage exists: ${!!this.grassBgImage}`);
+
     if (bgMode === 'text-black') {
       this.setDisplayMode('text');
       this.setSpeed(1000);
@@ -1410,13 +1423,37 @@ export class GridMovementScene extends Phaser.Scene {
       this.toggleHd2dEffects(true);
       this.toggleGrassBg(true);
       this.cameras.main.setBackgroundColor('#000000');
-      if (bgImage && this.grassBgImage) {
-        const validBgs = ['desert_bg_1024.jpg', 'cave_bg_1024.jpg', 'vast_desert_bg.jpg', 'vast_cave_bg.jpg'];
-        if (validBgs.includes(bgImage)) {
-          this.grassBgImage.setTexture(bgImage);
+      
+      if (this.grassBgImage) {
+        let textureKey = 'grass_bg';
+        
+        // 1. Determine background texture key dynamically from bgImage URL or filename
+        if (bgImage) {
+          const lower = bgImage.toLowerCase();
+          if (lower.includes('vast_desert')) {
+            textureKey = 'vast_desert_bg';
+          } else if (lower.includes('vast_cave')) {
+            textureKey = 'vast_cave_bg';
+          } else if (lower.includes('desert')) {
+            textureKey = 'desert_bg';
+          } else if (lower.includes('cave')) {
+            textureKey = 'cave_bg';
+          } else if (lower.includes('grass')) {
+            textureKey = 'grass_bg';
+          }
         } else {
-          this.grassBgImage.setTexture('grass_bg');
+          // 2. Dynamic fallback checking the current map name or map id
+          const mapName = this.mapData?.name?.toLowerCase() || '';
+          const mapId = this.mapData?.id?.toLowerCase() || '';
+          if (mapName.includes('砂漠') || mapId.includes('desert') || mapName.includes('desert')) {
+            textureKey = 'desert_bg';
+          } else if (mapName.includes('洞窟') || mapId.includes('cave') || mapName.includes('cave')) {
+            textureKey = 'cave_bg';
+          }
         }
+        
+        console.log(`[applyMapSettings] Dynamically resolved background texture key: "${textureKey}" (input bgImage: "${bgImage}")`);
+        this.grassBgImage.setTexture(textureKey);
       }
     }
   }
@@ -2878,7 +2915,7 @@ export class GridMovementScene extends Phaser.Scene {
         this.heroExp += 5;
         this.checkLevelUp();
       } else if (customItem) {
-        if (customItem.type === 'equipment') {
+        if (customItem.type === 'equipment' || customItem.type === 'artifact') {
           // equipmentTypeを推測または取得
           let slot = customItem.equipmentType;
           if (!slot) {
@@ -2896,6 +2933,7 @@ export class GridMovementScene extends Phaser.Scene {
             } else {
               slot = 'accessory';
             }
+            customItem.equipmentType = slot;
           }
           if (!slot) slot = 'weapon';
 
@@ -2915,7 +2953,12 @@ export class GridMovementScene extends Phaser.Scene {
           const newAtk = customItem.attack || 0;
           const newDef = customItem.defense || 0;
           
-          const shouldEquip = !currentEquipped || (newAtk > currentAtk) || (newDef > currentDef);
+          const currentPower = currentAtk + currentDef + (currentEquipped?.attackElementEnchantValue || 0) + (currentEquipped?.defenseElementEnchantValue || 0);
+          const newPower = newAtk + newDef + (customItem.attackElementEnchantValue || 0) + (customItem.defenseElementEnchantValue || 0);
+
+          const shouldEquip = !currentEquipped || (newPower > currentPower) || (newAtk > currentAtk) || (newDef > currentDef);
+          const typeText = customItem.type === 'artifact' ? 'アーティファクト' : '装備品';
+
           if (shouldEquip) {
             if (slot === 'weapon') this.equippedWeaponId = customItem.id;
             else if (slot === 'armor') this.equippedArmorId = customItem.id;
@@ -2941,11 +2984,11 @@ export class GridMovementScene extends Phaser.Scene {
             const elementStr = elementInfo.length > 0 ? ` (${elementInfo.join(', ')})` : '';
             
             const equipMsg = `『${customItem.name}』を装備した！ ${itemIcon}\n(攻撃力+${newAtk} 防御力+${newDef}${elementStr})\n${customItem.description || ''}`;
-            this.sendLog(`『${customItem.name}』を装備した！ ${itemIcon} (攻撃力+${newAtk} 防御力+${newDef})`, 'info');
+            this.sendLog(`『${customItem.name}』を${typeText}として装備した！ ${itemIcon} (攻撃力+${newAtk} 防御力+${newDef})`, 'info');
             this.enqueueMessage('item', equipMsg);
           } else {
             const descText = customItem.description ? `\n${customItem.description}` : '';
-            const msg = `『${customItem.name}』(装備品)を手に入れた！ ${itemIcon} (攻撃力+${newAtk} 防御力+${newDef}) (Exp +5)${descText}`;
+            const msg = `『${customItem.name}』(${typeText})を手に入れた！ ${itemIcon} (攻撃力+${newAtk} 防御力+${newDef}) (Exp +5)${descText}`;
             this.sendLog(`『${customItem.name}』を手に入れた！ ${itemIcon}`, 'info');
             this.enqueueMessage('item', msg);
           }
@@ -4901,8 +4944,20 @@ export class GridMovementScene extends Phaser.Scene {
           });
 
           if (!forceRebuild) {
-            this.sendLog(`条件達成！テレポートゲートが現れた！ 🌀 (${event.x}, ${event.y})`, 'system');
-            this.enqueueMessage('system', '条件達成！テレポートゲートが現れた！ 🌀');
+            const targetMapId = eventData.targetMap;
+            let targetMapName = '';
+            if (this.allScenarioMaps && targetMapId) {
+              const tMap = this.allScenarioMaps.find((m: any) => m.id === targetMapId);
+              if (tMap) {
+                targetMapName = tMap.name;
+              }
+            }
+            if (!targetMapName) {
+              targetMapName = targetMapId || '次のエリア';
+            }
+            const unlockMsg = `マップ"${targetMapName}"が解放された`;
+            this.sendLog(`${unlockMsg} 🌀 (${event.x}, ${event.y})`, 'system');
+            this.enqueueMessage('system', `${unlockMsg} 🌀`);
             
             for (let i = 0; i < 12; i++) {
               const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);

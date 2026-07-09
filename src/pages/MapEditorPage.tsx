@@ -12,8 +12,11 @@ import { CustomEvent, ConversationNode } from '../types/CustomEvent';
 import { CustomItem } from '../types/CustomItem';
 import { MagicData } from '../types/MagicData';
 import { PORTRAITS } from '../data/portraits';
-// @ts-ignore
-import grassBgUrl from '../../public/grass_bg_1782776475818.jpg';
+const getMapBgUrl = (bgImageName: string) => {
+  if (!bgImageName) return '/grass_bg_1782776475818.jpg';
+  if (bgImageName.startsWith('/') || bgImageName.startsWith('http')) return bgImageName;
+  return `/${bgImageName}`;
+};
 
 const getEquipmentIcon = (item: any) => {
   if (!item) return '🎁';
@@ -2137,7 +2140,7 @@ export default function MapEditorPage() {
           style={{ 
             width: `${currentMap.width * 32}px`, 
             height: `${currentMap.height * 32}px`,
-            backgroundImage: bgMode === 'image' && currentMap.bgImage ? (currentMap.bgImage.includes('grass_bg') ? `url(${grassBgUrl})` : `url(/${currentMap.bgImage})`) : 'none',
+            backgroundImage: bgMode === 'image' && currentMap.bgImage ? `url(${getMapBgUrl(currentMap.bgImage)})` : 'none',
             backgroundSize: '512px 512px',
             backgroundPosition: 'center',
             backgroundRepeat: 'repeat',
