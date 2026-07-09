@@ -98,20 +98,36 @@ export default function ItemEditorPage() {
     
     // Seed default items if empty
     let loadedItems: CustomItem[] = [];
+    const defaultItems: CustomItem[] = [
+      { id: 'item_iron_sword', name: '鋼鉄の剣', type: 'equipment', equipmentType: 'weapon', chestGraphic: '⚔️', description: '攻撃力が上昇する頑丈な剣。', attack: 10 },
+      { id: 'item_fire_scroll', name: 'ファイアボルト', type: 'magic', chestGraphic: '🔮', description: '炎の弾を撃ち出す古代の呪文書。', targetMagicId: 'magic_fire' },
+      { id: 'item_ice_scroll', name: 'アイスブラスト', type: 'magic', chestGraphic: '🔮', description: '冷たい吹雪を巻き起こす呪文書。', targetMagicId: 'magic_ice' },
+      { id: 'item_wind_scroll', name: 'ウインドトルネード', type: 'magic', chestGraphic: '🔮', description: '敵を追尾する竜巻を放つ呪文書。', targetMagicId: 'magic_wind' },
+      { id: 'item_earth_scroll', name: 'グランドアース', type: 'magic', chestGraphic: '🔮', description: '周囲4ブロックに地響きを起こす呪文書。', targetMagicId: 'magic_earth' },
+      { id: 'item_teleport_boots', name: 'エルメスの靴', type: 'move_asset', chestGraphic: '🥾', description: 'すばやく移動できるようになる不思議な靴。' },
+      { id: 'item_gate_key', name: '古びた真鍮の鍵', type: 'event', chestGraphic: '🗝️', description: 'ゲートを開くために必要な古い鍵。' },
+    ];
+
     if (data.length === 0) {
-      loadedItems = [
-        { id: 'item_iron_sword', name: '鋼鉄の剣', type: 'equipment', equipmentType: 'weapon', chestGraphic: '⚔️', description: '攻撃力が上昇する頑丈な剣。', attack: 10 },
-        { id: 'item_fire_scroll', name: 'ファイアボルト', type: 'magic', chestGraphic: '🔮', description: '炎の弾を撃ち出す古代の呪文書。', targetMagicId: 'magic_fire' },
-        { id: 'item_ice_scroll', name: 'アイスブラスト', type: 'magic', chestGraphic: '🔮', description: '冷たい吹雪を巻き起こす呪文書。', targetMagicId: 'magic_ice' },
-        { id: 'item_teleport_boots', name: 'エルメスの靴', type: 'move_asset', chestGraphic: '🥾', description: 'すばやく移動できるようになる不思議な靴。' },
-        { id: 'item_gate_key', name: '古びた真鍮の鍵', type: 'event', chestGraphic: '🗝️', description: 'ゲートを開くために必要な古い鍵。' },
-      ];
+      loadedItems = defaultItems;
     } else {
       loadedItems = data.map(item => {
         const copy = { ...item };
         syncIcon(copy);
         return copy;
       });
+      // Auto-merge new default scrolls if they don't exist
+      let changed = false;
+      defaultItems.forEach(defItem => {
+        if (!loadedItems.some(item => item.id === defItem.id)) {
+          loadedItems.push(defItem);
+          changed = true;
+        }
+      });
+      if (changed) {
+        // Save to Firestore in background
+        saveCustomItemsToFirestore(loadedItems).catch(console.error);
+      }
     }
     setItems(loadedItems);
     setMagics(magicsData);

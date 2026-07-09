@@ -8,8 +8,12 @@ import EventEditorPage from './pages/EventEditorPage';
 import ItemEditorPage from './pages/ItemEditorPage';
 import MagicEditorPage from './pages/MagicEditorPage';
 import { CustomPopupProvider } from './components/CustomPopupProvider';
+import { useWakeLock } from './lib/useWakeLock';
 
 export default function App() {
+  // Suppress smartphone screen sleeping / turning off globally during gameplay and editing
+  useWakeLock();
+
   return (
     <CustomPopupProvider>
       <HashRouter>

@@ -6,10 +6,11 @@ import { MapData } from '../types/MapData';
 import { getAvailableEnemies, getAvailableBosses } from '../data/EnemyAssets';
 import { PhaserGameContainer } from '../components/PhaserGameContainer';
 import { allMaps } from '../data/maps';
-import { fetchMapsFromFirestore, saveMapToFirestore, deleteMapFromFirestore, fetchEnemyAssetsFromFirestore, fetchCustomEventsFromFirestore, fetchCustomItemsFromFirestore, saveCustomEventsToFirestore, fetchScenariosFromFirestore, saveScenariosToFirestore, loadScenarioProgress } from '../lib/dbService';
+import { fetchMapsFromFirestore, saveMapToFirestore, deleteMapFromFirestore, fetchEnemyAssetsFromFirestore, fetchCustomEventsFromFirestore, fetchCustomItemsFromFirestore, saveCustomEventsToFirestore, fetchScenariosFromFirestore, saveScenariosToFirestore, loadScenarioProgress, fetchMagicDataFromFirestore } from '../lib/dbService';
 import { Scenario } from '../types/Scenario';
 import { CustomEvent, ConversationNode } from '../types/CustomEvent';
 import { CustomItem } from '../types/CustomItem';
+import { MagicData } from '../types/MagicData';
 import { PORTRAITS } from '../data/portraits';
 // @ts-ignore
 import grassBgUrl from '../../public/grass_bg_1782776475818.jpg';
@@ -61,10 +62,16 @@ export default function MapEditorPage() {
   const [initialMaps, setInitialMaps] = useState<MapData[]>([]);
   const [customEvents, setCustomEvents] = useState<CustomEvent[]>([]);
   const [customItems, setCustomItems] = useState<CustomItem[]>([]);
+  const [magics, setMagics] = useState<MagicData[]>([]);
   const [pendingTransition, setPendingTransition] = useState<{
     type: 'switch_map' | 'go_back';
     targetMapId?: string;
   } | null>(null);
+
+  // 障害配置用: ドラッグ・ホバー・タッチ連続配置のRef
+  const isDrawingRef = useRef<boolean>(false);
+  const drawModeRef = useRef<'add' | 'remove' | null>(null);
+  const lastPlacedRef = useRef<{ x: number; y: number } | null>(null);
 
   // Scenario management states
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
@@ -108,6 +115,10 @@ export default function MapEditorPage() {
       if (loadedCustomItems.length > 0 && isInitial) {
         setNewItemParams(prev => ({ ...prev, itemId: loadedCustomItems[0].id }));
       }
+
+      // Load custom magics
+      const loadedMagics = await fetchMagicDataFromFirestore();
+      setMagics(loadedMagics);
 
       // Load maps for this scenario
       let loadedMaps = await fetchMapsFromFirestore(activeScenarioId);
@@ -547,6 +558,88 @@ export default function MapEditorPage() {
     }
   }, [maps, newEventParams.targetMap]);
 
+  const startDrawing = (x: number, y: number) => {
+    if (placeMode !== 'obstacle') return;
+    isDrawingRef.current = true;
+    
+    const obstaclesList = currentMap?.obstacles || [];
+    const existingIndex = obstaclesList.findIndex((obs: any) => obs.x === x && obs.y === y);
+    const hasObstacleOfSameType = existingIndex >= 0 && obstaclesList[existingIndex].type === obstacleType;
+    
+    if (hasObstacleOfSameType) {
+      drawModeRef.current = 'remove';
+    } else {
+      drawModeRef.current = 'add';
+    }
+    
+    lastPlacedRef.current = { x, y };
+    applyDrawAction(x, y, drawModeRef.current);
+  };
+
+  const continueDrawing = (x: number, y: number) => {
+    if (!isDrawingRef.current || !drawModeRef.current || placeMode !== 'obstacle') return;
+    if (lastPlacedRef.current?.x === x && lastPlacedRef.current?.y === y) return;
+    
+    lastPlacedRef.current = { x, y };
+    applyDrawAction(x, y, drawModeRef.current);
+  };
+
+  const applyDrawAction = (x: number, y: number, mode: 'add' | 'remove') => {
+    const obstaclesList = currentMap?.obstacles || [];
+    const newObstacles = [...obstaclesList];
+    const existingIndex = newObstacles.findIndex((obs: any) => obs.x === x && obs.y === y);
+    
+    if (mode === 'remove') {
+      if (existingIndex >= 0) {
+        newObstacles.splice(existingIndex, 1);
+        handleUpdateCurrentMap({ obstacles: newObstacles });
+      }
+    } else { // 'add'
+      if (existingIndex >= 0) {
+        newObstacles[existingIndex] = { x, y, type: obstacleType };
+      } else {
+        newObstacles.push({ x, y, type: obstacleType });
+      }
+      handleUpdateCurrentMap({ obstacles: newObstacles });
+    }
+  };
+
+  const stopDrawing = () => {
+    isDrawingRef.current = false;
+    drawModeRef.current = null;
+    lastPlacedRef.current = null;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDrawingRef.current || placeMode !== 'obstacle') return;
+    const touch = e.touches[0];
+    if (!touch) return;
+    
+    const element = document.elementFromPoint(touch.clientX, touch.clientY);
+    if (!element) return;
+    
+    const gridCell = element.closest('[data-grid-x]');
+    if (gridCell) {
+      const x = parseInt(gridCell.getAttribute('data-grid-x') || '-1', 10);
+      const y = parseInt(gridCell.getAttribute('data-grid-y') || '-1', 10);
+      if (x >= 0 && y >= 0) {
+        continueDrawing(x, y);
+      }
+    }
+  };
+
+  useEffect(() => {
+    const handleGlobalMouseUp = () => {
+      stopDrawing();
+    };
+    window.addEventListener('mouseup', handleGlobalMouseUp);
+    window.addEventListener('touchend', handleGlobalMouseUp);
+    return () => {
+      window.removeEventListener('mouseup', handleGlobalMouseUp);
+      window.removeEventListener('touchend', handleGlobalMouseUp);
+    };
+  }, []);
+
   const handleGridClick = (x: number, y: number) => {
     if (placeMode === 'event') {
       const existingIndex = currentMap.events.findIndex(e => e.x === x && e.y === y);
@@ -828,13 +921,68 @@ export default function MapEditorPage() {
     }
 
     const targetMap = maps.find(m => m.id === currentMapId) || currentMap;
-    const nextWidth = updates.width !== undefined ? updates.width : targetMap.width;
-    const nextHeight = updates.height !== undefined ? updates.height : targetMap.height;
+    const oldWidth = targetMap.width;
+    const oldHeight = targetMap.height;
+    const nextWidth = updates.width !== undefined ? updates.width : oldWidth;
+    const nextHeight = updates.height !== undefined ? updates.height : oldHeight;
 
     if (updates.width !== undefined || updates.height !== undefined) {
-      finalUpdates.events = targetMap.events.filter(e => e.x < nextWidth && e.y < nextHeight);
-      finalUpdates.items = targetMap.items.filter(item => item.x < nextWidth && item.y < nextHeight);
-      finalUpdates.obstacles = (targetMap.obstacles || []).filter(obs => obs.x < nextWidth && obs.y < nextHeight);
+      const offsetX = nextWidth < oldWidth ? Math.floor((oldWidth - nextWidth) / 2) : 0;
+      const offsetY = nextHeight < oldHeight ? Math.floor((oldHeight - nextHeight) / 2) : 0;
+
+      let newObstacles: any[] = [];
+      let newItems: any[] = [];
+      let newEvents: any[] = [];
+
+      for (let y = 0; y < nextHeight; y++) {
+        for (let x = 0; x < nextWidth; x++) {
+          let srcX = x;
+          let srcY = y;
+
+          if (nextWidth < oldWidth) {
+            srcX = x + offsetX;
+          } else if (oldWidth > 0) {
+            srcX = x % oldWidth;
+          }
+
+          if (nextHeight < oldHeight) {
+            srcY = y + offsetY;
+          } else if (oldHeight > 0) {
+            srcY = y % oldHeight;
+          }
+
+          // Tile obstacles from old map wrapper
+          const obs = (targetMap.obstacles || []).find(o => o.x === srcX && o.y === srcY);
+          if (obs) {
+            newObstacles.push({ x, y, type: obs.type });
+          }
+
+          // Handle items and events (center-crop if shrinking, keep original bounds if expanding)
+          if (nextWidth < oldWidth || nextHeight < oldHeight) {
+            const item = (targetMap.items || []).find(it => it.x === srcX && it.y === srcY);
+            if (item) {
+              newItems.push({ ...item, x, y });
+            }
+            const ev = (targetMap.events || []).find(e => e.x === srcX && e.y === srcY);
+            if (ev) {
+              newEvents.push({ ...ev, x, y });
+            }
+          } else {
+            const item = (targetMap.items || []).find(it => it.x === x && it.y === y);
+            if (item) {
+              newItems.push(item);
+            }
+            const ev = (targetMap.events || []).find(e => e.x === x && e.y === y);
+            if (ev) {
+              newEvents.push(ev);
+            }
+          }
+        }
+      }
+
+      finalUpdates.obstacles = newObstacles;
+      finalUpdates.items = newItems;
+      finalUpdates.events = newEvents;
     }
 
     setMaps(maps.map(m => m.id === currentMapId ? { ...m, ...finalUpdates } : m));
@@ -1429,9 +1577,13 @@ export default function MapEditorPage() {
                       <select
                         value={currentMap.bgImage || 'grass_bg_1782776475818.jpg'}
                         onChange={(e) => handleUpdateCurrentMap({ bgImage: e.target.value })}
-                        className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-slate-400"
+                        className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-slate-400 font-mono"
                       >
-                        <option value="grass_bg_1782776475818.jpg">grass_bg_1782776475818.jpg</option>
+                        <option value="grass_bg_1782776475818.jpg">草原 (grass_bg_1782776475818.jpg)</option>
+                        <option value="desert_bg_1024.jpg">砂漠の街 (desert_bg_1024.jpg)</option>
+                        <option value="cave_bg_1024.jpg">洞窟A1 (cave_bg_1024.jpg)</option>
+                        <option value="vast_desert_bg.jpg">広大な砂漠 (vast_desert_bg.jpg)</option>
+                        <option value="vast_cave_bg.jpg">広大な洞窟 (vast_cave_bg.jpg)</option>
                       </select>
                     </div>
                   )}
@@ -1491,7 +1643,19 @@ export default function MapEditorPage() {
                       <label className="text-xs text-slate-400 font-bold uppercase">1. 宝箱の見た目の種類 (マップエディタ)</label>
                       <select
                         value={newItemParams.graphic || '📦'}
-                        onChange={(e) => setNewItemParams({ ...newItemParams, graphic: e.target.value })}
+                        onChange={(e) => {
+                          const nextGraphic = e.target.value;
+                          let nextItemId = newItemParams.itemId;
+                          if (nextGraphic === '🔮') {
+                            const firstMagic = magics.find(m => m.acquisitionType === 'item');
+                            if (firstMagic) nextItemId = firstMagic.id;
+                          } else {
+                            if (customItems.length > 0) {
+                              nextItemId = customItems[0].id;
+                            }
+                          }
+                          setNewItemParams({ ...newItemParams, graphic: nextGraphic, itemId: nextItemId });
+                        }}
                         className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400 font-bold"
                       >
                         <option value="📦">📦 木の宝箱 (ノーマル)</option>
@@ -1506,39 +1670,57 @@ export default function MapEditorPage() {
 
                     {/* 2. 中身のアイテム (アイテムエディタ) */}
                     <div className="flex flex-col gap-1">
-                      <label className="text-xs text-slate-400 font-bold uppercase">2. 中身のアイテム (アイテムエディタ)</label>
+                      <label className="text-xs text-slate-400 font-bold uppercase">
+                        {newItemParams.graphic === '🔮' ? '2. 中身の魔法 (マジックエディタ)' : '2. 中身のアイテム (アイテムエディタ)'}
+                      </label>
                       <select 
                         value={newItemParams.itemId}
                         onChange={(e) => setNewItemParams({ ...newItemParams, itemId: e.target.value })}
-                        className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
+                        className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400 font-bold"
                       >
-                        {bgMode === 'text-black' && <option value="treasure_text">宝 (Text)</option>}
-                        
-                        <optgroup label="✨ アーティファクト (ランダム生成)">
-                          <option value="artifact_weapon_lvl1_3">⚔️ 武器: 大剣 [Lv1-3]</option>
-                          <option value="artifact_armor_lvl1_3">🛡️ 防具: 全身鎧 [Lv1-3]</option>
-                          <option value="artifact_accessory_lvl1_3">💍 装飾: 指輪 [Lv1-3]</option>
-                          
-                          <option value="artifact_weapon_lvl4_6">⚔️ 武器: 勇者の剣 [Lv4-6]</option>
-                          <option value="artifact_armor_lvl4_6">🛡️ 防具: 勇者の鎧 [Lv4-6]</option>
-                          <option value="artifact_accessory_lvl4_6">💍 装飾: 勇者のネックレス [Lv4-6]</option>
-                          
-                          <option value="artifact_weapon_lvl7_9">⚔️ 武器: 伝説の剣 [Lv7-9]</option>
-                          <option value="artifact_armor_lvl7_9">🛡️ 防具: 伝説の鎧 [Lv7-9]</option>
-                          <option value="artifact_accessory_lvl7_9">💍 装飾: 伝説 of ネックレス [Lv7-9]</option>
-                          
-                          <option value="artifact_weapon_lvl10">⚔️ 武器: オリハルコンソード [Lv10]</option>
-                          <option value="artifact_armor_lvl10">🛡️ 防具: オリハルコンアーマー [Lv10]</option>
-                          <option value="artifact_accessory_lvl10">💍 装飾: ゴッドオーブ [Lv10]</option>
-                        </optgroup>
+                        {newItemParams.graphic === '🔮' ? (
+                          <optgroup label="🔮 「アイテム入手」で保存された魔法">
+                            {magics.filter(m => m.acquisitionType === 'item').length > 0 ? (
+                              magics.filter(m => m.acquisitionType === 'item').map((magic) => (
+                                <option key={magic.id} value={magic.id}>
+                                  🔮 {magic.name} (攻撃力:{magic.power} / 属性:{magic.attribute})
+                                </option>
+                              ))
+                            ) : (
+                              <option value="">アイテム習得の魔法がありません</option>
+                            )}
+                          </optgroup>
+                        ) : (
+                          <>
+                            {bgMode === 'text-black' && <option value="treasure_text">宝 (Text)</option>}
+                            
+                            <optgroup label="✨ アーティファクト (ランダム生成)">
+                              <option value="artifact_weapon_lvl1_3">⚔️ 武器: 大剣 [Lv1-3]</option>
+                              <option value="artifact_armor_lvl1_3">🛡️ 防具: 全身鎧 [Lv1-3]</option>
+                              <option value="artifact_accessory_lvl1_3">💍 装飾: 指輪 [Lv1-3]</option>
+                              
+                              <option value="artifact_weapon_lvl4_6">⚔️ 武器: 勇者の剣 [Lv4-6]</option>
+                              <option value="artifact_armor_lvl4_6">🛡️ 防具: 勇者の鎧 [Lv4-6]</option>
+                              <option value="artifact_accessory_lvl4_6">💍 装飾: 勇者のネックレス [Lv4-6]</option>
+                              
+                              <option value="artifact_weapon_lvl7_9">⚔️ 武器: 伝説の剣 [Lv7-9]</option>
+                              <option value="artifact_armor_lvl7_9">🛡️ 防具: 伝説の鎧 [Lv7-9]</option>
+                              <option value="artifact_accessory_lvl7_9">💍 装飾: 伝説 of ネックレス [Lv7-9]</option>
+                              
+                              <option value="artifact_weapon_lvl10">⚔️ 武器: オリハルコンソード [Lv10]</option>
+                              <option value="artifact_armor_lvl10">🛡️ 防具: オリハルコンアーマー [Lv10]</option>
+                              <option value="artifact_accessory_lvl10">💍 装飾: ゴッドオーブ [Lv10]</option>
+                            </optgroup>
 
-                        <optgroup label="📦 通常登録アイテム">
-                          {customItems.map((item) => (
-                            <option key={item.id} value={item.id}>
-                              {getEquipmentIcon(item)} {item.name}
-                            </option>
-                          ))}
-                        </optgroup>
+                            <optgroup label="📦 通常登録アイテム">
+                              {customItems.map((item) => (
+                                <option key={item.id} value={item.id}>
+                                  {getEquipmentIcon(item)} {item.name}
+                                </option>
+                              ))}
+                            </optgroup>
+                          </>
+                        )}
                       </select>
                     </div>
 
@@ -1652,21 +1834,36 @@ export default function MapEditorPage() {
                       </div>
                     )}
 
-                    {newEventParams.type === 'start_point' && (
-                      <div className="flex flex-col gap-1">
-                        <label className="text-xs text-slate-400 font-bold uppercase">元マップ指定</label>
-                        <select 
-                          value={newEventParams.fromMap}
-                          onChange={(e) => setNewEventParams({ ...newEventParams, fromMap: e.target.value })}
-                          className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
-                        >
-                          <option value="">設定なし (デフォルト開始位置)</option>
-                          {maps.map(m => (
-                            <option key={m.id} value={m.id}>{m.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
+                    {newEventParams.type === 'start_point' && (() => {
+                      const connectedMaps = maps.filter(m => {
+                        if (m.id === currentMap.id) return false;
+                        const events = m.events || [];
+                        return events.some(e => e.type === 'teleport' && e.data?.targetMap === currentMap.id);
+                      });
+                      const hasConnections = connectedMaps.length > 0;
+                      return (
+                        <div className="flex flex-col gap-1">
+                          <label className="text-xs text-slate-400 font-bold uppercase">元マップ指定</label>
+                          <select 
+                            value={hasConnections ? newEventParams.fromMap : ""}
+                            disabled={!hasConnections}
+                            onChange={(e) => setNewEventParams({ ...newEventParams, fromMap: e.target.value })}
+                            className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400 disabled:opacity-50"
+                          >
+                            {hasConnections ? (
+                              <>
+                                <option value="">設定なし (デフォルト開始位置)</option>
+                                {connectedMaps.map(m => (
+                                  <option key={m.id} value={m.id}>{m.name}</option>
+                                ))}
+                              </>
+                            ) : (
+                              <option value="">接続元のマップがありません (無効)</option>
+                            )}
+                          </select>
+                        </div>
+                      );
+                    })()}
 
                     {newEventParams.type === 'teleport' && (
                       <div className="flex flex-col gap-1">
@@ -1923,8 +2120,9 @@ export default function MapEditorPage() {
             width: `${currentMap.width * 32}px`, 
             height: `${currentMap.height * 32}px`,
             backgroundImage: bgMode === 'image' && currentMap.bgImage ? (currentMap.bgImage.includes('grass_bg') ? `url(${grassBgUrl})` : `url(/${currentMap.bgImage})`) : 'none',
-            backgroundSize: 'cover',
+            backgroundSize: '512px 512px',
             backgroundPosition: 'center',
+            backgroundRepeat: 'repeat',
             ...(bgMode === 'stone-gray' ? { backgroundImage: 'radial-gradient(circle, #cbd5e1 2px, transparent 2px), radial-gradient(circle, #cbd5e1 2px, transparent 2px)', backgroundSize: '16px 16px', backgroundPosition: '0 0, 8px 8px' } : {})
           }}
           >
@@ -1946,8 +2144,32 @@ export default function MapEditorPage() {
                 return (
                   <div 
                     key={i} 
-                    className="border border-slate-500/30 hover:bg-slate-400/30 cursor-pointer flex items-center justify-center transition-colors"
-                    onClick={() => handleGridClick(x, y)}
+                    data-grid-x={x}
+                    data-grid-y={y}
+                    className="border border-slate-500/30 hover:bg-slate-400/30 cursor-pointer flex items-center justify-center transition-colors touch-none"
+                    onMouseDown={(e) => {
+                      if (placeMode === 'obstacle') {
+                        startDrawing(x, y);
+                        e.preventDefault();
+                      }
+                    }}
+                    onMouseEnter={() => {
+                      if (placeMode === 'obstacle') {
+                        continueDrawing(x, y);
+                      }
+                    }}
+                    onTouchStart={(e) => {
+                      if (placeMode === 'obstacle') {
+                        startDrawing(x, y);
+                        e.preventDefault();
+                      }
+                    }}
+                    onTouchMove={handleTouchMove}
+                    onClick={() => {
+                      if (placeMode !== 'obstacle') {
+                        handleGridClick(x, y);
+                      }
+                    }}
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={(e) => handleGridDrop(e, x, y)}
                   >
@@ -1989,7 +2211,7 @@ export default function MapEditorPage() {
                                 }`}
                                 title={`初期値 ${hasEvent.data?.fromMap ? `(from: ${hasEvent.data.fromMap})` : ''}`}
                               >
-                                S
+                                {hasEvent.data?.fromMap ? 'S↩️' : 'S'}
                               </div>
                            )}
                           {hasEvent && hasEvent.type === 'teleport' && (
@@ -2173,21 +2395,36 @@ export default function MapEditorPage() {
                 </div>
               )}
 
-              {editingEvent.type === 'start_point' && (
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-300 font-bold uppercase">元マップ指定</label>
-                  <select 
-                    value={editingEvent.fromMap}
-                    onChange={(e) => setEditingEvent({ ...editingEvent, fromMap: e.target.value })}
-                    className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 outline-none focus:border-emerald-500"
-                  >
-                    <option value="">設定なし (デフォルト開始位置)</option>
-                    {maps.map(m => (
-                      <option key={m.id} value={m.id}>{m.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              {editingEvent.type === 'start_point' && (() => {
+                const connectedMaps = maps.filter(m => {
+                  if (m.id === currentMap.id) return false;
+                  const events = m.events || [];
+                  return events.some(e => e.type === 'teleport' && e.data?.targetMap === currentMap.id);
+                });
+                const hasConnections = connectedMaps.length > 0;
+                return (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-slate-300 font-bold uppercase">元マップ指定</label>
+                    <select 
+                      value={hasConnections ? editingEvent.fromMap : ""}
+                      disabled={!hasConnections}
+                      onChange={(e) => setEditingEvent({ ...editingEvent, fromMap: e.target.value })}
+                      className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 outline-none focus:border-emerald-500 disabled:opacity-50"
+                    >
+                      {hasConnections ? (
+                        <>
+                          <option value="">設定なし (デフォルト開始位置)</option>
+                          {connectedMaps.map(m => (
+                            <option key={m.id} value={m.id}>{m.name}</option>
+                          ))}
+                        </>
+                      ) : (
+                        <option value="">接続元のマップがありません (無効)</option>
+                      )}
+                    </select>
+                  </div>
+                );
+              })()}
 
               {editingEvent.type === 'teleport' && (
                 <div className="flex flex-col gap-1">
@@ -2326,10 +2563,23 @@ export default function MapEditorPage() {
                 <label className="text-xs text-slate-300 font-bold uppercase">1. 宝箱の見た目の種類 (マップエディタ)</label>
                 <select
                   value={editingItem.graphic || '📦'}
-                  onChange={(e) => setEditingItem({
-                    ...editingItem,
-                    graphic: e.target.value
-                  })}
+                  onChange={(e) => {
+                    const nextGraphic = e.target.value;
+                    let nextItemId = editingItem.itemId;
+                    if (nextGraphic === '🔮') {
+                      const firstMagic = magics.find(m => m.acquisitionType === 'item');
+                      if (firstMagic) nextItemId = firstMagic.id;
+                    } else {
+                      if (customItems.length > 0) {
+                        nextItemId = customItems[0].id;
+                      }
+                    }
+                    setEditingItem({
+                      ...editingItem,
+                      graphic: nextGraphic,
+                      itemId: nextItemId
+                    });
+                  }}
                   className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 outline-none focus:border-emerald-500 font-bold"
                 >
                   <option value="📦">📦 木の宝箱 (ノーマル)</option>
@@ -2344,42 +2594,60 @@ export default function MapEditorPage() {
 
               {/* 2. 中身のアイテム (アイテムエディタ) */}
               <div className="flex flex-col gap-1">
-                <label className="text-xs text-slate-300 font-bold uppercase">2. 中身のアイテム (アイテムエディタ)</label>
+                <label className="text-xs text-slate-300 font-bold uppercase">
+                  {editingItem.graphic === '🔮' ? '2. 中身の魔法 (マジックエディタ)' : '2. 中身のアイテム (アイテムエディタ)'}
+                </label>
                 <select 
                   value={editingItem.itemId}
                   onChange={(e) => setEditingItem({ 
                     ...editingItem, 
                     itemId: e.target.value
                   })}
-                  className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                  className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 outline-none focus:border-emerald-500 font-bold"
                 >
-                  {bgMode === 'text-black' && <option value="treasure_text">宝 (Text)</option>}
-                  
-                  <optgroup label="✨ アーティファクト (ランダム生成)">
-                    <option value="artifact_weapon_lvl1_3">⚔️ 武器: 大剣 [Lv1-3]</option>
-                    <option value="artifact_armor_lvl1_3">🛡️ 防具: 全身鎧 [Lv1-3]</option>
-                    <option value="artifact_accessory_lvl1_3">💍 装飾: 指輪 [Lv1-3]</option>
-                    
-                    <option value="artifact_weapon_lvl4_6">⚔️ 武器: 勇者の剣 [Lv4-6]</option>
-                    <option value="artifact_armor_lvl4_6">🛡️ 防具: 勇者の鎧 [Lv4-6]</option>
-                    <option value="artifact_accessory_lvl4_6">💍 装飾: 勇者のネックレス [Lv4-6]</option>
-                    
-                    <option value="artifact_weapon_lvl7_9">⚔️ 武器: 伝説の剣 [Lv7-9]</option>
-                    <option value="artifact_armor_lvl7_9">🛡️ 防具: 伝説の鎧 [Lv7-9]</option>
-                    <option value="artifact_accessory_lvl7_9">💍 装飾: 伝説のアンクレット [Lv7-9]</option>
-                    
-                    <option value="artifact_weapon_lvl10">⚔️ 武器: オリハルコンソード [Lv10]</option>
-                    <option value="artifact_armor_lvl10">🛡️ 防具: オリハルコンアーマー [Lv10]</option>
-                    <option value="artifact_accessory_lvl10">💍 装飾: ゴッドオーブ [Lv10]</option>
-                  </optgroup>
+                  {editingItem.graphic === '🔮' ? (
+                    <optgroup label="🔮 「アイテム入手」で保存された魔法">
+                      {magics.filter(m => m.acquisitionType === 'item').length > 0 ? (
+                        magics.filter(m => m.acquisitionType === 'item').map((magic) => (
+                          <option key={magic.id} value={magic.id}>
+                            🔮 {magic.name} (攻撃力:{magic.power} / 属性:{magic.attribute})
+                          </option>
+                        ))
+                      ) : (
+                        <option value="">アイテム習得の魔法がありません</option>
+                      )}
+                    </optgroup>
+                  ) : (
+                    <>
+                      {bgMode === 'text-black' && <option value="treasure_text">宝 (Text)</option>}
+                      
+                      <optgroup label="✨ アーティファクト (ランダム生成)">
+                        <option value="artifact_weapon_lvl1_3">⚔️ 武器: 大剣 [Lv1-3]</option>
+                        <option value="artifact_armor_lvl1_3">🛡️ 防具: 全身鎧 [Lv1-3]</option>
+                        <option value="artifact_accessory_lvl1_3">💍 装飾: 指輪 [Lv1-3]</option>
+                        
+                        <option value="artifact_weapon_lvl4_6">⚔️ 武器: 勇者の剣 [Lv4-6]</option>
+                        <option value="artifact_armor_lvl4_6">🛡️ 防具: 勇者の鎧 [Lv4-6]</option>
+                        <option value="artifact_accessory_lvl4_6">💍 装飾: 勇者のネックレス [Lv4-6]</option>
+                        
+                        <option value="artifact_weapon_lvl7_9">⚔️ 武器: 伝説の剣 [Lv7-9]</option>
+                        <option value="artifact_armor_lvl7_9">🛡️ 防具: 伝説の鎧 [Lv7-9]</option>
+                        <option value="artifact_accessory_lvl7_9">💍 装飾: 伝説のアンクレット [Lv7-9]</option>
+                        
+                        <option value="artifact_weapon_lvl10">⚔️ 武器: オリハルコンソード [Lv10]</option>
+                        <option value="artifact_armor_lvl10">🛡️ 防具: オリハルコンアーマー [Lv10]</option>
+                        <option value="artifact_accessory_lvl10">💍 装飾: ゴッドオーブ [Lv10]</option>
+                      </optgroup>
 
-                  <optgroup label="📦 通常登録アイテム">
-                    {customItems.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {getEquipmentIcon(item)} {item.name}
-                      </option>
-                    ))}
-                  </optgroup>
+                      <optgroup label="📦 通常登録アイテム">
+                        {customItems.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {getEquipmentIcon(item)} {item.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    </>
+                  )}
                 </select>
               </div>
             </div>

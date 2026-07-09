@@ -12,6 +12,9 @@ export interface EnemyAsset {
   attackElementEnchantValue?: number;
   defenseElement?: string;
   defenseElementEnchantValue?: number;
+  specialAbility?: 'none' | 'immune_physical' | 'immune_magic';
+  weaknessAttribute?: 'none' | 'fire' | 'ice' | 'wind' | 'earth';
+  weaknessDegree?: number;
 }
 
 export const EnemyAssets: Record<string, EnemyAsset[]> = {

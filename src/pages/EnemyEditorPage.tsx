@@ -1048,6 +1048,49 @@ export default function EnemyEditorPage() {
                   />
                 </div>
               </div>
+
+              <div className="sm:col-span-2 mt-2 bg-emerald-50 p-4 rounded-xl border border-emerald-100 flex flex-wrap sm:flex-nowrap items-end gap-3">
+                <div className="flex-1 min-w-[120px]">
+                  <label className="block text-[11px] font-bold text-emerald-800 mb-1">特殊能力</label>
+                  <select
+                    value={currentEnemy.specialAbility || 'none'}
+                    onChange={e => handleUpdate({ specialAbility: e.target.value as any })}
+                    className="w-full bg-white border border-emerald-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm font-medium"
+                  >
+                    <option value="none">なし (None)</option>
+                    <option value="immune_physical">物理攻撃無効 (Immune Physical)</option>
+                    <option value="immune_magic">魔法攻撃無効 (Immune Magic)</option>
+                  </select>
+                </div>
+
+                <div className="flex-1 min-w-[120px]">
+                  <label className="block text-[11px] font-bold text-emerald-800 mb-1">弱点属性</label>
+                  <select
+                    value={currentEnemy.weaknessAttribute || 'none'}
+                    onChange={e => handleUpdate({ weaknessAttribute: e.target.value as any })}
+                    className="w-full bg-white border border-emerald-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm font-medium"
+                  >
+                    <option value="none">なし (None)</option>
+                    <option value="fire">火 (Fire)</option>
+                    <option value="ice">氷 (Ice)</option>
+                    <option value="wind">風 (Wind)</option>
+                    <option value="earth">地 (Earth)</option>
+                  </select>
+                </div>
+
+                <div className="w-28 min-w-[80px]">
+                  <label className="block text-[11px] font-bold text-emerald-800 mb-1" title="弱点属性攻撃に対する追加ダメージ倍率">弱点度 (%)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="10"
+                    value={currentEnemy.weaknessDegree !== undefined ? currentEnemy.weaknessDegree : 50}
+                    onChange={e => handleUpdate({ weaknessDegree: parseInt(e.target.value) || 0 })}
+                    className="w-full bg-white border border-emerald-200 rounded-lg px-2 py-1.5 text-xs text-center focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm disabled:bg-slate-100 disabled:text-slate-400 font-medium"
+                    disabled={!currentEnemy.weaknessAttribute || currentEnemy.weaknessAttribute === 'none'}
+                  />
+                </div>
+              </div>
             </div>
             </div>
           </div>

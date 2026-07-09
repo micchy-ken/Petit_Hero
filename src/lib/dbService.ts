@@ -57,6 +57,29 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 }
 
 /**
+ * Recursively removes all undefined properties from an object/array so Firestore doesn't complain.
+ */
+export function cleanUndefined<T>(obj: T): T {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map(item => cleanUndefined(item)) as unknown as T;
+  }
+  if (typeof obj === 'object') {
+    const cleaned: any = {};
+    for (const key of Object.keys(obj as any)) {
+      const val = (obj as any)[key];
+      if (val !== undefined) {
+        cleaned[key] = cleanUndefined(val);
+      }
+    }
+    return cleaned as T;
+  }
+  return obj;
+}
+
+/**
  * Fetch all maps from Firestore for a specific scenario.
  * If Firestore is empty, seed it with initial default static maps and return them for the 'scenario_test' scenario.
  */
@@ -71,7 +94,7 @@ export async function fetchMapsFromFirestore(scenarioId: string = 'scenario_test
       for (const map of staticMaps) {
         const seededMap = { ...map, scenarioId: 'scenario_test' };
         const docRef = doc(db, 'maps', map.id);
-        await setDoc(docRef, seededMap);
+        await setDoc(docRef, cleanUndefined(seededMap));
         seededMaps.push(seededMap);
       }
       return seededMaps.filter(m => m.scenarioId === scenarioId);
@@ -107,7 +130,7 @@ export async function fetchMapsFromFirestore(scenarioId: string = 'scenario_test
       };
       
       const docRef = doc(db, 'maps', newMapId);
-      await setDoc(docRef, newBeginningMap);
+      await setDoc(docRef, cleanUndefined(newBeginningMap));
       filteredMaps = [newBeginningMap];
     }
 
@@ -146,7 +169,7 @@ export async function saveMapToFirestore(mapData: MapData): Promise<void> {
     mapData.scenarioId = 'scenario_test';
   }
   const docRef = doc(db, 'maps', mapData.id);
-  await setDoc(docRef, mapData);
+  await setDoc(docRef, cleanUndefined(mapData));
   console.log(`Saved map ${mapData.id} (scenario: ${mapData.scenarioId}) to Firestore`);
 }
 
@@ -400,17 +423,34 @@ export async function fetchMagicDataFromFirestore(): Promise<MagicData[]> {
     const docRef = doc(db, 'config', 'custom_magics');
     const docSnap = await getDoc(docRef);
     
+    const defaultMagics: MagicData[] = [
+      { id: 'magic_fire', name: 'ファイアボルト', attribute: 'fire', power: 12, interval: 3, acquisitionType: 'item', acquisitionValue: 'item_fire_scroll' },
+      { id: 'magic_ice', name: 'アイスブラスト', attribute: 'ice', power: 12, interval: 3, acquisitionType: 'item', acquisitionValue: 'item_ice_scroll' },
+      { id: 'magic_wind', name: 'ウインドトルネード', attribute: 'wind', power: 6, interval: 2, acquisitionType: 'item', acquisitionValue: 'item_wind_scroll' },
+      { id: 'magic_earth', name: 'グランドアース', attribute: 'earth', power: 20, interval: 5, acquisitionType: 'item', acquisitionValue: 'item_earth_scroll' }
+    ];
+
     if (docSnap.exists()) {
       const data = docSnap.data();
       const magics = data.magics || [];
       console.log('Loaded custom magics from Firestore');
+      
+      // Auto-merge new magics if they don't exist
+      let changed = false;
+      defaultMagics.forEach(defMagic => {
+        if (!magics.some((m: any) => m.id === defMagic.id)) {
+          magics.push(defMagic);
+          changed = true;
+        }
+      });
+      
+      if (changed) {
+        await setDoc(docRef, { magics });
+        console.log('Automatically added wind and earth magics to Firestore config');
+      }
       return magics;
     } else {
       console.log('No custom magics found in Firestore. Seeding with default magics...');
-      const defaultMagics: MagicData[] = [
-        { id: 'magic_fire', name: 'ファイアボルト', attribute: 'fire', power: 12, interval: 3, acquisitionType: 'item', acquisitionValue: 'item_fire_scroll' },
-        { id: 'magic_ice', name: 'アイスブラスト', attribute: 'ice', power: 12, interval: 3, acquisitionType: 'item', acquisitionValue: 'item_ice_scroll' }
-      ];
       await setDoc(docRef, { magics: defaultMagics });
       return defaultMagics;
     }

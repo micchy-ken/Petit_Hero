@@ -17,6 +17,14 @@ import { getEnemyAssetById, EnemyAsset, getAvailableEnemies } from '../data/Enem
 import { getHeroStatusByLevel, getAllHeroStatus } from '../data/HeroStatusAssets';
 // @ts-ignore
 import grassBgUrl from '../../public/grass_bg_1782776475818.jpg';
+// @ts-ignore
+import desertBgUrl from '../../public/desert_bg_1024.jpg';
+// @ts-ignore
+import caveBgUrl from '../../public/cave_bg_1024.jpg';
+// @ts-ignore
+import vastDesertBgUrl from '../../public/vast_desert_bg.jpg';
+// @ts-ignore
+import vastCaveBgUrl from '../../public/vast_cave_bg.jpg';
 
 export type Direction = 'up' | 'down' | 'left' | 'right' | 'up-left' | 'up-right' | 'down-left' | 'down-right' | 'idle';
 
@@ -68,6 +76,9 @@ interface SlimeData {
   attackElementEnchantValue?: number;
   defenseElement?: string;
   defenseElementEnchantValue?: number;
+  specialAbility?: 'none' | 'immune_physical' | 'immune_magic';
+  weaknessAttribute?: 'none' | 'fire' | 'ice' | 'wind' | 'earth';
+  weaknessDegree?: number;
 }
 
 export interface ActionLog {
@@ -88,7 +99,7 @@ export class GridMovementScene extends Phaser.Scene {
   private vignetteOverlay!: Phaser.GameObjects.Graphics;
   private particleMotes!: Phaser.GameObjects.Arc[];
   private visitedTraceGraphics?: Phaser.GameObjects.Graphics;
-  private grassBgImage?: Phaser.GameObjects.Image;
+  private grassBgImage?: Phaser.GameObjects.TileSprite;
   private useGrassBg: boolean = true;
   private allow8Way: boolean = false;
   private isTextMode: boolean = true;
@@ -228,7 +239,19 @@ export class GridMovementScene extends Phaser.Scene {
   private totalEnemiesSpawned: number = 0;
   private enemiesDefeated: number = 0;
   private bossSpawned: boolean = false;
-  private bossDefeated: boolean = false;
+  private _bossDefeated: boolean = false;
+  private defeatedBosses: Set<string> = new Set();
+  private get bossDefeated(): boolean {
+    return this.mapData?.id ? this.defeatedBosses.has(this.mapData.id) : this._bossDefeated;
+  }
+  private set bossDefeated(val: boolean) {
+    this._bossDefeated = val;
+    if (val && this.mapData?.id) {
+      this.defeatedBosses.add(this.mapData.id);
+    } else if (!val && this.mapData?.id) {
+      this.defeatedBosses.delete(this.mapData.id);
+    }
+  }
   private bossAnnouncementSent: boolean = false;
   public isSettingsPaused: boolean = false;
   
@@ -275,6 +298,10 @@ export class GridMovementScene extends Phaser.Scene {
 
   preload() {
     this.load.image('grass_bg', grassBgUrl);
+    this.load.image('desert_bg_1024.jpg', desertBgUrl);
+    this.load.image('cave_bg_1024.jpg', caveBgUrl);
+    this.load.image('vast_desert_bg.jpg', vastDesertBgUrl);
+    this.load.image('vast_cave_bg.jpg', vastCaveBgUrl);
     generateHeroSpritesheet(this, 'normal');
     generateHeroSpritesheet(this, 'text');
     generateHeroSpritesheet(this, 'grayscale');
@@ -328,7 +355,7 @@ export class GridMovementScene extends Phaser.Scene {
     this.cameras.main.scrollY = this.currentCamGridY * GRID_SIZE;
 
     // 1. 背景画像とグリッドの作成
-    this.grassBgImage = this.add.image(0, 0, 'grass_bg').setOrigin(0, 0);
+    this.grassBgImage = this.add.tileSprite(0, 0, this.gridCols * GRID_SIZE, this.gridRows * GRID_SIZE, 'grass_bg').setOrigin(0, 0);
     this.grassBgImage.setDepth(-1);
     this.createGridBackground();
 
@@ -781,7 +808,7 @@ export class GridMovementScene extends Phaser.Scene {
         let hasMagic = false;
         if (magic.acquisitionType === 'item') {
           const acquiredByMagicId = this.customItems.some((item: any) => item.targetMagicId === magic.id && this.acquiredItems.has(item.id));
-          hasMagic = this.acquiredItems.has(magic.acquisitionValue) || acquiredByMagicId;
+          hasMagic = this.acquiredItems.has(magic.acquisitionValue) || this.acquiredItems.has(magic.id) || acquiredByMagicId;
         } else if (magic.acquisitionType === 'event') {
           // Check if event was played (using basic string inclusion for now or if event ID matches)
           hasMagic = Array.from(this.playedMapEvents).some(id => id.includes(magic.acquisitionValue)) || 
@@ -893,7 +920,21 @@ export class GridMovementScene extends Phaser.Scene {
 
     if (this.grassBgImage) {
       this.grassBgImage.setVisible(this.displayMode === 'normal' && this.useGrassBg);
-      this.grassBgImage.setDisplaySize(this.gridCols * GRID_SIZE, this.gridRows * GRID_SIZE);
+      const W = this.gridCols * GRID_SIZE;
+      const H = this.gridRows * GRID_SIZE;
+      this.grassBgImage.setSize(W, H);
+
+      // Determine texture dimensions safely
+      const textureKey = this.grassBgImage.texture.key;
+      const frame = this.textures.getFrame(textureKey);
+      const texWidth = frame ? frame.width : 1024;
+      const texHeight = frame ? frame.height : 1024;
+
+      // Crop the center when map is smaller than texture, tile starting at 0 when larger
+      const x_offset = Math.max(0, (texWidth - W) / 2);
+      const y_offset = Math.max(0, (texHeight - H) / 2);
+
+      this.grassBgImage.setTilePosition(x_offset, y_offset);
     }
 
     if (this.displayMode === 'text') {
@@ -1369,7 +1410,12 @@ export class GridMovementScene extends Phaser.Scene {
       this.toggleGrassBg(true);
       this.cameras.main.setBackgroundColor('#000000');
       if (bgImage && this.grassBgImage) {
-         // TODO: support loading arbitrary bg image if not preloaded. For now, it defaults to grass_bg
+        const validBgs = ['desert_bg_1024.jpg', 'cave_bg_1024.jpg', 'vast_desert_bg.jpg', 'vast_cave_bg.jpg'];
+        if (validBgs.includes(bgImage)) {
+          this.grassBgImage.setTexture(bgImage);
+        } else {
+          this.grassBgImage.setTexture('grass_bg');
+        }
       }
     }
   }
@@ -1965,17 +2011,34 @@ export class GridMovementScene extends Phaser.Scene {
     let baseDamage = this.heroAttack - (slime.defense || 0);
     let elementMsg = '';
 
-    if (this.heroAttackElement && slime.defenseElement && this.heroAttackElement === slime.defenseElement) {
-      const reduction = slime.defenseElementEnchantValue || 0;
-      if (reduction > 0) {
-        baseDamage -= reduction;
-        elementMsg = ` (属性:${elMap[this.heroAttackElement]}防御で-${reduction})`;
+    if (slime.specialAbility === 'immune_physical') {
+      baseDamage = 0;
+      elementMsg = ' (物理攻撃無効)';
+    } else {
+      if (this.heroAttackElement && slime.defenseElement && this.heroAttackElement === slime.defenseElement) {
+        const reduction = slime.defenseElementEnchantValue || 0;
+        if (reduction > 0) {
+          baseDamage -= reduction;
+          elementMsg = ` (属性:${elMap[this.heroAttackElement]}防御で-${reduction})`;
+        }
+      }
+
+      // Check weakness attribute
+      if (this.heroAttackElement && slime.weaknessAttribute && slime.weaknessAttribute !== 'none' && this.heroAttackElement === slime.weaknessAttribute) {
+        const degree = slime.weaknessDegree !== undefined ? slime.weaknessDegree : 50;
+        const weaknessBonus = Math.floor(Math.max(1, baseDamage) * degree / 100);
+        baseDamage += weaknessBonus;
+        elementMsg += ` (弱点特効! +${weaknessBonus} [${degree}%])`;
       }
     }
 
-    const damage = Math.max(1, baseDamage);
+    const damage = Math.max(slime.specialAbility === 'immune_physical' ? 0 : 1, baseDamage);
     slime.hp -= damage;
-    this.sendLog(`勇者の通常攻撃！ ${slime.name || 'スライム'}に ${damage} ダメージを与えた！${elementMsg} ⚔️`, 'combat');
+    if (slime.specialAbility === 'immune_physical') {
+      this.sendLog(`勇者の通常攻撃！ しかし ${slime.name || 'スライム'} には効果がない！ (物理攻撃無効) 🛡️`, 'combat');
+    } else {
+      this.sendLog(`勇者の通常攻撃！ ${slime.name || 'スライム'}に ${damage} ダメージを与えた！${elementMsg} ⚔️`, 'combat');
+    }
 
     // 攻撃エフェクト (本格的な円弧のダブルクロス・スラッシュ & スパーク)
     
@@ -2794,13 +2857,26 @@ export class GridMovementScene extends Phaser.Scene {
       this.acquiredItems.add(item.itemId);
       const isDefault = item.itemId === 'treasure_text';
       const customItem = this.customItems.find((it: any) => it.id === item.itemId);
+      const foundMagic = this.magics.find((m: any) => m.id === item.itemId);
 
       if (isDefault) {
         this.sendLog('宝を手に入れた！ ✨ (Exp +5)', 'info');
         this.enqueueMessage('item', '宝を手に入れた！ ✨ (Exp +5)');
         this.heroExp += 5;
         this.checkLevelUp();
-            } else if (customItem) {
+      } else if (foundMagic) {
+        const elMap: Record<string, string> = { fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇', ice: '氷' };
+        const elementLabel = elMap[foundMagic.attribute] || foundMagic.attribute || '無';
+        const msg = `魔法『${foundMagic.name}』を習得した！ 🔮\n(属性: ${elementLabel} / 攻撃力: ${foundMagic.power} / 間隔: ${foundMagic.interval}秒)\nこれで自動的に魔法が放たれます！ (Exp +5)`;
+        this.sendLog(`魔法『${foundMagic.name}』を習得した！ 🔮`, 'info');
+        this.enqueueMessage('item', msg);
+        this.acquiredItems.add(foundMagic.id);
+        if (foundMagic.acquisitionValue) {
+          this.acquiredItems.add(foundMagic.acquisitionValue);
+        }
+        this.heroExp += 5;
+        this.checkLevelUp();
+      } else if (customItem) {
         if (customItem.type === 'equipment') {
           // equipmentTypeを推測または取得
           let slot = customItem.equipmentType;
@@ -2943,6 +3019,21 @@ export class GridMovementScene extends Phaser.Scene {
   private checkMapEvents() {
     if (!this.mapData || !this.mapData.events) return;
     const eventsHere = this.mapData.events.filter((e: any) => e.x === this.currentGridX && e.y === this.currentGridY);
+    
+    // 初期値 (元マップ指定有り) への接触判定による元マップへの帰還
+    const startPointEvent = eventsHere.find((e: any) => e.type === 'start_point');
+    if (startPointEvent && startPointEvent.data?.fromMap) {
+      const targetMapId = startPointEvent.data.fromMap;
+      this.isTurboActive = false;
+      if (this.onTestPlayClear) {
+        this.onTestPlayClear();
+      } else if (this.onTeleport) {
+        this.sendLog(`元マップへ戻ります。`, 'system');
+        this.onTeleport(targetMapId);
+      }
+      return;
+    }
+
     const teleportEvent = eventsHere.find((e: any) => e.type === 'teleport');
     const monologueEvent = eventsHere.find((e: any) => e.type === 'monologue');
     const customEvent = eventsHere.find((e: any) => e.type === 'custom_event');
@@ -3082,10 +3173,10 @@ export class GridMovementScene extends Phaser.Scene {
       this.bossSpawned = false;
     }
     
-    // マップ切り替え時の処理
+    // マップ切り替え時の処理 (再生頻度の設定維持のため、playedMapEventsはクリアしません)
     if (isMapChanging) {
-       this.playedMapEvents.clear();
-     }
+       // this.playedMapEvents.clear();
+    }
     
     // 踏破・視野情報をクリアし、表示もクリアする
     this.visitedGrids.clear();
@@ -3149,9 +3240,22 @@ export class GridMovementScene extends Phaser.Scene {
          startEvent = this.mapData.events?.find((e: any) => e.type === 'start_point');
        }
 
+        let returnPortalPos = null;
+        if (!startEvent && fromMapId) {
+          const teleportEvent = this.mapData.events?.find(
+            (e: any) => e.type === 'teleport' && e.data?.targetMap === fromMapId
+          );
+          if (teleportEvent) {
+            returnPortalPos = { x: teleportEvent.x, y: teleportEvent.y };
+          }
+        }
+
        if (startEvent) {
           this.currentGridX = startEvent.x;
           this.currentGridY = startEvent.y;
+       } else if (returnPortalPos) {
+          this.currentGridX = returnPortalPos.x;
+          this.currentGridY = returnPortalPos.y;
        } else {
           this.currentGridX = 0;
           this.currentGridY = 0;
@@ -3447,6 +3551,9 @@ export class GridMovementScene extends Phaser.Scene {
             attackElementEnchantValue: bossConfig.attackElementEnchantValue,
             defenseElement: bossConfig.defenseElement,
             defenseElementEnchantValue: bossConfig.defenseElementEnchantValue,
+            specialAbility: bossConfig.specialAbility || 'none',
+            weaknessAttribute: bossConfig.weaknessAttribute || 'none',
+            weaknessDegree: bossConfig.weaknessDegree !== undefined ? bossConfig.weaknessDegree : 50,
           };
           this.slimes.push(newBoss);
           this.bossSpawned = true;
@@ -3513,6 +3620,9 @@ export class GridMovementScene extends Phaser.Scene {
         attackElementEnchantValue: enemyConfig.attackElementEnchantValue,
         defenseElement: enemyConfig.defenseElement,
         defenseElementEnchantValue: enemyConfig.defenseElementEnchantValue,
+        specialAbility: enemyConfig.specialAbility || 'none',
+        weaknessAttribute: enemyConfig.weaknessAttribute || 'none',
+        weaknessDegree: enemyConfig.weaknessDegree !== undefined ? enemyConfig.weaknessDegree : 50,
       };
 
       this.slimes.push(newSlime);
@@ -3813,6 +3923,16 @@ export class GridMovementScene extends Phaser.Scene {
       return;
     }
 
+    if (magic.attribute === 'wind') {
+      this.castWindMagic(magic);
+      return;
+    }
+
+    if (magic.attribute === 'earth') {
+      this.castEarthMagic(magic);
+      return;
+    }
+
     // Default or fire: 最も近いスライムをターゲットにする
     let targetSlime: SlimeData | null = null;
     let minDistance = Infinity;
@@ -3909,9 +4029,29 @@ export class GridMovementScene extends Phaser.Scene {
 
     if (hitSlimes.length > 0) {
       hitSlimes.forEach(targetSlime => {
-        const actualFireDamage = Math.max(1, fireDamage - (targetSlime.defense || 0));
+        let baseDmg = fireDamage - (targetSlime.defense || 0);
+        let logMsg = '';
+
+        if (targetSlime.specialAbility === 'immune_magic') {
+          baseDmg = 0;
+          logMsg = ` (魔法攻撃無効)`;
+        } else {
+          if (targetSlime.weaknessAttribute === 'fire') {
+            const degree = targetSlime.weaknessDegree !== undefined ? targetSlime.weaknessDegree : 50;
+            const weaknessBonus = Math.floor(Math.max(1, baseDmg) * degree / 100);
+            baseDmg += weaknessBonus;
+            logMsg = ` (弱点特効! +${weaknessBonus} [${degree}%])`;
+          }
+        }
+
+        const actualFireDamage = Math.max(targetSlime.specialAbility === 'immune_magic' ? 0 : 1, baseDmg);
         targetSlime.hp -= actualFireDamage;
-        this.sendLog(`ファイアボールが直撃！ ${targetSlime.name || 'スライム'}に ${actualFireDamage} ダメージを与えた！ 🔥`, "combat");
+
+        if (targetSlime.specialAbility === 'immune_magic') {
+          this.sendLog(`ファイアボールが命中！ しかし ${targetSlime.name || 'スライム'} には効果がない！ (魔法攻撃無効) 🛡️`, "combat");
+        } else {
+          this.sendLog(`ファイアボールが直撃！ ${targetSlime.name || 'スライム'}に ${actualFireDamage} ダメージを与えた！${logMsg} 🔥`, "combat");
+        }
 
         // スライムの撃破処理
         if (targetSlime.hp <= 0) {
@@ -4151,9 +4291,29 @@ export class GridMovementScene extends Phaser.Scene {
     // 5. ダメージ適用 (効果は周囲8マスのまま)
     const iceDamage = magic.power || 12; // 氷の魔法は周囲のみのため強力
     hitSlimes.forEach(targetSlime => {
-      const actualIceDamage = Math.max(1, iceDamage - (targetSlime.defense || 0));
+      let baseDmg = iceDamage - (targetSlime.defense || 0);
+      let logMsg = '';
+
+      if (targetSlime.specialAbility === 'immune_magic') {
+        baseDmg = 0;
+        logMsg = ` (魔法攻撃無効)`;
+      } else {
+        if (targetSlime.weaknessAttribute === 'ice') {
+          const degree = targetSlime.weaknessDegree !== undefined ? targetSlime.weaknessDegree : 50;
+          const weaknessBonus = Math.floor(Math.max(1, baseDmg) * degree / 100);
+          baseDmg += weaknessBonus;
+          logMsg = ` (弱点特効! +${weaknessBonus} [${degree}%])`;
+        }
+      }
+
+      const actualIceDamage = Math.max(targetSlime.specialAbility === 'immune_magic' ? 0 : 1, baseDmg);
       targetSlime.hp -= actualIceDamage;
-      this.sendLog(`サークル氷結が${targetSlime.name || 'スライム'}に直撃！ ${actualIceDamage} ダメージ！ `, "combat");
+
+      if (targetSlime.specialAbility === 'immune_magic') {
+        this.sendLog(`サークル氷結が命中！ しかし ${targetSlime.name || 'スライム'} には効果がない！ (魔法攻撃無効) 🛡️`, "combat");
+      } else {
+        this.sendLog(`サークル氷結が${targetSlime.name || 'スライム'}に直撃！ ${actualIceDamage} ダメージ！${logMsg} ❄️`, "combat");
+      }
 
       // 敵が力尽きたかチェック
       if (targetSlime.hp <= 0) {
@@ -4187,6 +4347,427 @@ export class GridMovementScene extends Phaser.Scene {
     });
 
     this.notifyStateChange(false);
+  }
+
+  public castWindMagic(magic: any) {
+    if (this.slimes.length === 0) return;
+
+    // Find closest slime
+    let targetSlime: SlimeData | null = null;
+    let minDistance = Infinity;
+
+    this.slimes.forEach(slime => {
+      const dist = Phaser.Math.Distance.Between(this.hero.x, this.hero.y, slime.sprite.x, slime.sprite.y);
+      if (dist < minDistance) {
+        minDistance = dist;
+        targetSlime = slime;
+      }
+    });
+
+    if (!targetSlime) return;
+
+    this.sendLog(`風の魔法（${magic.name || 'ウインドトルネード'}）！ 旋風が敵を追尾する！ 🌪️`, "combat");
+
+    const startX = this.hero.x;
+    const startY = this.hero.y;
+
+    // Create a beautiful spinning emerald tornado container
+    const tornado = this.add.container(startX, startY);
+    tornado.setDepth(15);
+
+    // Multi-layered visual for a rich 3D pixel-art wind vortex
+    const layers: Phaser.GameObjects.Ellipse[] = [];
+    for (let i = 0; i < 5; i++) {
+      const scaleY = 0.4;
+      const radius = 16 - i * 2.5; // Wider at the top, narrower at the bottom
+      const offsetY = -i * 6; // Stacked vertically upwards
+
+      const ellipse = this.add.ellipse(0, offsetY, radius * 2, radius * 2 * scaleY, 0x3df0b5, 0.45);
+      ellipse.setStrokeStyle(1.5, 0xffffff, 0.85);
+      tornado.add(ellipse);
+      layers.push(ellipse);
+
+      // Organic yoyo floating motion
+      this.tweens.add({
+        targets: ellipse,
+        x: { from: -2, to: 2 },
+        yoyo: true,
+        repeat: -1,
+        duration: 200 + i * 50,
+        ease: 'Sine.easeInOut'
+      });
+    }
+
+    // Glowing core
+    const core = this.add.circle(0, -12, 6, 0xe8fffc, 0.95);
+    tornado.add(core);
+
+    const speed = 250; // pixels per second
+    const delay = 16; // ms (~60fps)
+    const step = speed * (delay / 1000);
+
+    const timer = this.time.addEvent({
+      delay: delay,
+      loop: true,
+      callback: () => {
+        if (!tornado.active) {
+          timer.destroy();
+          return;
+        }
+
+        // Homing: If original target is dead, dynamic retargeting! Always hits!
+        if (!targetSlime || !targetSlime.sprite || !targetSlime.sprite.active || targetSlime.hp <= 0) {
+          let newTarget: SlimeData | null = null;
+          let closestDist = Infinity;
+          this.slimes.forEach(slime => {
+            if (slime.sprite && slime.sprite.active && slime.hp > 0) {
+              const d = Phaser.Math.Distance.Between(tornado.x, tornado.y, slime.sprite.x, slime.sprite.y);
+              if (d < closestDist) {
+                closestDist = d;
+                newTarget = slime;
+              }
+            }
+          });
+
+          if (newTarget) {
+            targetSlime = newTarget;
+          } else {
+            // Dissipate beautifully if no enemies
+            this.tweens.add({
+              targets: tornado,
+              alpha: 0,
+              scale: 0,
+              duration: 200,
+              onComplete: () => tornado.destroy()
+            });
+            timer.destroy();
+            return;
+          }
+        }
+
+        const tx = targetSlime.sprite.x;
+        const ty = targetSlime.sprite.y;
+        const distance = Phaser.Math.Distance.Between(tornado.x, tornado.y, tx, ty);
+
+        // Rapid rotation
+        tornado.angle += 12;
+
+        // Spawn tiny leaf/sparkle dust behind
+        if (Math.random() < 0.35) {
+          const leafX = tornado.x + Phaser.Math.Between(-10, 10);
+          const leafY = tornado.y + Phaser.Math.Between(-10, 10);
+          const leaf = this.add.circle(leafX, leafY, Phaser.Math.Between(2, 4), 0xa3ffd6, 0.85);
+          leaf.setDepth(14);
+          this.tweens.add({
+            targets: leaf,
+            y: leafY - Phaser.Math.Between(12, 28),
+            scale: 0,
+            alpha: 0,
+            duration: 350,
+            onComplete: () => leaf.destroy()
+          });
+        }
+
+        if (distance <= step + 12) {
+          timer.destroy();
+          this.triggerWindHit(targetSlime, tornado.x, tornado.y, magic.power || 6);
+          tornado.destroy();
+        } else {
+          const angle = Phaser.Math.Angle.Between(tornado.x, tornado.y, tx, ty);
+          tornado.x += Math.cos(angle) * step;
+          tornado.y += Math.sin(angle) * step;
+        }
+      }
+    });
+  }
+
+  private triggerWindHit(targetSlime: SlimeData, x: number, y: number, power: number) {
+    if (!targetSlime || !targetSlime.sprite || !targetSlime.sprite.active || targetSlime.hp <= 0) {
+      return;
+    }
+
+    let baseDmg = power - (targetSlime.defense || 0);
+    let logMsg = '';
+
+    if (targetSlime.specialAbility === 'immune_magic') {
+      baseDmg = 0;
+      logMsg = ` (魔法攻撃無効)`;
+    } else {
+      if (targetSlime.weaknessAttribute === 'wind') {
+        const degree = targetSlime.weaknessDegree !== undefined ? targetSlime.weaknessDegree : 50;
+        const weaknessBonus = Math.floor(Math.max(1, baseDmg) * degree / 100);
+        baseDmg += weaknessBonus;
+        logMsg = ` (弱点特効! +${weaknessBonus} [${degree}%])`;
+      }
+    }
+
+    const damage = Math.max(targetSlime.specialAbility === 'immune_magic' ? 0 : 1, baseDmg);
+    targetSlime.hp -= damage;
+
+    if (targetSlime.specialAbility === 'immune_magic') {
+      this.sendLog(`竜巻が直撃！ しかし ${targetSlime.name || 'スライム'} には効果がない！ (魔法攻撃無効) 🛡️`, "combat");
+    } else {
+      this.sendLog(`竜巻が直撃！ ${targetSlime.name || 'スライム'}に ${damage} ダメージを与えた！${logMsg} 🌪️`, "combat");
+    }
+
+    // Defeated logic
+    if (targetSlime.hp <= 0) {
+      if (targetSlime.id.startsWith('boss-')) {
+        this.bossDefeated = true;
+      }
+      this.enemiesDefeated++;
+      this.updateStats(this.currentGridX, this.currentGridY, this.currentCamGridX, this.currentCamGridY);
+      
+      const gainedExp = (targetSlime.exp !== undefined && !isNaN(Number(targetSlime.exp))) ? Number(targetSlime.exp) : 2;
+      this.sendLog(`${targetSlime.name || 'スライム'}は暴風に巻き上げられて消滅した！ 経験値を ${gainedExp} 獲得。`, "info");
+      this.heroExp += gainedExp;
+      this.checkLevelUp();
+
+      this.tweens.add({
+        targets: targetSlime.sprite,
+        scaleX: 0,
+        scaleY: 0,
+        alpha: 0,
+        duration: 200,
+        onComplete: () => {
+          if (targetSlime.sprite && targetSlime.sprite.active) targetSlime.sprite.destroy();
+        }
+      });
+
+      const idx = this.slimes.indexOf(targetSlime);
+      if (idx !== -1) {
+        this.slimes.splice(idx, 1);
+      }
+    }
+
+    // Gorgeous wind impact/cutting graphics
+    for (let i = 0; i < 12; i++) {
+      const angle = (i * Math.PI * 2) / 12 + Phaser.Math.FloatBetween(-0.2, 0.2);
+      const dist = Phaser.Math.Between(30, 60);
+      const windCut = this.add.graphics();
+      windCut.setDepth(16);
+      windCut.setPosition(x, y);
+      windCut.lineStyle(1.5, 0x8effd7, 0.9);
+      
+      // Draw a sleek curved crescent line
+      windCut.beginPath();
+      windCut.arc(0, 0, Phaser.Math.Between(5, 12), angle - 0.2, angle + 0.2);
+      windCut.strokePath();
+
+      this.tweens.add({
+        targets: windCut,
+        x: x + Math.cos(angle) * dist,
+        y: y + Math.sin(angle) * dist,
+        scale: 1.5,
+        alpha: 0,
+        duration: 350,
+        onComplete: () => windCut.destroy()
+      });
+    }
+
+    // Small flash
+    const flash = this.add.circle(x, y, 6, 0xffffff, 1);
+    flash.setDepth(15);
+    this.tweens.add({
+      targets: flash,
+      scale: 5,
+      alpha: 0,
+      duration: 150,
+      onComplete: () => flash.destroy()
+    });
+
+    this.notifyStateChange(false);
+  }
+
+  public castEarthMagic(magic: any) {
+    this.sendLog(`地の魔法（${magic.name || 'グランドアース'}）！ 大地が激しく揺れ動く！ 🧱`, "combat");
+
+    // Camera shake
+    this.cameras.main.shake(600, 0.015);
+
+    const GRID_SIZE = GridMovementScene.GRID_SIZE;
+    const hgx = this.currentGridX;
+    const hgy = this.currentGridY;
+
+    // Propagation directions: Up, Down, Left, Right
+    const dirs = [
+      { dx: 1, dy: 0 },
+      { dx: -1, dy: 0 },
+      { dx: 0, dy: 1 },
+      { dx: 0, dy: -1 }
+    ];
+
+    const damagePower = magic.power || 20;
+
+    // 4 blocks propagate sequentially
+    for (let stepIndex = 1; stepIndex <= 4; stepIndex++) {
+      this.time.addEvent({
+        delay: stepIndex * 120, // sequential delay for shockwave feel
+        callback: () => {
+          dirs.forEach(dir => {
+            const cellX = hgx + dir.dx * stepIndex;
+            const cellY = hgy + dir.dy * stepIndex;
+
+            // Screen position of this cell
+            const px = cellX * GRID_SIZE + GRID_SIZE / 2;
+            const py = cellY * GRID_SIZE + GRID_SIZE / 2;
+
+            // 1. Spikes rising up
+            const spike = this.add.graphics();
+            spike.setDepth(14);
+            spike.setPosition(px, py + 12); // start slightly lower
+
+            // Draw a powerful geometric stone spike (diamond/triangle)
+            spike.fillStyle(0x735c45, 0.9); // Earthy brown
+            spike.fillTriangle(-12, 0, 12, 0, 0, -32); // Main spike
+            spike.fillStyle(0x8e745c, 0.95); // Highlight side
+            spike.fillTriangle(0, -32, 12, 0, 0, 0);
+            spike.lineStyle(1.0, 0xb89e82, 0.8);
+            spike.strokeTriangle(-12, 0, 12, 0, 0, -32);
+
+            // Pop up animation
+            this.tweens.add({
+              targets: spike,
+              y: py - 2, // rapid pop up
+              duration: 100,
+              ease: 'Back.easeOut',
+              onComplete: () => {
+                // Drop down and crumble after a short delay
+                this.time.addEvent({
+                  delay: 200,
+                  callback: () => {
+                    this.tweens.add({
+                      targets: spike,
+                      scaleY: 0,
+                      alpha: 0,
+                      duration: 150,
+                      onComplete: () => spike.destroy()
+                    });
+                  }
+                });
+              }
+            });
+
+            // 2. Earth cracks / lines on the ground
+            const crack = this.add.graphics();
+            crack.setDepth(13);
+            crack.setPosition(px, py);
+            crack.lineStyle(2, 0x3d2c1d, 0.85);
+            crack.beginPath();
+            crack.moveTo(Phaser.Math.Between(-12, -4), Phaser.Math.Between(-12, -4));
+            crack.lineTo(Phaser.Math.Between(-2, 2), Phaser.Math.Between(-2, 2));
+            crack.lineTo(Phaser.Math.Between(4, 12), Phaser.Math.Between(4, 12));
+            crack.strokePath();
+
+            // Crack fade out
+            this.tweens.add({
+              targets: crack,
+              alpha: 0,
+              duration: 800,
+              onComplete: () => crack.destroy()
+            });
+
+            // 3. Spreading dirt particles
+            for (let i = 0; i < 4; i++) {
+              const particle = this.add.circle(px + Phaser.Math.Between(-8, 8), py + Phaser.Math.Between(-8, 8), Phaser.Math.Between(3, 5), 0x5c4033, 0.9);
+              particle.setDepth(15);
+              const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+              const speed = Phaser.Math.Between(50, 120);
+
+              this.tweens.add({
+                targets: particle,
+                x: particle.x + Math.cos(angle) * speed * 0.3,
+                y: particle.y + Math.sin(angle) * speed * 0.3 - Phaser.Math.Between(5, 15), // upward dust
+                scale: 0,
+                alpha: 0,
+                duration: Phaser.Math.Between(300, 500),
+                onComplete: () => particle.destroy()
+              });
+            }
+
+            // 4. Damage any slimes standing on this cell
+            const slimesOnCell = this.slimes.filter(slime => {
+              if (!slime.sprite || !slime.sprite.active || slime.hp <= 0) return false;
+              
+              const isBoss = this.isBossEnemy(slime.enemyId);
+              if (isBoss) {
+                // Check intersection with the boss's 2x2 cells
+                for (let ox = 0; ox < 2; ox++) {
+                  for (let oy = 0; oy < 2; oy++) {
+                    if (slime.gridX + ox === cellX && slime.gridY + oy === cellY) {
+                      return true;
+                    }
+                  }
+                }
+                return false;
+              } else {
+                return slime.gridX === cellX && slime.gridY === cellY;
+              }
+            });
+
+            slimesOnCell.forEach(targetSlime => {
+              let baseDmg = damagePower - (targetSlime.defense || 0);
+              let logMsg = '';
+
+              if (targetSlime.specialAbility === 'immune_magic') {
+                baseDmg = 0;
+                logMsg = ` (魔法攻撃無効)`;
+              } else {
+                if (targetSlime.weaknessAttribute === 'earth') {
+                  const degree = targetSlime.weaknessDegree !== undefined ? targetSlime.weaknessDegree : 50;
+                  const weaknessBonus = Math.floor(Math.max(1, baseDmg) * degree / 100);
+                  baseDmg += weaknessBonus;
+                  logMsg = ` (弱点特効! +${weaknessBonus} [${degree}%])`;
+                }
+              }
+
+              const damage = Math.max(targetSlime.specialAbility === 'immune_magic' ? 0 : 1, baseDmg);
+              targetSlime.hp -= damage;
+
+              if (targetSlime.specialAbility === 'immune_magic') {
+                this.sendLog(`激しい地響きが命中！ しかし ${targetSlime.name || 'スライム'} には効果がない！ (魔法攻撃無効) 🛡️`, "combat");
+              } else {
+                this.sendLog(`激しい地響きが激突！ ${targetSlime.name || 'スライム'}に ${damage} ダメージ！${logMsg} 🧱`, "combat");
+              }
+
+              // Defeated logic
+              if (targetSlime.hp <= 0) {
+                if (targetSlime.id.startsWith('boss-')) {
+                  this.bossDefeated = true;
+                }
+                this.enemiesDefeated++;
+                this.updateStats(this.currentGridX, this.currentGridY, this.currentCamGridX, this.currentCamGridY);
+                
+                const gainedExp = (targetSlime.exp !== undefined && !isNaN(Number(targetSlime.exp))) ? Number(targetSlime.exp) : 2;
+                this.sendLog(`${targetSlime.name || 'スライム'}は亀裂に飲み込まれた！ 経験値を ${gainedExp} 獲得。`, "info");
+                this.heroExp += gainedExp;
+                this.checkLevelUp();
+
+                this.tweens.add({
+                  targets: targetSlime.sprite,
+                  scaleX: 0,
+                  scaleY: 0,
+                  alpha: 0,
+                  duration: 200,
+                  onComplete: () => {
+                    if (targetSlime.sprite && targetSlime.sprite.active) targetSlime.sprite.destroy();
+                  }
+                });
+
+                const idx = this.slimes.indexOf(targetSlime);
+                if (idx !== -1) {
+                  this.slimes.splice(idx, 1);
+                }
+              }
+            });
+          });
+          
+          if (stepIndex === 4) {
+            this.notifyStateChange(false);
+          }
+        }
+      });
+    }
   }
 
   public resetHero() {
