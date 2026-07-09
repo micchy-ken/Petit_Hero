@@ -551,18 +551,48 @@ export async function saveScenarioProgress(
   }
 ): Promise<void> {
   try {
+    let customItemsToSave = progress.customItems;
+    if (customItemsToSave === undefined) {
+      try {
+        const localSaveStr = localStorage.getItem(`save_${scenarioId}`);
+        if (localSaveStr) {
+          const parsed = JSON.parse(localSaveStr);
+          if (parsed && parsed.customItems) {
+            customItemsToSave = parsed.customItems;
+          }
+        }
+      } catch (e) {
+        console.error('Error preserving customItems:', e);
+      }
+    }
+
     const saveData = {
       position: progress.position,
       heroState: statusMode === 'individual' ? progress.heroState : undefined,
-      customItems: progress.customItems,
+      customItems: customItemsToSave,
       timestamp: Date.now()
     };
     localStorage.setItem(`save_${scenarioId}`, JSON.stringify(saveData));
 
     if (statusMode === 'shared') {
+      let sharedCustomItemsToSave = progress.customItems;
+      if (sharedCustomItemsToSave === undefined) {
+        try {
+          const sharedSaveStr = localStorage.getItem('save_shared_status');
+          if (sharedSaveStr) {
+            const parsed = JSON.parse(sharedSaveStr);
+            if (parsed && parsed.customItems) {
+              sharedCustomItemsToSave = parsed.customItems;
+            }
+          }
+        } catch (e) {
+          console.error('Error preserving shared customItems:', e);
+        }
+      }
+
       const sharedData = {
         heroState: progress.heroState,
-        customItems: progress.customItems,
+        customItems: sharedCustomItemsToSave,
         timestamp: Date.now()
       };
       localStorage.setItem('save_shared_status', JSON.stringify(sharedData));

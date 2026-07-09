@@ -756,7 +756,8 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
           equippedAccessoryId: heroState.equippedAccessoryId || null,
           baseAttack: heroState.baseAttack || 5,
           baseDefense: heroState.baseDefense || 0
-        }
+        },
+        customItems: customItemsRef.current || []
       });
     }, 2000); // Throttle writes by saving 2 seconds after last movement/change
 
@@ -845,7 +846,8 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
           equippedAccessoryId: heroState.equippedAccessoryId || null,
           baseAttack: heroState.baseAttack || 5,
           baseDefense: heroState.baseDefense || 0
-        }
+        },
+        customItems: customItemsRef.current || []
       });
     }
     navigate(path);
@@ -1541,128 +1543,135 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
                 </div>
 
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                  <h4 className="font-bold text-slate-800 border-b border-slate-200 pb-2 mb-3 flex items-center justify-between">
-                    <span className="flex items-center gap-2">
-                      <Package className="w-4 h-4 text-indigo-600" />
-                      アイテムボックス
-                    </span>
-                    <span className="text-xs font-normal text-slate-500 font-mono">
-                      {heroState.acquiredItems?.length || 0} 個
-                    </span>
-                  </h4>
-                  
-                  {heroState.acquiredItems && heroState.acquiredItems.length > 0 ? (
-                    <div className="grid grid-cols-1 gap-1.5 max-h-[180px] overflow-y-auto pr-1">
-                      {heroState.acquiredItems.map((itemId) => {
-                        const item = customItems.find(it => it.id === itemId);
-                        if (!item) return null;
-                        const isEquipped = heroState.equippedWeaponId === itemId || heroState.equippedArmorId === itemId || heroState.equippedAccessoryId === itemId;
-                        const isEquipment = item.type === 'equipment' || item.type === 'artifact';
+                  {(() => {
+                    const boxItems = (heroState.acquiredItems || []).filter(itemId => customItems.some(it => it.id === itemId));
+                    return (
+                      <>
+                        <h4 className="font-bold text-slate-800 border-b border-slate-200 pb-2 mb-3 flex items-center justify-between">
+                          <span className="flex items-center gap-2">
+                            <Package className="w-4 h-4 text-indigo-600" />
+                            アイテムボックス
+                          </span>
+                          <span className="text-xs font-normal text-slate-500 font-mono">
+                            {boxItems.length} 個
+                          </span>
+                        </h4>
                         
-                        let slot = item.equipmentType;
-                        if (!slot) {
-                          const name = item.name || '';
-                          if (name.includes('剣') || name.includes('ブレード') || name.includes('ソード') || name.includes('刀') || name.includes('斧') || name.includes('弓') || name.includes('杖') || name.includes('ハンマー') || name.includes('ウェポン') || name.includes('アクス') || name.includes('ダガー')) {
-                            slot = 'weapon';
-                          } else if (name.includes('鎧') || name.includes('盾') || name.includes('シールド') || name.includes('アーマー') || name.includes('兜') || name.includes('ヘルム') || name.includes('ローブ') || name.includes('ベスト') || name.includes('プレート')) {
-                            slot = 'armor';
-                          } else if (name.includes('指輪') || name.includes('リング') || name.includes('ネックレス') || name.includes('アンクレット') || name.includes('オーブ') || name.includes('アミュレット') || name.includes('靴') || name.includes('ブーツ') || name.includes('ベルト')) {
-                            slot = 'accessory';
-                          } else if ((item.attack || 0) > 0 && (!(item.defense || 0) || (item.attack || 0) > (item.defense || 0))) {
-                            slot = 'weapon';
-                          } else if ((item.defense || 0) > 0) {
-                            slot = 'armor';
-                          } else {
-                            slot = 'accessory';
-                          }
-                        }
-                        if (!slot) slot = 'weapon';
+                        {boxItems.length > 0 ? (
+                          <div className="grid grid-cols-1 gap-1.5 max-h-[180px] overflow-y-auto pr-1">
+                            {boxItems.map((itemId) => {
+                              const item = customItems.find(it => it.id === itemId);
+                              if (!item) return null;
+                              const isEquipped = heroState.equippedWeaponId === itemId || heroState.equippedArmorId === itemId || heroState.equippedAccessoryId === itemId;
+                              const isEquipment = item.type === 'equipment' || item.type === 'artifact';
+                              
+                              let slot = item.equipmentType;
+                              if (!slot) {
+                                const name = item.name || '';
+                                if (name.includes('剣') || name.includes('ブレード') || name.includes('ソード') || name.includes('刀') || name.includes('斧') || name.includes('弓') || name.includes('杖') || name.includes('ハンマー') || name.includes('ウェポン') || name.includes('アクス') || name.includes('ダガー')) {
+                                  slot = 'weapon';
+                                } else if (name.includes('鎧') || name.includes('盾') || name.includes('シールド') || name.includes('アーマー') || name.includes('兜') || name.includes('ヘルム') || name.includes('ローブ') || name.includes('ベスト') || name.includes('プレート')) {
+                                  slot = 'armor';
+                                } else if (name.includes('指輪') || name.includes('リング') || name.includes('ネックレス') || name.includes('アンクレット') || name.includes('オーブ') || name.includes('アミュレット') || name.includes('靴') || name.includes('ブーツ') || name.includes('ベルト')) {
+                                  slot = 'accessory';
+                                } else if ((item.attack || 0) > 0 && (!(item.defense || 0) || (item.attack || 0) > (item.defense || 0))) {
+                                  slot = 'weapon';
+                                } else if ((item.defense || 0) > 0) {
+                                  slot = 'armor';
+                                } else {
+                                  slot = 'accessory';
+                                }
+                              }
+                              if (!slot) slot = 'weapon';
 
-                        const slotLabels = { weapon: '武器', armor: '防具', accessory: '装飾' };
+                              const slotLabels = { weapon: '武器', armor: '防具', accessory: '装飾' };
 
-                        return (
-                          <div 
-                            key={itemId}
-                            className={`flex justify-between items-center p-2 rounded-lg border text-xs transition-all ${
-                              isEquipped 
-                                ? 'bg-indigo-50/70 border-indigo-300 ring-1 ring-indigo-200' 
-                                : 'bg-white border-slate-200 hover:border-slate-300'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2 overflow-hidden flex-1">
-                              <div className="relative flex-shrink-0 w-8 h-8 bg-slate-100 rounded flex items-center justify-center border border-slate-200">
-                                <span className="text-lg">{getEquipmentIcon(item)}</span>
-                                {isEquipped && (
-                                  <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] font-extrabold w-4 h-4 rounded-full border border-white flex items-center justify-center shadow-sm">
-                                    E
-                                  </span>
-                                )}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <div className="font-bold text-slate-800 truncate flex items-center gap-1">
-                                  {item.name}
-                                  {isEquipment && <span className="text-[9px] text-slate-500 font-normal">[{slotLabels[slot]}]</span>}
-                                  {isEquipped && <span className="text-[9px] text-indigo-600 font-extrabold">[E]</span>}
+                              return (
+                                <div 
+                                  key={itemId}
+                                  className={`flex justify-between items-center p-2 rounded-lg border text-xs transition-all ${
+                                    isEquipped 
+                                      ? 'bg-indigo-50/70 border-indigo-300 ring-1 ring-indigo-200' 
+                                      : 'bg-white border-slate-200 hover:border-slate-300'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2 overflow-hidden flex-1">
+                                    <div className="relative flex-shrink-0 w-8 h-8 bg-slate-100 rounded flex items-center justify-center border border-slate-200">
+                                      <span className="text-lg">{getEquipmentIcon(item)}</span>
+                                      {isEquipped && (
+                                        <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] font-extrabold w-4 h-4 rounded-full border border-white flex items-center justify-center shadow-sm">
+                                          E
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="font-bold text-slate-800 truncate flex items-center gap-1">
+                                        {item.name}
+                                        {isEquipment && <span className="text-[9px] text-slate-500 font-normal">[{slotLabels[slot]}]</span>}
+                                        {isEquipped && <span className="text-[9px] text-indigo-600 font-extrabold">[E]</span>}
+                                      </div>
+                                      <div className="text-[10px] text-slate-400 truncate">
+                                        {item.description || '説明なし'}
+                                      </div>
+                                      <div className="text-[10px] flex gap-1.5 mt-0.5 font-bold flex-wrap">
+                                        {item.attack !== undefined && item.attack > 0 && <span className="text-red-500">攻+{item.attack}</span>}
+                                        {item.defense !== undefined && item.defense > 0 && <span className="text-blue-500">防+{item.defense}</span>}
+                                        {item.attackElement && (
+                                          <span className="text-[9px] px-1 bg-red-50 text-red-600 rounded border border-red-100 font-extrabold">
+                                            {{ fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' }[item.attackElement] || item.attackElement}攻
+                                          </span>
+                                        )}
+                                        {item.defenseElement && (
+                                          <span className="text-[9px] px-1 bg-blue-50 text-blue-600 rounded border border-blue-100 font-extrabold">
+                                            {{ fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' }[item.defenseElement] || item.defenseElement}防
+                                          </span>
+                                        )}
+                                        {item.attackElement && item.attackElementEnchantValue !== undefined && item.attackElementEnchantValue > 0 && (
+                                          <span className="text-[9px] px-1 bg-amber-50 text-amber-700 rounded border border-amber-100 font-extrabold" title={`敵が${{ fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' }[item.attackElement] || item.attackElement}属性の時に攻撃力+${item.attackElementEnchantValue}`}>
+                                            付与攻:{{ fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' }[item.attackElement] || item.attackElement}+{item.attackElementEnchantValue}
+                                          </span>
+                                        )}
+                                        {item.defenseElement && item.defenseElementEnchantValue !== undefined && item.defenseElementEnchantValue > 0 && (
+                                          <span className="text-[9px] px-1 bg-cyan-50 text-cyan-700 rounded border border-cyan-100 font-extrabold" title={`敵が${{ fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' }[item.defenseElement] || item.defenseElement}属性の時に防御力+${item.defenseElementEnchantValue}`}>
+                                            付与防:{{ fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' }[item.defenseElement] || item.defenseElement}+{item.defenseElementEnchantValue}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  
+                                  {isEquipment && (
+                                    <button
+                                      onClick={() => {
+                                        if (sceneRef.current) {
+                                          if (isEquipped) {
+                                            sceneRef.current.equipItem(null, slot);
+                                          } else {
+                                            sceneRef.current.equipItem(itemId, slot);
+                                          }
+                                        }
+                                      }}
+                                      className={`text-[10px] font-bold px-2 py-1 rounded border transition-colors flex-shrink-0 ml-2 ${
+                                        isEquipped
+                                          ? 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100'
+                                          : 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 shadow-sm'
+                                      }`}
+                                    >
+                                      {isEquipped ? '外す' : '装備'}
+                                    </button>
+                                  )}
                                 </div>
-                                <div className="text-[10px] text-slate-400 truncate">
-                                  {item.description || '説明なし'}
-                                </div>
-                                <div className="text-[10px] flex gap-1.5 mt-0.5 font-bold flex-wrap">
-                                  {item.attack !== undefined && item.attack > 0 && <span className="text-red-500">攻+{item.attack}</span>}
-                                  {item.defense !== undefined && item.defense > 0 && <span className="text-blue-500">防+{item.defense}</span>}
-                                  {item.attackElement && (
-                                    <span className="text-[9px] px-1 bg-red-50 text-red-600 rounded border border-red-100 font-extrabold">
-                                      {{ fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' }[item.attackElement] || item.attackElement}攻
-                                    </span>
-                                  )}
-                                  {item.defenseElement && (
-                                    <span className="text-[9px] px-1 bg-blue-50 text-blue-600 rounded border border-blue-100 font-extrabold">
-                                      {{ fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' }[item.defenseElement] || item.defenseElement}防
-                                    </span>
-                                  )}
-                                  {item.attackElement && item.attackElementEnchantValue !== undefined && item.attackElementEnchantValue > 0 && (
-                                    <span className="text-[9px] px-1 bg-amber-50 text-amber-700 rounded border border-amber-100 font-extrabold" title={`敵が${{ fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' }[item.attackElement] || item.attackElement}属性の時に攻撃力+${item.attackElementEnchantValue}`}>
-                                      付与攻:{{ fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' }[item.attackElement] || item.attackElement}+{item.attackElementEnchantValue}
-                                    </span>
-                                  )}
-                                  {item.defenseElement && item.defenseElementEnchantValue !== undefined && item.defenseElementEnchantValue > 0 && (
-                                    <span className="text-[9px] px-1 bg-cyan-50 text-cyan-700 rounded border border-cyan-100 font-extrabold" title={`敵が${{ fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' }[item.defenseElement] || item.defenseElement}属性の時に防御力+${item.defenseElementEnchantValue}`}>
-                                      付与防:{{ fire: '火', water: '水', wind: '風', earth: '地', light: '光', dark: '闇' }[item.defenseElement] || item.defenseElement}+{item.defenseElementEnchantValue}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                            
-                            {isEquipment && (
-                              <button
-                                onClick={() => {
-                                  if (sceneRef.current) {
-                                    if (isEquipped) {
-                                      sceneRef.current.equipItem(null, slot);
-                                    } else {
-                                      sceneRef.current.equipItem(itemId, slot);
-                                    }
-                                  }
-                                }}
-                                className={`text-[10px] font-bold px-2 py-1 rounded border transition-colors flex-shrink-0 ml-2 ${
-                                  isEquipped
-                                    ? 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100'
-                                    : 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 shadow-sm'
-                                }`}
-                              >
-                                {isEquipped ? '外す' : '装備'}
-                              </button>
-                            )}
+                              );
+                            })}
                           </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="bg-white p-3 rounded-lg border border-slate-200 text-slate-400 text-center text-xs">
-                      アイテムボックスは空です。
-                    </div>
-                  )}
+                        ) : (
+                          <div className="bg-white p-3 rounded-lg border border-slate-200 text-slate-400 text-center text-xs">
+                            アイテムボックスは空です。
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
 
                 {/* スプライト生成ボタンをこちらへ移動 */}
