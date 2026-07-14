@@ -556,6 +556,7 @@ export default function MapEditorPage() {
     requiredSearchRate: null as number | null,
     requiredDefeatRate: null as number | null,
     playMode: 'always' as 'always' | 'once_per_map' | 'once_global',
+    flagOperations: [] as any[],
   });
   
   // アイテム配置用の状態（オブジェクト化）
@@ -933,7 +934,13 @@ export default function MapEditorPage() {
         if (newEventParams.requiredDefeatRate !== null) data.requiredDefeatRate = newEventParams.requiredDefeatRate;
         data.playMode = newEventParams.playMode;
         
-        newEvents.push({ x, y, type: newEventParams.type, data });
+        newEvents.push({ 
+          x, 
+          y, 
+          type: newEventParams.type, 
+          data, 
+          flagOperations: newEventParams.flagOperations || [] 
+        });
         handleUpdateCurrentMap({ events: newEvents });
       }
     } else if (placeMode === 'item') {
@@ -2164,19 +2171,29 @@ export default function MapEditorPage() {
                     })()}
 
                     {newEventParams.type === 'teleport' && (
-                      <div className="flex flex-col gap-1">
-                        <label className="text-xs text-slate-400 font-bold uppercase">移動先マップ</label>
-                        <select 
-                          value={newEventParams.targetMap}
-                          onChange={(e) => setNewEventParams({ ...newEventParams, targetMap: e.target.value })}
-                          className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
-                        >
-                          <option value="" disabled>選択してください</option>
-                          {maps.map(m => (
-                            <option key={m.id} value={m.id}>{m.name}</option>
-                          ))}
-                        </select>
-                      </div>
+                      <>
+                        <div className="flex flex-col gap-1">
+                          <label className="text-xs text-slate-400 font-bold uppercase">移動先マップ</label>
+                          <select 
+                            value={newEventParams.targetMap}
+                            onChange={(e) => setNewEventParams({ ...newEventParams, targetMap: e.target.value })}
+                            className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
+                          >
+                            <option value="" disabled>選択してください</option>
+                            {maps.map(m => (
+                              <option key={m.id} value={m.id}>{m.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="flex flex-col gap-1 mt-2">
+                          <label className="text-xs text-slate-400 font-bold uppercase">🚪 マップ移動時フラグ操作</label>
+                          <FlagOperationsEditor
+                            flagOperations={newEventParams.flagOperations || []}
+                            flags={flags}
+                            onChange={(ops) => setNewEventParams({ ...newEventParams, flagOperations: ops })}
+                          />
+                        </div>
+                      </>
                     )}
 
                     {newEventParams.type === 'monologue' && (
