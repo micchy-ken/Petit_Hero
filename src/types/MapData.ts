@@ -1,9 +1,13 @@
+import { FlagOperation } from './Flag';
+
 export interface MapEvent {
   x: number;
   y: number;
   type: string;
   data?: any;
+  flagOperations?: FlagOperation[];
 }
+
 
 export interface MapItem {
   x: number;
@@ -41,4 +45,6 @@ export interface MapData {
   clearConditions?: MapClearConditions;
   scenarioId?: string;
   forceManualMode?: boolean;
+  bossDefeatFlagOperations?: FlagOperation[];
+  enemySweepFlagOperations?: FlagOperation[];
 }

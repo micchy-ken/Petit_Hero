@@ -6,9 +6,11 @@ import { useNavigate, useLocation } from 'react-router-dom';
 
 import { MapData } from '../types/MapData';
 import { CustomEvent, ConversationNode } from '../types/CustomEvent';
-import { fetchCustomEventsFromFirestore, fetchCustomItemsFromFirestore, fetchMagicDataFromFirestore, saveScenarioProgress } from '../lib/dbService';
+import { fetchCustomEventsFromFirestore, fetchCustomItemsFromFirestore, fetchMagicDataFromFirestore, saveScenarioProgress, fetchFlagsFromFirestore } from '../lib/dbService';
 import { CustomItem } from '../types/CustomItem';
 import { PORTRAITS } from '../data/portraits';
+import { Flag } from '../types/Flag';
+import { applyFlagOperations } from '../lib/flagService';
 
 export interface PhaserGameContainerProps {
   isTestPlay?: boolean;
@@ -22,6 +24,7 @@ export interface PhaserGameContainerProps {
   initialPosition?: any;
   initialShowSettings?: boolean;
   initialCustomItems?: any[];
+  initialFlags?: any[];
 }
 
 const getEquipmentIcon = (item: any) => {
@@ -118,7 +121,8 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
   initialHeroState,
   initialPosition,
   initialShowSettings,
-  initialCustomItems
+  initialCustomItems,
+  initialFlags
 }) => {
   const gameContainerRef = useRef<HTMLDivElement>(null);
   const gameInstanceRef = useRef<Phaser.Game | null>(null);
@@ -128,6 +132,14 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
   const location = useLocation();
 
   const showSettingsOnInit = location.search.includes('settings=true') || location.hash.includes('settings=true');
+
+  // フラグ情報ステート
+  const [activeFlags, setActiveFlags] = useState<Flag[]>([]);
+  const activeFlagsRef = useRef<Flag[]>([]);
+
+  useEffect(() => {
+    activeFlagsRef.current = activeFlags;
+  }, [activeFlags]);
 
   // カスタムイベント再生ステータス
   const [customEvents, setCustomEvents] = useState<CustomEvent[]>([]);
@@ -169,6 +181,24 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
   const [activeNodeIndex, setActiveNodeIndex] = useState(0);
   const [onEventComplete, setOnEventComplete] = useState<(() => void) | null>(null);
 
+  // 会話イベントのノードがフラグ操作ノード（type === 'flag'）の場合に自動実行する
+  useEffect(() => {
+    if (!activeEvent) return;
+    const node = activeEvent.nodes[activeNodeIndex];
+    if (node && node.type === 'flag') {
+      if (node.flagOperations && node.flagOperations.length > 0) {
+        const updated = applyFlagOperations(activeFlagsRef.current, node.flagOperations);
+        setActiveFlags(updated);
+        activeFlagsRef.current = updated;
+        if (sceneRef.current) {
+          sceneRef.current.activeFlags = updated;
+        }
+      }
+      // フラグ適用後、自動的に次のノードに進む
+      handleNextConversationNode();
+    }
+  }, [activeEvent, activeNodeIndex]);
+
   const [isEventsLoaded, setIsEventsLoaded] = useState(false);
   const [isGameReady, setIsGameReady] = useState(false);
   const [customItems, setCustomItems] = useState<CustomItem[]>([]);
@@ -179,8 +209,9 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
     Promise.all([
       fetchCustomEventsFromFirestore(),
       fetchCustomItemsFromFirestore(),
-      fetchMagicDataFromFirestore()
-    ]).then(([eventsData, itemsData, magicsData]) => {
+      fetchMagicDataFromFirestore(),
+      fetchFlagsFromFirestore()
+    ]).then(([eventsData, itemsData, magicsData, flagsData]) => {
       setCustomEvents(eventsData);
       customEventsRef.current = eventsData;
       
@@ -194,14 +225,33 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
       setCustomItems(mergedItems);
       customItemsRef.current = mergedItems;
       magicsRef.current = magicsData;
+
+      // フラグの初期化
+      let finalFlags = [...flagsData];
+      if (initialFlags && initialFlags.length > 0) {
+        finalFlags = flagsData.map(masterFlag => {
+          const saved = initialFlags.find(sf => sf.id === masterFlag.id);
+          if (saved !== undefined) {
+            return {
+              ...masterFlag,
+              value: saved.value !== undefined ? saved.value : masterFlag.value
+            };
+          }
+          return masterFlag;
+        });
+      }
+      setActiveFlags(finalFlags);
+      activeFlagsRef.current = finalFlags;
+
       setIsEventsLoaded(true);
 
       if (sceneRef.current) {
         sceneRef.current.customItems = mergedItems;
         sceneRef.current.magics = magicsData;
+        sceneRef.current.activeFlags = finalFlags;
       }
     });
-  }, [initialCustomItems]);
+  }, [initialCustomItems, initialFlags]);
 
   // UIステータス
   const [showSettings, setShowSettings] = useState(initialShowSettings || showSettingsOnInit);
@@ -558,12 +608,18 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
         scene.isSettingsPaused = showSettings;
         scene.customItems = customItemsRef.current;
         scene.magics = magicsRef.current;
+        scene.activeFlags = activeFlagsRef.current;
         lastLevelRef.current = 1;
         
         if (showSettings) {
           scene.scene.pause();
         }
         
+        scene.setOnFlagsChange?.((updatedFlags) => {
+          setActiveFlags(updatedFlags);
+          activeFlagsRef.current = updatedFlags;
+        });
+
         scene.setOnCustomItemsChange?.((updatedItems) => {
           setCustomItems(updatedItems);
           customItemsRef.current = updatedItems;
@@ -757,7 +813,8 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
           baseAttack: heroState.baseAttack || 5,
           baseDefense: heroState.baseDefense || 0
         },
-        customItems: customItemsRef.current || []
+        customItems: customItemsRef.current || [],
+        flags: activeFlagsRef.current || []
       });
     }, 2000); // Throttle writes by saving 2 seconds after last movement/change
 
@@ -847,7 +904,8 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
           baseAttack: heroState.baseAttack || 5,
           baseDefense: heroState.baseDefense || 0
         },
-        customItems: customItemsRef.current || []
+        customItems: customItemsRef.current || [],
+        flags: activeFlagsRef.current || []
       });
     }
     navigate(path);
@@ -1006,7 +1064,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
                 className="w-full h-full"
               />
               {/* 会話イベントオーバーレイ */}
-              {activeEvent && activeEvent.nodes[activeNodeIndex] && (
+              {activeEvent && activeEvent.nodes[activeNodeIndex] && activeEvent.nodes[activeNodeIndex].type !== 'flag' && (
                 <div 
                   className="absolute inset-0 z-50 cursor-pointer"
                   onPointerDown={(e) => e.stopPropagation()}

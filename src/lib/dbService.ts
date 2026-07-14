@@ -8,6 +8,7 @@ import { HeroStatus } from '../types/HeroStatus';
 import { DefaultHeroStatus, setDynamicHeroStatus } from '../data/HeroStatusAssets';
 import { CustomItem } from '../types/CustomItem';
 import { Scenario } from '../types/Scenario';
+import { Flag } from '../types/Flag';
 
 export enum OperationType {
   CREATE = 'create',
@@ -512,6 +513,33 @@ export async function fetchScenariosFromFirestore(): Promise<Scenario[]> {
 /**
  * Save scenarios list to Firestore.
  */
+export async function fetchFlagsFromFirestore(): Promise<Flag[]> {
+  try {
+    const docRef = doc(db, 'config', 'flags');
+    const docSnap = await getDoc(docRef);
+    
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      return data.flags || [];
+    } else {
+      await setDoc(docRef, { flags: [] });
+      return [];
+    }
+  } catch (error) {
+    console.error('Error fetching flags from Firestore:', error);
+    return [];
+  }
+}
+
+export async function saveFlagsToFirestore(flags: Flag[]): Promise<void> {
+  const docRef = doc(db, 'config', 'flags');
+  await setDoc(docRef, { flags });
+  console.log('Saved flags to Firestore');
+}
+
+/**
+ * Save scenarios list to Firestore.
+ */
 export async function saveScenariosToFirestore(scenarios: Scenario[]): Promise<void> {
   const docRef = doc(db, 'config', 'scenarios');
   await setDoc(docRef, { scenarios });
@@ -548,6 +576,7 @@ export async function saveScenarioProgress(
       baseDefense: number;
     };
     customItems?: any[];
+    flags?: Flag[];
   }
 ): Promise<void> {
   try {
@@ -570,9 +599,11 @@ export async function saveScenarioProgress(
       position: progress.position,
       heroState: statusMode === 'individual' ? progress.heroState : undefined,
       customItems: customItemsToSave,
+      flags: progress.flags,
       timestamp: Date.now()
     };
     localStorage.setItem(`save_${scenarioId}`, JSON.stringify(saveData));
+
 
     if (statusMode === 'shared') {
       let sharedCustomItemsToSave = progress.customItems;
@@ -640,17 +671,20 @@ export async function loadScenarioProgress(
     baseDefense: number;
   } | null;
   customItems: any[] | null;
+  flags: Flag[] | null;
 }> {
   try {
     const localSaveStr = localStorage.getItem(`save_${scenarioId}`);
     let position = null;
     let heroState = null;
     let customItems = null;
+    let flags = null;
 
     if (localSaveStr) {
       const data = JSON.parse(localSaveStr);
       position = data.position || null;
       customItems = data.customItems || null;
+      flags = data.flags || null;
       if (statusMode === 'individual') {
         heroState = data.heroState || null;
       }
@@ -662,13 +696,14 @@ export async function loadScenarioProgress(
         const data = JSON.parse(sharedSaveStr);
         heroState = data.heroState || null;
         customItems = data.customItems || customItems || null;
+        // Shared mode doesn't strictly have shared flags, but we can load scenario flags first
       }
     }
 
-    return { position, heroState, customItems };
+    return { position, heroState, customItems, flags };
   } catch (error) {
     console.error('Error loading scenario progress locally:', error);
-    return { position: null, heroState: null, customItems: null };
+    return { position: null, heroState: null, customItems: null, flags: null };
   }
 }
 

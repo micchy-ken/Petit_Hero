@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Box, Gem, Zap, Plus, Map as MapIcon, Save, Settings, Play, Loader2, RefreshCw, Check, AlertCircle, Trash2, MessageSquare } from 'lucide-react';
+import { ArrowLeft, Box, Gem, Zap, Plus, Map as MapIcon, Save, Settings, Play, Loader2, RefreshCw, Check, AlertCircle, Trash2, MessageSquare, Edit } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { usePopup } from '../components/CustomPopupProvider';
 import { MapData } from '../types/MapData';
 import { getAvailableEnemies, getAvailableBosses } from '../data/EnemyAssets';
 import { PhaserGameContainer } from '../components/PhaserGameContainer';
 import { allMaps } from '../data/maps';
-import { fetchMapsFromFirestore, saveMapToFirestore, deleteMapFromFirestore, fetchEnemyAssetsFromFirestore, fetchCustomEventsFromFirestore, fetchCustomItemsFromFirestore, saveCustomEventsToFirestore, fetchScenariosFromFirestore, saveScenariosToFirestore, loadScenarioProgress, fetchMagicDataFromFirestore } from '../lib/dbService';
+import { fetchMapsFromFirestore, saveMapToFirestore, deleteMapFromFirestore, fetchEnemyAssetsFromFirestore, fetchCustomEventsFromFirestore, fetchCustomItemsFromFirestore, saveCustomEventsToFirestore, fetchScenariosFromFirestore, saveScenariosToFirestore, loadScenarioProgress, fetchMagicDataFromFirestore, fetchFlagsFromFirestore, saveFlagsToFirestore } from '../lib/dbService';
 import { Scenario } from '../types/Scenario';
+import { Flag, FlagType, FlagOperation } from '../types/Flag';
 import { CustomEvent, ConversationNode } from '../types/CustomEvent';
 import { CustomItem } from '../types/CustomItem';
 import { MagicData } from '../types/MagicData';
@@ -39,6 +40,184 @@ const getMapBgUrl = (bgImageName: string) => {
   const cleanName = bgImageName.startsWith('/') ? bgImageName.substring(1) : bgImageName;
   return BG_MAPPING[cleanName] || BG_MAPPING[bgImageName] || grassBg;
 };
+
+interface FlagOperationsEditorProps {
+  flagOperations: FlagOperation[] | undefined;
+  flags: Flag[];
+  onChange: (ops: FlagOperation[]) => void;
+  title?: string;
+}
+
+function FlagOperationsEditor({ flagOperations = [], flags, onChange, title }: FlagOperationsEditorProps) {
+  const addOperation = () => {
+    if (flags.length === 0) return;
+    const defaultFlag = flags[0];
+    const newOp: FlagOperation = {
+      flagId: defaultFlag.id,
+      action: defaultFlag.type === 'number' ? 'set' : 'toggle',
+      value: defaultFlag.type === 'number' ? 0 : false,
+    };
+    onChange([...flagOperations, newOp]);
+  };
+
+  const removeOperation = (idx: number) => {
+    const updated = [...flagOperations];
+    updated.splice(idx, 1);
+    onChange(updated);
+  };
+
+  const updateOperation = (idx: number, field: keyof FlagOperation, val: any) => {
+    const updated = [...flagOperations];
+    const op = { ...updated[idx], [field]: val };
+
+    if (field === 'flagId') {
+      const selectedFlag = flags.find(f => f.id === val);
+      if (selectedFlag) {
+        op.action = selectedFlag.type === 'number' ? 'set' : 'toggle';
+        op.value = selectedFlag.type === 'number' ? 0 : false;
+        op.index = selectedFlag.type === 'array_toggle' ? 0 : undefined;
+      }
+    }
+    
+    updated[idx] = op;
+    onChange(updated);
+  };
+
+  return (
+    <div className="flex flex-col gap-2 bg-slate-900/60 p-2 rounded border border-slate-700/50 mt-1">
+      {title && (
+        <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider border-b border-slate-800 pb-1 flex items-center justify-between mb-1">
+          <span>{title}</span>
+        </div>
+      )}
+      
+      {flagOperations.length === 0 ? (
+        <div className="text-center py-2 text-[10px] text-slate-500 italic">
+          フラグ操作が登録されていません
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2 max-h-[150px] overflow-y-auto pr-1">
+          {flagOperations.map((op, idx) => {
+            const currentFlag = flags.find(f => f.id === op.flagId);
+            return (
+              <div key={idx} className="bg-slate-900 border border-slate-800 p-2 rounded flex flex-col gap-2 relative">
+                <button
+                  type="button"
+                  onClick={() => removeOperation(idx)}
+                  className="absolute top-1.5 right-1.5 text-slate-500 hover:text-red-400 transition-colors"
+                  title="操作削除"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+                
+                <div className="grid grid-cols-2 gap-2 mt-1">
+                  <div className="flex flex-col gap-0.5">
+                    <label className="text-[8px] text-slate-400">対象フラグ</label>
+                    <select
+                      value={op.flagId}
+                      onChange={(e) => updateOperation(idx, 'flagId', e.target.value)}
+                      className="bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-[9px] text-slate-200 outline-none font-medium"
+                    >
+                      {flags.map(f => (
+                        <option key={f.id} value={f.id}>{f.name} ({f.id})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col gap-0.5">
+                    <label className="text-[8px] text-slate-400">操作アクション</label>
+                    <select
+                      value={op.action}
+                      onChange={(e) => updateOperation(idx, 'action', e.target.value)}
+                      className="bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-[9px] text-slate-200 outline-none font-medium"
+                    >
+                      {currentFlag?.type === 'number' ? (
+                        <>
+                          <option value="set">代入 (=)</option>
+                          <option value="add">加算 (+)</option>
+                          <option value="sub">減算 (-)</option>
+                        </>
+                      ) : (
+                        <>
+                          <option value="set">値を指定 (=)</option>
+                          <option value="toggle">反転 (Toggle)</option>
+                        </>
+                      )}
+                    </select>
+                  </div>
+                </div>
+
+                {currentFlag?.type === 'array_toggle' && (
+                  <div className="flex flex-col gap-0.5">
+                    <label className="text-[8px] text-slate-400">配列インデックス (1 〜 {currentFlag.arraySize || 1})</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max={currentFlag.arraySize || 1}
+                      value={(op.index ?? 0) + 1}
+                      onChange={(e) => {
+                        const val = Math.max(0, parseInt(e.target.value) - 1);
+                        updateOperation(idx, 'index', val);
+                      }}
+                      className="bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-[9px] text-slate-200 outline-none w-20"
+                    />
+                  </div>
+                )}
+
+                {op.action === 'set' && (
+                  <div className="flex flex-col gap-0.5">
+                    <label className="text-[8px] text-slate-400">設定する値</label>
+                    {currentFlag?.type === 'number' ? (
+                      <input
+                        type="number"
+                        value={op.value}
+                        onChange={(e) => updateOperation(idx, 'value', Number(e.target.value))}
+                        className="bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-[9px] text-slate-200 outline-none w-24"
+                      />
+                    ) : (
+                      <select
+                        value={op.value ? "true" : "false"}
+                        onChange={(e) => updateOperation(idx, 'value', e.target.value === "true")}
+                        className="bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-[9px] text-slate-200 outline-none w-24"
+                      >
+                        <option value="true">ON (True)</option>
+                        <option value="false">OFF (False)</option>
+                      </select>
+                    )}
+                  </div>
+                )}
+
+                {(op.action === 'add' || op.action === 'sub') && (
+                  <div className="flex flex-col gap-0.5">
+                    <label className="text-[8px] text-slate-400">加減算する値</label>
+                    <input
+                      type="number"
+                      value={op.value}
+                      onChange={(e) => updateOperation(idx, 'value', Number(e.target.value))}
+                      className="bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-[9px] text-slate-200 outline-none w-24"
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {flags.length > 0 ? (
+        <button
+          type="button"
+          onClick={addOperation}
+          className="py-1 px-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[9px] font-bold flex items-center justify-center gap-1 border border-slate-700 self-start transition-colors"
+        >
+          <Plus className="w-2.5 h-2.5 text-emerald-400" /> 操作を追加
+        </button>
+      ) : (
+        <div className="text-[9px] text-amber-400">※フラグが定義されていません。「フラグ」タブで作成してください。</div>
+      )}
+    </div>
+  );
+}
 
 const getEquipmentIcon = (item: any) => {
   if (!item) return '🎁';
@@ -100,6 +279,7 @@ export default function MapEditorPage() {
 
   // Scenario management states
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
+  const [flags, setFlags] = useState<Flag[]>([]);
   const [currentScenarioId, setCurrentScenarioId] = useState<string>(initialScenarioId);
   const [showNewScenarioForm, setShowNewScenarioForm] = useState(false);
   const [newScenarioName, setNewScenarioName] = useState('');
@@ -107,6 +287,12 @@ export default function MapEditorPage() {
   const [showEditScenarioForm, setShowEditScenarioForm] = useState(false);
   const [editScenarioName, setEditScenarioName] = useState('');
   const [editScenarioMode, setEditScenarioMode] = useState<'individual' | 'shared'>('individual');
+  
+  const [showNewFlagForm, setShowNewFlagForm] = useState(false);
+  const [newFlagName, setNewFlagName] = useState('');
+  const [newFlagType, setNewFlagType] = useState<FlagType>('toggle');
+  const [newFlagArraySize, setNewFlagArraySize] = useState(1);
+  const [editingFlagId, setEditingFlagId] = useState<string | null>(null);
 
   const loadMapsFromFirestoreDB = async (isInitial = false, targetScenarioId = currentScenarioId) => {
     try {
@@ -144,6 +330,10 @@ export default function MapEditorPage() {
       // Load custom magics
       const loadedMagics = await fetchMagicDataFromFirestore();
       setMagics(loadedMagics);
+
+      // Load flags
+      const loadedFlags = await fetchFlagsFromFirestore();
+      setFlags(loadedFlags);
 
       // Load maps for this scenario
       let loadedMaps = await fetchMapsFromFirestore(activeScenarioId);
@@ -273,6 +463,35 @@ export default function MapEditorPage() {
     }
   };
 
+  const handleCreateFlag = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newFlagName.trim()) return;
+
+    setIsLoading(true);
+    try {
+      const newFlag: Flag = {
+        id: `flag_${Date.now()}`,
+        name: newFlagName.trim(),
+        type: newFlagType,
+        value: newFlagType === 'toggle' ? false : (newFlagType === 'number' ? 0 : Array(newFlagArraySize).fill(false)),
+        arraySize: newFlagType === 'array_toggle' ? newFlagArraySize : undefined
+      };
+
+      const updated = [...flags, newFlag];
+      setFlags(updated);
+      await saveFlagsToFirestore(updated);
+      
+      setNewFlagName('');
+      setShowNewFlagForm(false);
+      
+      await showAlert(`フラグ「${newFlag.name}」を作成しました。`, '作成完了');
+    } catch (err: any) {
+      await showAlert('フラグ作成エラー: ' + err.message, '作成エラー');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadMapsFromFirestoreDB(true);
   }, []);
@@ -348,7 +567,7 @@ export default function MapEditorPage() {
   const [obstacleType, setObstacleType] = useState<'transparent' | 'pillar' | 'rock' | 'peg' | 'wall'>('transparent');
   
   // 新しい統合タブ管理
-  const [activeTab, setActiveTab] = useState<'settings' | 'placement' | 'events' | 'map'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'placement' | 'events' | 'flags' | 'map'>('settings');
 
   // モバイル初期表示時にマップを表示、およびPC版でのタブ状態補正
   useEffect(() => {
@@ -430,7 +649,7 @@ export default function MapEditorPage() {
     }));
   };
 
-  const updateNode = (eventId: string, nodeIndex: number, field: keyof ConversationNode, value: string) => {
+  const updateNode = (eventId: string, nodeIndex: number, field: keyof ConversationNode, value: any) => {
     setCustomEvents(customEvents.map(ev => {
       if (ev.id === eventId) {
         const newNodes = [...ev.nodes];
@@ -496,6 +715,7 @@ export default function MapEditorPage() {
     requiredSearchRate: number | null;
     requiredDefeatRate: number | null;
     playMode: 'always' | 'once_per_map' | 'once_global';
+    flagOperations?: FlagOperation[];
   } | null>(null);
 
   // アイテム個別編集状態
@@ -685,6 +905,7 @@ export default function MapEditorPage() {
            requiredSearchRate: ev.data?.requiredSearchRate ?? null,
            requiredDefeatRate: ev.data?.requiredDefeatRate ?? null,
            playMode: ev.data?.playMode || 'always',
+           flagOperations: ev.flagOperations || [],
          });
       } else {
         let data: any = {};
@@ -800,14 +1021,16 @@ export default function MapEditorPage() {
         x: editingEvent.x,
         y: editingEvent.y,
         type: editingEvent.type,
-        data
+        data,
+        flagOperations: editingEvent.flagOperations || []
       };
     } else {
       newEvents.push({
         x: editingEvent.x,
         y: editingEvent.y,
         type: editingEvent.type,
-        data
+        data,
+        flagOperations: editingEvent.flagOperations || []
       });
     }
 
@@ -1228,6 +1451,12 @@ export default function MapEditorPage() {
           >
             イベント
           </button>
+          <button 
+            onClick={() => setActiveTab('flags')}
+            className={`flex-1 py-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'flags' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400'}`}
+          >
+            フラグ
+          </button>
         </div>
       </div>
 
@@ -1554,6 +1783,32 @@ export default function MapEditorPage() {
                       />
                       <span className="text-sm font-bold">オート操作を強制解除 (手動操作のみ)</span>
                     </label>
+                  </div>
+
+                  {/* ボス撃破時フラグ操作 */}
+                  {currentMap.boss && (
+                    <div className="flex flex-col gap-1 mt-3 border-t border-slate-700 pt-3">
+                      <label className="text-xs text-slate-300 font-bold uppercase flex items-center gap-1">
+                        👹 ボス撃破時フラグ操作
+                      </label>
+                      <FlagOperationsEditor
+                        flagOperations={currentMap.bossDefeatFlagOperations || []}
+                        flags={flags}
+                        onChange={(ops) => handleUpdateCurrentMap({ bossDefeatFlagOperations: ops })}
+                      />
+                    </div>
+                  )}
+
+                  {/* 敵掃討時フラグ操作 */}
+                  <div className="flex flex-col gap-1 mt-3 border-t border-slate-700 pt-3">
+                    <label className="text-xs text-slate-300 font-bold uppercase flex items-center gap-1">
+                      ⚔️ 敵掃討時フラグ操作
+                    </label>
+                    <FlagOperationsEditor
+                      flagOperations={currentMap.enemySweepFlagOperations || []}
+                      flags={flags}
+                      onChange={(ops) => handleUpdateCurrentMap({ enemySweepFlagOperations: ops })}
+                    />
                   </div>
                 </div>
               </div>
@@ -2067,82 +2322,311 @@ export default function MapEditorPage() {
                         ) : (
                           <div className="flex flex-col gap-2.5 max-h-[220px] overflow-y-auto bg-slate-900/50 p-2 rounded border border-slate-700/50">
                             {ev.nodes.map((node, nodeIdx) => (
-                              <div key={node.id} className="bg-slate-900 border border-slate-700 p-2 rounded flex flex-col gap-2 relative">
+                              <div key={node.id} className="bg-slate-900 border border-slate-700 p-2.5 rounded flex flex-col gap-2 relative">
                                 <button
                                   onClick={() => removeNode(ev.id, nodeIdx)}
-                                  className="absolute top-1.5 right-1.5 text-slate-500 hover:text-red-400 transition-colors"
+                                  className="absolute top-1.5 right-1.5 text-slate-500 hover:text-red-400 transition-colors animate-in fade-in duration-200"
                                   title="ノード削除"
                                 >
                                   <Trash2 className="w-3 h-3" />
                                 </button>
 
-                                <div className="grid grid-cols-2 gap-2 mt-1">
-                                  <div className="flex flex-col gap-0.5">
-                                    <label className="text-[9px] text-slate-400 uppercase">話者グラフィック</label>
-                                    <div className="flex items-center gap-2">
-                                      {PORTRAITS[node.portraitId || 'none'] ? (
-                                        <div className="w-10 h-10 bg-slate-800 border border-indigo-500/50 rounded overflow-hidden shrink-0 flex items-center justify-center">
-                                          <img 
-                                            src={PORTRAITS[node.portraitId || 'none']} 
-                                            alt="portrait" 
-                                            className="w-full h-full object-cover animate-in fade-in duration-200"
-                                          />
-                                        </div>
-                                      ) : (
-                                        <div className="w-10 h-10 bg-slate-800 border border-slate-700 rounded shrink-0 flex items-center justify-center text-[9px] text-slate-500 font-bold">
-                                          なし
-                                        </div>
-                                      )}
-                                      <select
-                                        value={node.portraitId}
-                                        onChange={(e) => updateNode(ev.id, nodeIdx, 'portraitId', e.target.value)}
-                                        className="bg-slate-800 border border-slate-700 rounded px-1.5 py-1 text-[10px] text-slate-200 outline-none flex-1 font-medium"
-                                      >
-                                        <option value="none">グラフィックなし</option>
-                                        <optgroup label="キャラクター">
-                                          <option value="hero">主人公</option>
-                                          <option value="villager">村人 (中性/女性)</option>
-                                          <option value="villager_male">村人 (男)</option>
-                                          <option value="soldier">兵士</option>
-                                          <option value="princess">姫</option>
-                                          <option value="demon_king">魔王</option>
-                                        </optgroup>
-                                        <optgroup label="モンスター">
-                                          <option value="monster_slime">スライム</option>
-                                          <option value="monster_goblin">ゴブリン</option>
-                                          <option value="monster_golem">ゴーレム</option>
-                                          <option value="monster_dragon">ドラゴン</option>
-                                        </optgroup>
-                                      </select>
-                                    </div>
-                                  </div>
-                                  <div className="flex flex-col gap-0.5">
-                                    <label className="text-[9px] text-slate-400 uppercase">話者名</label>
-                                    <input
-                                      type="text"
-                                      value={node.speakerName}
-                                      onChange={(e) => updateNode(ev.id, nodeIdx, 'speakerName', e.target.value)}
-                                      className="bg-slate-800 border border-slate-700 rounded px-1.5 py-1 text-[10px] text-slate-200 outline-none"
-                                      placeholder="話者名"
-                                    />
-                                  </div>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="text-[10px] text-slate-400 font-bold">#{(nodeIdx + 1)} ノードタイプ:</span>
+                                  <select
+                                    value={node.type || 'message'}
+                                    onChange={(e) => updateNode(ev.id, nodeIdx, 'type', e.target.value)}
+                                    className="bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-[9px] text-indigo-300 outline-none font-bold"
+                                  >
+                                    <option value="message">💬 メッセージ (通常会話)</option>
+                                    <option value="flag">🚩 フラグ操作</option>
+                                  </select>
                                 </div>
 
-                                <div className="flex flex-col gap-0.5">
-                                  <label className="text-[9px] text-slate-400 uppercase">メッセージ内容</label>
-                                  <textarea
-                                    value={node.message}
-                                    onChange={(e) => updateNode(ev.id, nodeIdx, 'message', e.target.value)}
-                                    className="bg-slate-800 border border-slate-700 rounded px-1.5 py-1 text-[10px] text-slate-200 outline-none resize-none"
-                                    rows={2}
-                                    placeholder="セリフを入力してください"
-                                  />
-                                </div>
+                                {(node.type || 'message') === 'message' ? (
+                                  <div className="flex flex-col gap-2 animate-in fade-in duration-200">
+                                    <div className="grid grid-cols-2 gap-2 mt-1">
+                                      <div className="flex flex-col gap-0.5">
+                                        <label className="text-[9px] text-slate-400 uppercase">話者グラフィック</label>
+                                        <div className="flex items-center gap-2">
+                                          {PORTRAITS[node.portraitId || 'none'] ? (
+                                            <div className="w-10 h-10 bg-slate-800 border border-indigo-500/50 rounded overflow-hidden shrink-0 flex items-center justify-center">
+                                              <img 
+                                                src={PORTRAITS[node.portraitId || 'none']} 
+                                                alt="portrait" 
+                                                className="w-full h-full object-cover animate-in fade-in duration-200"
+                                              />
+                                            </div>
+                                          ) : (
+                                            <div className="w-10 h-10 bg-slate-800 border border-slate-700 rounded shrink-0 flex items-center justify-center text-[9px] text-slate-500 font-bold">
+                                              なし
+                                            </div>
+                                          )}
+                                          <select
+                                            value={node.portraitId}
+                                            onChange={(e) => updateNode(ev.id, nodeIdx, 'portraitId', e.target.value)}
+                                            className="bg-slate-800 border border-slate-700 rounded px-1.5 py-1 text-[10px] text-slate-200 outline-none flex-1 font-medium"
+                                          >
+                                            <option value="none">グラフィックなし</option>
+                                            <optgroup label="キャラクター">
+                                              <option value="hero">主人公</option>
+                                              <option value="villager">村人 (中性/女性)</option>
+                                              <option value="villager_male">村人 (男)</option>
+                                              <option value="soldier">兵士</option>
+                                              <option value="princess">姫</option>
+                                              <option value="demon_king">魔王</option>
+                                            </optgroup>
+                                            <optgroup label="モンスター">
+                                              <option value="monster_slime">スライム</option>
+                                              <option value="monster_goblin">ゴブリン</option>
+                                              <option value="monster_golem">ゴーレム</option>
+                                              <option value="monster_dragon">ドラゴン</option>
+                                            </optgroup>
+                                          </select>
+                                        </div>
+                                      </div>
+                                      <div className="flex flex-col gap-0.5">
+                                        <label className="text-[9px] text-slate-400 uppercase">話者名</label>
+                                        <input
+                                          type="text"
+                                          value={node.speakerName}
+                                          onChange={(e) => updateNode(ev.id, nodeIdx, 'speakerName', e.target.value)}
+                                          className="bg-slate-800 border border-slate-700 rounded px-1.5 py-1 text-[10px] text-slate-200 outline-none"
+                                          placeholder="話者名"
+                                        />
+                                      </div>
+                                    </div>
+
+                                    <div className="flex flex-col gap-0.5">
+                                      <label className="text-[9px] text-slate-400 uppercase">メッセージ内容</label>
+                                      <textarea
+                                        value={node.message}
+                                        onChange={(e) => updateNode(ev.id, nodeIdx, 'message', e.target.value)}
+                                        className="bg-slate-800 border border-slate-700 rounded px-1.5 py-1 text-[10px] text-slate-200 outline-none resize-none"
+                                        rows={2}
+                                        placeholder="セリフを入力してください"
+                                      />
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="animate-in fade-in duration-200">
+                                    <FlagOperationsEditor
+                                      flagOperations={node.flagOperations || []}
+                                      flags={flags}
+                                      onChange={(updatedOps) => updateNode(ev.id, nodeIdx, 'flagOperations', updatedOps)}
+                                      title="ノード実行時のフラグ操作"
+                                    />
+                                  </div>
+                                )}
                               </div>
                             ))}
                           </div>
                         )}
                       </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 4. フラグ管理タブ */}
+          {activeTab === 'flags' && (
+            <div className="flex flex-col gap-4 animate-in fade-in duration-200">
+              <div className="flex items-center justify-between border-b border-slate-600 pb-2">
+                <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-emerald-400" /> フラグ一覧
+                </h2>
+                <button
+                  onClick={() => setShowNewFlagForm(!showNewFlagForm)}
+                  className="flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-bold transition-colors"
+                >
+                  <Plus className="w-3 h-3" /> 新規作成
+                </button>
+              </div>
+
+              {showNewFlagForm && (
+                <div className="bg-slate-800/80 p-3 rounded-lg border border-emerald-500/30">
+                  <form onSubmit={handleCreateFlag} className="space-y-3">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] text-slate-400 font-bold font-mono">フラグ名</label>
+                      <input
+                        type="text"
+                        required
+                        value={newFlagName}
+                        onChange={(e) => setNewFlagName(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1.5 text-xs text-slate-200 outline-none"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] text-slate-400 font-bold font-mono">フラグ種類</label>
+                      <select
+                        value={newFlagType}
+                        onChange={(e) => setNewFlagType(e.target.value as FlagType)}
+                        className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1.5 text-xs text-slate-200 outline-none"
+                      >
+                        <option value="toggle">トグル</option>
+                        <option value="number">数字</option>
+                        <option value="array_toggle">配列トグル</option>
+                      </select>
+                    </div>
+                    {newFlagType === 'array_toggle' && (
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-[10px] text-slate-400 font-bold font-mono">配列サイズ</label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="20"
+                            value={newFlagArraySize}
+                            onChange={(e) => setNewFlagArraySize(parseInt(e.target.value))}
+                            className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1.5 text-xs text-slate-200 outline-none"
+                          />
+                        </div>
+                    )}
+                    <div className="flex gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowNewFlagForm(false)}
+                        className="flex-1 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded text-xs font-bold"
+                      >
+                        キャンセル
+                      </button>
+                      <button
+                        type="submit"
+                        className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-bold"
+                      >
+                        作成
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              {flags.length === 0 ? (
+                <div className="text-center p-6 bg-slate-800/50 rounded-lg border border-slate-700 text-slate-400 text-xs">
+                  登録されているフラグはありません。
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {flags.map((flag, idx) => (
+                    <div key={flag.id} className="bg-slate-800 border border-slate-700 p-2.5 rounded-lg flex flex-col gap-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-mono text-emerald-400 bg-emerald-900/30 px-1.5 py-0.5 rounded border border-emerald-800/50">{flag.id}</span>
+                          <span className="text-[10px] font-bold text-slate-300 bg-slate-700 px-1.5 py-0.5 rounded">
+                            {flag.type === 'toggle' ? 'トグル' : flag.type === 'number' ? '数字' : `配列トグル (${flag.arraySize})`}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => {
+                              setEditingFlagId(editingFlagId === flag.id ? null : flag.id);
+                            }}
+                            className={`p-1 transition-colors ${editingFlagId === flag.id ? 'text-emerald-400' : 'text-slate-500 hover:text-emerald-400'}`}
+                            title="詳細編集"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              if(window.confirm('このフラグを削除しますか？')) {
+                                const newFlags = [...flags];
+                                newFlags.splice(idx, 1);
+                                setFlags(newFlags);
+                                saveFlagsToFirestore(newFlags);
+                                if (editingFlagId === flag.id) {
+                                  setEditingFlagId(null);
+                                }
+                              }
+                            }}
+                            className="p-1 text-slate-500 hover:text-red-400 transition-colors"
+                            title="フラグ削除"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[9px] text-slate-400 font-bold font-mono">表示名</label>
+                        <input
+                          type="text"
+                          value={flag.name}
+                          onChange={(e) => {
+                            const newFlags = [...flags];
+                            newFlags[idx].name = e.target.value;
+                            setFlags(newFlags);
+                          }}
+                          onBlur={() => saveFlagsToFirestore(flags)}
+                          className="w-full bg-slate-900 border border-slate-700 focus:border-emerald-500 rounded outline-none px-2 py-1 text-xs font-bold text-slate-200"
+                        />
+                      </div>
+
+                      {editingFlagId === flag.id && (
+                        <div className="flex flex-col gap-2 mt-1 bg-slate-900/50 p-2 rounded border border-slate-700/50 text-xs">
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[9px] text-slate-400 font-bold font-mono">フラグ種類</label>
+                            <select
+                              value={flag.type}
+                              onChange={(e) => {
+                                const newType = e.target.value as FlagType;
+                                const newFlags = [...flags];
+                                const current = { ...newFlags[idx] };
+                                current.type = newType;
+                                if (newType === 'toggle') {
+                                  current.value = false;
+                                  delete current.arraySize;
+                                } else if (newType === 'number') {
+                                  current.value = 0;
+                                  delete current.arraySize;
+                                } else if (newType === 'array_toggle') {
+                                  const size = current.arraySize || 5;
+                                  current.arraySize = size;
+                                  current.value = Array(size).fill(false);
+                                }
+                                newFlags[idx] = current;
+                                setFlags(newFlags);
+                                saveFlagsToFirestore(newFlags);
+                              }}
+                              className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 outline-none"
+                            >
+                              <option value="toggle">トグル</option>
+                              <option value="number">数字</option>
+                              <option value="array_toggle">配列トグル</option>
+                            </select>
+                          </div>
+
+                          {flag.type === 'array_toggle' && (
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[9px] text-slate-400 font-bold font-mono">配列サイズ (1〜20)</label>
+                              <input
+                                type="number"
+                                min="1"
+                                max="20"
+                                value={flag.arraySize || 5}
+                                onChange={(e) => {
+                                  const size = Math.max(1, Math.min(20, parseInt(e.target.value) || 1));
+                                  const newFlags = [...flags];
+                                  const current = { ...newFlags[idx] };
+                                  current.arraySize = size;
+                                  
+                                  // Adjust existing array values
+                                  const currentArray = Array.isArray(current.value) ? current.value : [];
+                                  const newArray = Array(size).fill(false);
+                                  for (let i = 0; i < Math.min(currentArray.length, size); i++) {
+                                    newArray[i] = currentArray[i];
+                                  }
+                                  current.value = newArray;
+                                  
+                                  newFlags[idx] = current;
+                                  setFlags(newFlags);
+                                }}
+                                onBlur={() => saveFlagsToFirestore(flags)}
+                                className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 outline-none"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -2470,19 +2954,30 @@ export default function MapEditorPage() {
               })()}
 
               {editingEvent.type === 'teleport' && (
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-300 font-bold uppercase">移動先マップ</label>
-                  <select 
-                    value={editingEvent.targetMap}
-                    onChange={(e) => setEditingEvent({ ...editingEvent, targetMap: e.target.value })}
-                    className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 outline-none focus:border-emerald-500"
-                  >
-                    <option value="" disabled>選択してください</option>
-                    {maps.map(m => (
-                      <option key={m.id} value={m.id}>{m.name}</option>
-                    ))}
-                  </select>
-                </div>
+                <>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-slate-300 font-bold uppercase">移動先マップ</label>
+                    <select 
+                      value={editingEvent.targetMap}
+                      onChange={(e) => setEditingEvent({ ...editingEvent, targetMap: e.target.value })}
+                      className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                    >
+                      <option value="" disabled>選択してください</option>
+                      {maps.map(m => (
+                        <option key={m.id} value={m.id}>{m.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col gap-1 mt-2">
+                    <label className="text-xs text-slate-300 font-bold uppercase">🚪 マップ移動時フラグ操作</label>
+                    <FlagOperationsEditor
+                      flagOperations={editingEvent.flagOperations || []}
+                      flags={flags}
+                      onChange={(ops) => setEditingEvent({ ...editingEvent, flagOperations: ops })}
+                    />
+                  </div>
+                </>
               )}
 
               {editingEvent.type === 'monologue' && (

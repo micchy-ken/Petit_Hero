@@ -22,6 +22,7 @@ import caveBg1024 from '../assets/images/cave_bg_1024_1783554724524.jpg';
 import desertBg1024 from '../assets/images/desert_bg_1024_1783554709282.jpg';
 import vastCaveBg from '../assets/images/vast_cave_bg_1783555031253.jpg';
 import vastDesertBg from '../assets/images/vast_desert_bg_1783555019080.jpg';
+import { applyFlagOperations } from '../lib/flagService';
 
 export type Direction = 'up' | 'down' | 'left' | 'right' | 'up-left' | 'up-right' | 'down-left' | 'down-right' | 'idle';
 
@@ -241,13 +242,20 @@ export class GridMovementScene extends Phaser.Scene {
   private bossSpawned: boolean = false;
   private _bossDefeated: boolean = false;
   private defeatedBosses: Set<string> = new Set();
+  private sweptMaps: Set<string> = new Set();
   private get bossDefeated(): boolean {
     return this.mapData?.id ? this.defeatedBosses.has(this.mapData.id) : this._bossDefeated;
   }
   private set bossDefeated(val: boolean) {
+    const wasDefeated = this.bossDefeated;
     this._bossDefeated = val;
     if (val && this.mapData?.id) {
       this.defeatedBosses.add(this.mapData.id);
+      // Trigger boss defeat flag operations if newly defeated
+      if (!wasDefeated && this.mapData.bossDefeatFlagOperations && this.mapData.bossDefeatFlagOperations.length > 0) {
+        this.sendLog(`👹 ボス撃破時のフラグ操作を実行します。`, 'system');
+        this.applySceneFlags(this.mapData.bossDefeatFlagOperations);
+      }
     } else if (!val && this.mapData?.id) {
       this.defeatedBosses.delete(this.mapData.id);
     }
@@ -264,6 +272,35 @@ export class GridMovementScene extends Phaser.Scene {
 
   constructor() {
     super({ key: 'GridMovementScene' });
+  }
+
+  public activeFlags: any[] = [];
+  public onFlagsChangeCallback?: (flags: any[]) => void;
+
+  public setOnFlagsChange(callback: (flags: any[]) => void) {
+    this.onFlagsChangeCallback = callback;
+  }
+
+  public applySceneFlags(operations: any[]) {
+    if (!operations || operations.length === 0) return;
+    const updated = applyFlagOperations(this.activeFlags, operations);
+    this.activeFlags = updated;
+    if (this.onFlagsChangeCallback) {
+      this.onFlagsChangeCallback(updated);
+    }
+  }
+
+  public checkEnemySweep() {
+    if (!this.mapData?.id || this.sweptMaps.has(this.mapData.id)) return;
+
+    const rate = this.getDefeatRate();
+    if (rate >= 100) {
+      this.sweptMaps.add(this.mapData.id);
+      if (this.mapData.enemySweepFlagOperations && this.mapData.enemySweepFlagOperations.length > 0) {
+        this.sendLog(`⚔️ 敵掃討（全滅）時のフラグ操作を実行します。`, 'system');
+        this.applySceneFlags(this.mapData.enemySweepFlagOperations);
+      }
+    }
   }
 
   public onCustomEventCallback?: (eventId: string, onComplete: () => void) => void;
@@ -2243,6 +2280,7 @@ export class GridMovementScene extends Phaser.Scene {
             this.bossDefeated = true;
           }
           this.enemiesDefeated++;
+          this.checkEnemySweep();
           this.updateStats(this.currentGridX, this.currentGridY, this.currentCamGridX, this.currentCamGridY);
           
           const gainedExp = (slime.exp !== undefined && !isNaN(Number(slime.exp))) ? Number(slime.exp) : 2;
@@ -3158,6 +3196,12 @@ export class GridMovementScene extends Phaser.Scene {
         this.pointerTargetGridX = null;
         this.pointerTargetGridY = null;
         this.notifyStateChange(false);
+
+        // マップ移動時のフラグ操作を適用
+        if (event.flagOperations && event.flagOperations.length > 0) {
+          this.applySceneFlags(event.flagOperations);
+        }
+
         if (this.onTestPlayClear) {
           this.onTestPlayClear();
         } else if (this.onTeleport && eventData.targetMap) {
@@ -4173,6 +4217,7 @@ export class GridMovementScene extends Phaser.Scene {
             this.bossDefeated = true;
           }
           this.enemiesDefeated++;
+          this.checkEnemySweep();
           this.updateStats(this.currentGridX, this.currentGridY, this.currentCamGridX, this.currentCamGridY);
           
           const gainedExp = (targetSlime.exp !== undefined && !isNaN(Number(targetSlime.exp))) ? Number(targetSlime.exp) : 2;
@@ -4435,6 +4480,7 @@ export class GridMovementScene extends Phaser.Scene {
           this.bossDefeated = true;
         }
         this.enemiesDefeated++;
+        this.checkEnemySweep();
         this.updateStats(this.currentGridX, this.currentGridY, this.currentCamGridX, this.currentCamGridY);
         
         const gainedExp = (targetSlime.exp !== undefined && !isNaN(Number(targetSlime.exp))) ? Number(targetSlime.exp) : 2;
@@ -4630,6 +4676,7 @@ export class GridMovementScene extends Phaser.Scene {
         this.bossDefeated = true;
       }
       this.enemiesDefeated++;
+      this.checkEnemySweep();
       this.updateStats(this.currentGridX, this.currentGridY, this.currentCamGridX, this.currentCamGridY);
       
       const gainedExp = (targetSlime.exp !== undefined && !isNaN(Number(targetSlime.exp))) ? Number(targetSlime.exp) : 2;
@@ -4850,6 +4897,7 @@ export class GridMovementScene extends Phaser.Scene {
                   this.bossDefeated = true;
                 }
                 this.enemiesDefeated++;
+                this.checkEnemySweep();
                 this.updateStats(this.currentGridX, this.currentGridY, this.currentCamGridX, this.currentCamGridY);
                 
                 const gainedExp = (targetSlime.exp !== undefined && !isNaN(Number(targetSlime.exp))) ? Number(targetSlime.exp) : 2;
