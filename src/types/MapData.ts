@@ -6,6 +6,9 @@ export interface MapEvent {
   type: string;
   data?: any;
   flagOperations?: FlagOperation[];
+  requiredFlagId?: string;
+  requiredFlagValue?: any;
+  requiredFlagIndex?: number;
 }
 
 
@@ -14,6 +17,9 @@ export interface MapItem {
   y: number;
   itemId: string;
   graphic?: string;
+  requiredFlagId?: string;
+  requiredFlagValue?: any;
+  requiredFlagIndex?: number;
 }
 
 export interface MapObstacle {

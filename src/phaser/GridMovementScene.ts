@@ -22,7 +22,7 @@ import caveBg1024 from '../assets/images/cave_bg_1024_1783554724524.jpg';
 import desertBg1024 from '../assets/images/desert_bg_1024_1783554709282.jpg';
 import vastCaveBg from '../assets/images/vast_cave_bg_1783555031253.jpg';
 import vastDesertBg from '../assets/images/vast_desert_bg_1783555019080.jpg';
-import { applyFlagOperations } from '../lib/flagService';
+import { applyFlagOperations, checkFlagCondition } from '../lib/flagService';
 
 export type Direction = 'up' | 'down' | 'left' | 'right' | 'up-left' | 'up-right' | 'down-left' | 'down-right' | 'idle';
 
@@ -140,6 +140,11 @@ export class GridMovementScene extends Phaser.Scene {
   }
 
   private canPlayEvent(event: any): boolean {
+    // フラグ条件のチェック
+    if (event.requiredFlagId && !checkFlagCondition(this.activeFlags, event.requiredFlagId, event.requiredFlagValue, event.requiredFlagIndex)) {
+      return false;
+    }
+
     const mode = event.data?.playMode || 'always';
     if (mode === 'always') return true;
     const uniqueId = `${this.mapData?.id}_${event.x}_${event.y}_${event.type}`;
@@ -1719,6 +1724,9 @@ export class GridMovementScene extends Phaser.Scene {
             const dRate = this.getDefeatRate();
 
             const activeGoals = this.mapData.events.filter((event: any) => {
+              if (event.requiredFlagId && !checkFlagCondition(this.activeFlags, event.requiredFlagId, event.requiredFlagValue, event.requiredFlagIndex)) {
+                return false;
+              }
               const isTeleportGate = event.type === 'teleport' || (event.type === 'start_point' && event.data?.fromMap);
               if (!isTeleportGate) return false;
               const eventData = event.data || {};
@@ -3350,7 +3358,7 @@ export class GridMovementScene extends Phaser.Scene {
        let returnPortalPos = null;
        if (fromMapId) {
          startEvent = this.mapData.events?.find(
-           (e: any) => e.type === 'start_point' && e.data?.fromMap === fromMapId
+           (e: any) => e.type === 'start_point' && e.data?.fromMap === fromMapId && checkFlagCondition(this.activeFlags, e.requiredFlagId, e.requiredFlagValue, e.requiredFlagIndex)
          );
        }
 
@@ -3378,13 +3386,13 @@ export class GridMovementScene extends Phaser.Scene {
        // 2. なければ、設定なし(fromMapがnullまたは空文字列)の初期値を探す
        if (!startEvent) {
          startEvent = this.mapData.events?.find(
-           (e: any) => e.type === 'start_point' && (!e.data || e.data.fromMap === null || e.data.fromMap === '')
+           (e: any) => e.type === 'start_point' && (!e.data || e.data.fromMap === null || e.data.fromMap === '') && checkFlagCondition(this.activeFlags, e.requiredFlagId, e.requiredFlagValue, e.requiredFlagIndex)
          );
        }
 
        // 3. それでもなければ、何かしらの最初の start_point を使用
        if (!startEvent) {
-         startEvent = this.mapData.events?.find((e: any) => e.type === 'start_point');
+         startEvent = this.mapData.events?.find((e: any) => e.type === 'start_point' && checkFlagCondition(this.activeFlags, e.requiredFlagId, e.requiredFlagValue, e.requiredFlagIndex));
        }
 
         /* // returnPortalPos is already calculated above
@@ -3796,6 +3804,11 @@ export class GridMovementScene extends Phaser.Scene {
     this.mapData.items.forEach((item: any) => {
       // Check if item has already been collected
       if (this.acquiredItems && this.acquiredItems.has(item.itemId)) {
+        return;
+      }
+
+      // フラグ条件のチェック
+      if (item.requiredFlagId && !checkFlagCondition(this.activeFlags, item.requiredFlagId, item.requiredFlagValue, item.requiredFlagIndex)) {
         return;
       }
 
@@ -4966,7 +4979,12 @@ export class GridMovementScene extends Phaser.Scene {
       this.teleportPortals = [];
     }
 
-    const teleportEvents = this.mapData.events.filter((e: any) => e.type === 'teleport' || (e.type === 'start_point' && e.data && e.data.fromMap));
+    const teleportEvents = this.mapData.events.filter((e: any) => {
+      if (e.requiredFlagId && !checkFlagCondition(this.activeFlags, e.requiredFlagId, e.requiredFlagValue, e.requiredFlagIndex)) {
+        return false;
+      }
+      return e.type === 'teleport' || (e.type === 'start_point' && e.data && e.data.fromMap);
+    });
 
     const expRate = (this.visitedGrids.size / this.totalGrids) * 100;
     const sRate = (this.viewedGrids.size / this.totalGrids) * 100;

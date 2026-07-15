@@ -219,6 +219,142 @@ function FlagOperationsEditor({ flagOperations = [], flags, onChange, title }: F
   );
 }
 
+interface FlagConditionEditorProps {
+  requiredFlagId: string;
+  requiredFlagValue: string;
+  requiredFlagIndex: number;
+  flags: Flag[];
+  onChange: (updates: { requiredFlagId: string; requiredFlagValue: string; requiredFlagIndex: number }) => void;
+  title?: string;
+}
+
+function FlagConditionEditor({
+  requiredFlagId,
+  requiredFlagValue,
+  requiredFlagIndex,
+  flags,
+  onChange,
+  title = "起動/出現条件フラグ"
+}: FlagConditionEditorProps) {
+  if (!flags || flags.length === 0) {
+    return (
+      <div className="p-3 bg-slate-800/40 border border-slate-700/60 rounded-lg text-xs text-slate-400">
+        条件に使用できるフラグが登録されていません。フラグ管理タブからフラグを追加してください。
+      </div>
+    );
+  }
+
+  const selectedFlag = flags.find(f => f.id === requiredFlagId);
+
+  return (
+    <div className="space-y-3 p-3 bg-slate-800/40 border border-slate-700/60 rounded-lg mt-2">
+      <div className="flex items-center justify-between">
+        <label className="text-xs font-bold text-slate-300 block">{title}</label>
+        {requiredFlagId && (
+          <button
+            type="button"
+            onClick={() => onChange({ requiredFlagId: '', requiredFlagValue: 'true', requiredFlagIndex: 0 })}
+            className="text-[10px] text-red-400 hover:text-red-300 transition-colors font-medium"
+          >
+            条件をクリア
+          </button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 gap-2">
+        {/* フラグの選択 */}
+        <div>
+          <select
+            value={requiredFlagId}
+            onChange={(e) => {
+              const val = e.target.value;
+              const nextFlag = flags.find(f => f.id === val);
+              let defaultVal = 'true';
+              if (nextFlag?.type === 'number') {
+                defaultVal = '0';
+              }
+              onChange({
+                requiredFlagId: val,
+                requiredFlagValue: defaultVal,
+                requiredFlagIndex: 0
+              });
+            }}
+            className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+          >
+            <option value="">-- 条件なし (常に実行/表示) --</option>
+            {flags.map(f => (
+              <option key={f.id} value={f.id}>
+                {f.name} ({f.type === 'toggle' ? 'トグル' : f.type === 'number' ? '数値' : `配列[${f.arraySize || 0}]`})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {selectedFlag && (
+          <div className="grid grid-cols-2 gap-2 mt-1">
+            {/* 配列インデックスの入力 */}
+            {selectedFlag.type === 'array_toggle' && (
+              <div className="col-span-2">
+                <label className="text-[10px] font-semibold text-slate-400 block mb-1">
+                  配列インデックス (0 〜 {(selectedFlag.arraySize || 1) - 1})
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max={(selectedFlag.arraySize || 1) - 1}
+                  value={requiredFlagIndex}
+                  onChange={(e) => {
+                    const idx = Math.max(0, Math.min((selectedFlag.arraySize || 1) - 1, Number(e.target.value)));
+                    onChange({
+                      requiredFlagId,
+                      requiredFlagValue,
+                      requiredFlagIndex: idx
+                    });
+                  }}
+                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+            )}
+
+            {/* 期待される値の入力 */}
+            <div className="col-span-2">
+              <label className="text-[10px] font-semibold text-slate-400 block mb-1">
+                実行条件（フラグ値がこの値のとき実行/表示）
+              </label>
+              {selectedFlag.type === 'number' ? (
+                <input
+                  type="number"
+                  value={requiredFlagValue}
+                  onChange={(e) => onChange({
+                    requiredFlagId,
+                    requiredFlagValue: e.target.value,
+                    requiredFlagIndex
+                  })}
+                  className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                  placeholder="期待する数値"
+                />
+              ) : (
+                <select
+                  value={requiredFlagValue}
+                  onChange={(e) => onChange({
+                    requiredFlagId,
+                    requiredFlagValue: e.target.value,
+                    requiredFlagIndex
+                  })}
+                  className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="true">ON (true)</option>
+                  <option value="false">OFF (false)</option>
+                </select>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const getEquipmentIcon = (item: any) => {
   if (!item) return '🎁';
   if (item.type === 'equipment') {
@@ -557,12 +693,18 @@ export default function MapEditorPage() {
     requiredDefeatRate: null as number | null,
     playMode: 'always' as 'always' | 'once_per_map' | 'once_global',
     flagOperations: [] as any[],
+    requiredFlagId: '',
+    requiredFlagValue: 'true',
+    requiredFlagIndex: 0,
   });
   
   // アイテム配置用の状態（オブジェクト化）
   const [newItemParams, setNewItemParams] = useState({
     itemId: 'treasure_text',
     graphic: '📦',
+    requiredFlagId: '',
+    requiredFlagValue: 'true',
+    requiredFlagIndex: 0,
   });
   // 障害配置用の状態
   const [obstacleType, setObstacleType] = useState<'transparent' | 'pillar' | 'rock' | 'peg' | 'wall'>('transparent');
@@ -907,6 +1049,9 @@ export default function MapEditorPage() {
            requiredDefeatRate: ev.data?.requiredDefeatRate ?? null,
            playMode: ev.data?.playMode || 'always',
            flagOperations: ev.flagOperations || [],
+           requiredFlagId: ev.requiredFlagId || '',
+           requiredFlagValue: ev.requiredFlagValue !== undefined ? String(ev.requiredFlagValue) : 'true',
+           requiredFlagIndex: ev.requiredFlagIndex ?? 0,
          });
       } else {
         let data: any = {};
@@ -939,7 +1084,10 @@ export default function MapEditorPage() {
           y, 
           type: newEventParams.type, 
           data, 
-          flagOperations: newEventParams.flagOperations || [] 
+          flagOperations: newEventParams.flagOperations || [],
+          requiredFlagId: newEventParams.requiredFlagId || undefined,
+          requiredFlagValue: newEventParams.requiredFlagId ? (newEventParams.requiredFlagValue === 'true' ? true : (newEventParams.requiredFlagValue === 'false' ? false : (isNaN(Number(newEventParams.requiredFlagValue)) ? newEventParams.requiredFlagValue : Number(newEventParams.requiredFlagValue)))) : undefined,
+          requiredFlagIndex: newEventParams.requiredFlagId ? newEventParams.requiredFlagIndex : undefined,
         });
         handleUpdateCurrentMap({ events: newEvents });
       }
@@ -955,9 +1103,20 @@ export default function MapEditorPage() {
           y: item.y,
           itemId: item.itemId,
           graphic: item.graphic || '📦',
+          requiredFlagId: item.requiredFlagId || '',
+          requiredFlagValue: item.requiredFlagValue !== undefined ? String(item.requiredFlagValue) : 'true',
+          requiredFlagIndex: item.requiredFlagIndex ?? 0,
         });
       } else {
-        newItems.push({ x, y, itemId: newItemParams.itemId, graphic: newItemParams.graphic || '📦' });
+        newItems.push({ 
+          x, 
+          y, 
+          itemId: newItemParams.itemId, 
+          graphic: newItemParams.graphic || '📦',
+          requiredFlagId: newItemParams.requiredFlagId || undefined,
+          requiredFlagValue: newItemParams.requiredFlagId ? (newItemParams.requiredFlagValue === 'true' ? true : (newItemParams.requiredFlagValue === 'false' ? false : (isNaN(Number(newItemParams.requiredFlagValue)) ? newItemParams.requiredFlagValue : Number(newItemParams.requiredFlagValue)))) : undefined,
+          requiredFlagIndex: newItemParams.requiredFlagId ? newItemParams.requiredFlagIndex : undefined,
+        });
         handleUpdateCurrentMap({ items: newItems });
       }
     } else if (placeMode === 'obstacle') {
@@ -1029,7 +1188,10 @@ export default function MapEditorPage() {
         y: editingEvent.y,
         type: editingEvent.type,
         data,
-        flagOperations: editingEvent.flagOperations || []
+        flagOperations: editingEvent.flagOperations || [],
+        requiredFlagId: editingEvent.requiredFlagId || undefined,
+        requiredFlagValue: editingEvent.requiredFlagId ? (editingEvent.requiredFlagValue === 'true' ? true : (editingEvent.requiredFlagValue === 'false' ? false : (isNaN(Number(editingEvent.requiredFlagValue)) ? editingEvent.requiredFlagValue : Number(editingEvent.requiredFlagValue)))) : undefined,
+        requiredFlagIndex: editingEvent.requiredFlagId ? editingEvent.requiredFlagIndex : undefined,
       };
     } else {
       newEvents.push({
@@ -1037,7 +1199,10 @@ export default function MapEditorPage() {
         y: editingEvent.y,
         type: editingEvent.type,
         data,
-        flagOperations: editingEvent.flagOperations || []
+        flagOperations: editingEvent.flagOperations || [],
+        requiredFlagId: editingEvent.requiredFlagId || undefined,
+        requiredFlagValue: editingEvent.requiredFlagId ? (editingEvent.requiredFlagValue === 'true' ? true : (editingEvent.requiredFlagValue === 'false' ? false : (isNaN(Number(editingEvent.requiredFlagValue)) ? editingEvent.requiredFlagValue : Number(editingEvent.requiredFlagValue)))) : undefined,
+        requiredFlagIndex: editingEvent.requiredFlagId ? editingEvent.requiredFlagIndex : undefined,
       });
     }
 
@@ -1066,6 +1231,9 @@ export default function MapEditorPage() {
         y: editingItem.y,
         itemId: editingItem.itemId,
         graphic: editingItem.graphic,
+        requiredFlagId: editingItem.requiredFlagId || undefined,
+        requiredFlagValue: editingItem.requiredFlagId ? (editingItem.requiredFlagValue === 'true' ? true : (editingItem.requiredFlagValue === 'false' ? false : (isNaN(Number(editingItem.requiredFlagValue)) ? editingItem.requiredFlagValue : Number(editingItem.requiredFlagValue)))) : undefined,
+        requiredFlagIndex: editingItem.requiredFlagId ? editingItem.requiredFlagIndex : undefined,
       };
     } else {
       newItems.push({
@@ -1073,6 +1241,9 @@ export default function MapEditorPage() {
         y: editingItem.y,
         itemId: editingItem.itemId,
         graphic: editingItem.graphic,
+        requiredFlagId: editingItem.requiredFlagId || undefined,
+        requiredFlagValue: editingItem.requiredFlagId ? (editingItem.requiredFlagValue === 'true' ? true : (editingItem.requiredFlagValue === 'false' ? false : (isNaN(Number(editingItem.requiredFlagValue)) ? editingItem.requiredFlagValue : Number(editingItem.requiredFlagValue)))) : undefined,
+        requiredFlagIndex: editingItem.requiredFlagId ? editingItem.requiredFlagIndex : undefined,
       });
     }
     handleUpdateCurrentMap({ items: newItems });
@@ -2061,6 +2232,17 @@ export default function MapEditorPage() {
                         </tbody>
                       </table>
                     </div>
+
+                    <div className="mt-3">
+                      <FlagConditionEditor
+                        requiredFlagId={newItemParams.requiredFlagId}
+                        requiredFlagValue={newItemParams.requiredFlagValue}
+                        requiredFlagIndex={newItemParams.requiredFlagIndex}
+                        flags={flags}
+                        onChange={(updates) => setNewItemParams({ ...newItemParams, ...updates })}
+                        title="アイテム出現条件フラグ"
+                      />
+                    </div>
                   </div>
                 </div>
               )}
@@ -2264,6 +2446,17 @@ export default function MapEditorPage() {
                         <option value="80">80%</option>
                         <option value="100">100%</option>
                       </select>
+                    </div>
+
+                    <div className="mt-3">
+                      <FlagConditionEditor
+                        requiredFlagId={newEventParams.requiredFlagId}
+                        requiredFlagValue={newEventParams.requiredFlagValue}
+                        requiredFlagIndex={newEventParams.requiredFlagIndex}
+                        flags={flags}
+                        onChange={(updates) => setNewEventParams({ ...newEventParams, ...updates })}
+                        title="起動/出現条件フラグ"
+                      />
                     </div>
                   </div>
                 </div>
@@ -3074,6 +3267,17 @@ export default function MapEditorPage() {
                   <option value="100">100%</option>
                 </select>
               </div>
+
+              <div className="mt-3">
+                <FlagConditionEditor
+                  requiredFlagId={editingEvent.requiredFlagId}
+                  requiredFlagValue={editingEvent.requiredFlagValue}
+                  requiredFlagIndex={editingEvent.requiredFlagIndex}
+                  flags={flags}
+                  onChange={(updates) => setEditingEvent({ ...editingEvent, ...updates })}
+                  title="起動/出現条件フラグ"
+                />
+              </div>
             </div>
 
             <div className="flex justify-between items-center mt-4 pt-4 border-t border-slate-600 gap-2">
@@ -3213,8 +3417,19 @@ export default function MapEditorPage() {
                   )}
                 </select>
               </div>
+
+              <div className="mt-3">
+                <FlagConditionEditor
+                  requiredFlagId={editingItem.requiredFlagId}
+                  requiredFlagValue={editingItem.requiredFlagValue}
+                  requiredFlagIndex={editingItem.requiredFlagIndex}
+                  flags={flags}
+                  onChange={(updates) => setEditingItem({ ...editingItem, ...updates })}
+                  title="アイテム出現条件フラグ"
+                />
+              </div>
             </div>
-            <div className="flex justify-between items-center mt-4 pt-4 border-t border-slate-600 gap-2">
+            <div className="flex justify-between items-center mt-4 pt-4 border-t border-slate-600 gap-2 font-bold">
               <button 
                 onClick={handleDeleteItem}
                 className="px-4 py-2 rounded text-sm bg-red-600 hover:bg-red-500 text-white font-bold transition-colors shadow"

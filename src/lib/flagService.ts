@@ -59,3 +59,41 @@ export function applyFlagOperations(flags: Flag[], operations: FlagOperation[]):
 
   return updatedFlags;
 }
+
+/**
+ * Checks if a flag condition is satisfied based on current flags state.
+ */
+export function checkFlagCondition(
+  flags: Flag[],
+  requiredFlagId?: string,
+  requiredFlagValue?: any,
+  requiredFlagIndex?: number
+): boolean {
+  if (!requiredFlagId) return true; // No flag condition, always satisfied
+
+  const flag = flags?.find(f => f.id === requiredFlagId);
+  if (!flag) {
+    // If flag doesn't exist, assume false (or check default falsy state)
+    return false;
+  }
+
+  const expected = requiredFlagValue;
+
+  if (flag.type === 'toggle') {
+    const current = !!flag.value;
+    const exp = expected !== undefined ? (expected === 'true' || expected === true) : true;
+    return current === exp;
+  } else if (flag.type === 'number') {
+    const current = Number(flag.value) || 0;
+    const exp = expected !== undefined ? Number(expected) : 1;
+    return current === exp;
+  } else if (flag.type === 'array_toggle') {
+    const idx = requiredFlagIndex ?? 0;
+    const arr = Array.isArray(flag.value) ? flag.value : [];
+    const current = !!arr[idx];
+    const exp = expected !== undefined ? (expected === 'true' || expected === true) : true;
+    return current === exp;
+  }
+
+  return true;
+}
