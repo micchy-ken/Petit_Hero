@@ -210,7 +210,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
       fetchCustomEventsFromFirestore(),
       fetchCustomItemsFromFirestore(),
       fetchMagicDataFromFirestore(),
-      fetchFlagsFromFirestore()
+      fetchFlagsFromFirestore(scenarioId)
     ]).then(([eventsData, itemsData, magicsData, flagsData]) => {
       setCustomEvents(eventsData);
       customEventsRef.current = eventsData;
@@ -251,7 +251,7 @@ export const PhaserGameContainer: React.FC<PhaserGameContainerProps> = ({
         sceneRef.current.activeFlags = finalFlags;
       }
     });
-  }, [initialCustomItems, initialFlags]);
+  }, [initialCustomItems, initialFlags, scenarioId]);
 
   // UIステータス
   const [showSettings, setShowSettings] = useState(initialShowSettings || showSettingsOnInit);

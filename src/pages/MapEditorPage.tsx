@@ -468,7 +468,7 @@ export default function MapEditorPage() {
       setMagics(loadedMagics);
 
       // Load flags
-      const loadedFlags = await fetchFlagsFromFirestore();
+      const loadedFlags = await fetchFlagsFromFirestore(activeScenarioId);
       setFlags(loadedFlags);
 
       // Load maps for this scenario
@@ -615,7 +615,7 @@ export default function MapEditorPage() {
 
       const updated = [...flags, newFlag];
       setFlags(updated);
-      await saveFlagsToFirestore(updated);
+      await saveFlagsToFirestore(currentScenarioId, updated);
       
       setNewFlagName('');
       setShowNewFlagForm(false);
@@ -1274,6 +1274,7 @@ export default function MapEditorPage() {
       events: [],
       items: [],
       enemies: [],
+      maxEnemies: 0,
       scenarioId: currentScenarioId
     };
     setMaps([...maps, newMap]);
@@ -1904,7 +1905,12 @@ export default function MapEditorPage() {
                         onChange={(e) => {
                           const newEnemies = [...(currentMap.enemies || [])];
                           newEnemies[index] = e.target.value;
-                          handleUpdateCurrentMap({ enemies: newEnemies.filter(v => v !== undefined && v !== '') });
+                          const filtered = newEnemies.filter(v => v !== undefined && v !== '');
+                          const updates: any = { enemies: filtered };
+                          if (filtered.length === 0) {
+                            updates.maxEnemies = 0;
+                          }
+                          handleUpdateCurrentMap(updates);
                         }}
                         className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400 mb-1"
                       >
@@ -1929,9 +1935,13 @@ export default function MapEditorPage() {
                     </select>
                   </div>
                   <div className="flex flex-col gap-1 mt-1">
-                    <label className="text-xs text-slate-400 font-bold uppercase">敵の出現数 (Max Enemies)</label>
+                    <label className="text-xs text-slate-400 font-bold uppercase flex items-center justify-between">
+                      <span>敵の出現数 (Max Enemies)</span>
+                      {(currentMap.enemies || []).length === 0 && <span className="text-[10px] text-amber-500 font-normal">※敵をセットしてください</span>}
+                    </label>
                     <select
-                      value={currentMap.maxEnemies === undefined || currentMap.maxEnemies === 'infinite' ? 'infinite' : currentMap.maxEnemies === 0 ? 'none' : String(currentMap.maxEnemies)}
+                      value={((currentMap.enemies || []).length === 0) ? 'none' : (currentMap.maxEnemies === undefined || currentMap.maxEnemies === 'infinite' ? 'infinite' : currentMap.maxEnemies === 0 ? 'none' : String(currentMap.maxEnemies))}
+                      disabled={(currentMap.enemies || []).length === 0}
                       onChange={(e) => {
                         let val: 'infinite' | number = 'infinite';
                         if (e.target.value === 'infinite') val = 'infinite';
@@ -1939,7 +1949,7 @@ export default function MapEditorPage() {
                         else val = Number(e.target.value);
                         handleUpdateCurrentMap({ maxEnemies: val });
                       }}
-                      className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400"
+                      className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-slate-200 outline-none focus:border-slate-400 disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       <option value="none">なし (None)</option>
                       <option value="infinite">無限 (Infinite)</option>
@@ -2743,7 +2753,7 @@ export default function MapEditorPage() {
                                 const newFlags = [...flags];
                                 newFlags.splice(idx, 1);
                                 setFlags(newFlags);
-                                saveFlagsToFirestore(newFlags);
+                                saveFlagsToFirestore(currentScenarioId, newFlags);
                                 if (editingFlagId === flag.id) {
                                   setEditingFlagId(null);
                                 }
@@ -2766,7 +2776,7 @@ export default function MapEditorPage() {
                             newFlags[idx].name = e.target.value;
                             setFlags(newFlags);
                           }}
-                          onBlur={() => saveFlagsToFirestore(flags)}
+                          onBlur={() => saveFlagsToFirestore(currentScenarioId, flags)}
                           className="w-full bg-slate-900 border border-slate-700 focus:border-emerald-500 rounded outline-none px-2 py-1 text-xs font-bold text-slate-200"
                         />
                       </div>
@@ -2795,7 +2805,7 @@ export default function MapEditorPage() {
                                 }
                                 newFlags[idx] = current;
                                 setFlags(newFlags);
-                                saveFlagsToFirestore(newFlags);
+                                saveFlagsToFirestore(currentScenarioId, newFlags);
                               }}
                               className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 outline-none"
                             >
@@ -2830,7 +2840,7 @@ export default function MapEditorPage() {
                                   newFlags[idx] = current;
                                   setFlags(newFlags);
                                 }}
-                                onBlur={() => saveFlagsToFirestore(flags)}
+                                onBlur={() => saveFlagsToFirestore(currentScenarioId, flags)}
                                 className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 outline-none"
                               />
                             </div>

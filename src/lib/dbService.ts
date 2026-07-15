@@ -513,9 +513,9 @@ export async function fetchScenariosFromFirestore(): Promise<Scenario[]> {
 /**
  * Save scenarios list to Firestore.
  */
-export async function fetchFlagsFromFirestore(): Promise<Flag[]> {
+export async function fetchFlagsFromFirestore(scenarioId: string = 'scenario_test'): Promise<Flag[]> {
   try {
-    const docRef = doc(db, 'config', 'flags');
+    const docRef = doc(db, 'config', `flags_${scenarioId}`);
     const docSnap = await getDoc(docRef);
     
     if (docSnap.exists()) {
@@ -531,10 +531,10 @@ export async function fetchFlagsFromFirestore(): Promise<Flag[]> {
   }
 }
 
-export async function saveFlagsToFirestore(flags: Flag[]): Promise<void> {
-  const docRef = doc(db, 'config', 'flags');
+export async function saveFlagsToFirestore(scenarioId: string = 'scenario_test', flags: Flag[]): Promise<void> {
+  const docRef = doc(db, 'config', `flags_${scenarioId}`);
   await setDoc(docRef, { flags });
-  console.log('Saved flags to Firestore');
+  console.log(`Saved flags to Firestore for scenario ${scenarioId}`);
 }
 
 /**
