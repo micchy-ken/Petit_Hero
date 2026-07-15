@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Box, Gem, Zap, Plus, Map as MapIcon, Save, Settings, Play, Loader2, RefreshCw, Check, AlertCircle, Trash2, MessageSquare, Edit } from 'lucide-react';
+import { ArrowLeft, Box, Gem, Zap, Plus, Map as MapIcon, Save, Settings, Play, Loader2, RefreshCw, Check, AlertCircle, Trash2, MessageSquare, Edit, GripVertical } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { usePopup } from '../components/CustomPopupProvider';
 import { MapData } from '../types/MapData';
@@ -430,6 +430,9 @@ export default function MapEditorPage() {
   const [newFlagArraySize, setNewFlagArraySize] = useState(1);
   const [editingFlagId, setEditingFlagId] = useState<string | null>(null);
 
+  const [draggedNode, setDraggedNode] = useState<{ eventId: string; index: number } | null>(null);
+  const [dragOverNodeIndex, setDragOverNodeIndex] = useState<number | null>(null);
+
   const loadMapsFromFirestoreDB = async (isInitial = false, targetScenarioId = currentScenarioId) => {
     try {
       // Load scenarios first
@@ -837,6 +840,53 @@ export default function MapEditorPage() {
       }
       return ev;
     }));
+  };
+
+  const handleNodeDragStart = (e: React.DragEvent, eventId: string, nodeIndex: number) => {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', JSON.stringify({ eventId, nodeIndex }));
+    setDraggedNode({ eventId, index: nodeIndex });
+  };
+
+  const handleNodeDragOver = (e: React.DragEvent, eventId: string, nodeIndex: number) => {
+    if (!draggedNode || draggedNode.eventId !== eventId) return;
+    e.preventDefault();
+    if (dragOverNodeIndex !== nodeIndex) {
+      setDragOverNodeIndex(nodeIndex);
+    }
+  };
+
+  const handleNodeDrop = (e: React.DragEvent, eventId: string, targetIndex: number) => {
+    e.preventDefault();
+    const dataStr = e.dataTransfer.getData('text/plain');
+    if (!dataStr) return;
+    try {
+      const data = JSON.parse(dataStr);
+      if (data.eventId !== eventId) return;
+      const sourceIndex = data.nodeIndex;
+      if (sourceIndex === targetIndex) return;
+
+      setCustomEvents(prevEvents => {
+        const updated = prevEvents.map(ev => {
+          if (ev.id !== eventId) return ev;
+          const newNodes = [...ev.nodes];
+          const [removed] = newNodes.splice(sourceIndex, 1);
+          newNodes.splice(targetIndex, 0, removed);
+          return { ...ev, nodes: newNodes };
+        });
+        return updated;
+      });
+    } catch (err) {
+      console.error("Failed to parse drag drop data", err);
+    } finally {
+      setDraggedNode(null);
+      setDragOverNodeIndex(null);
+    }
+  };
+
+  const handleNodeDragEnd = () => {
+    setDraggedNode(null);
+    setDragOverNodeIndex(null);
   };
 
   const [showNewMapModal, setShowNewMapModal] = useState(false);
@@ -2542,7 +2592,18 @@ export default function MapEditorPage() {
                         ) : (
                           <div className="flex flex-col gap-2.5 max-h-[220px] overflow-y-auto bg-slate-900/50 p-2 rounded border border-slate-700/50">
                             {ev.nodes.map((node, nodeIdx) => (
-                              <div key={node.id} className="bg-slate-900 border border-slate-700 p-2.5 rounded flex flex-col gap-2 relative">
+                              <div 
+                                key={node.id} 
+                                onDragOver={(e) => handleNodeDragOver(e, ev.id, nodeIdx)}
+                                onDrop={(e) => handleNodeDrop(e, ev.id, nodeIdx)}
+                                className={`bg-slate-900 border p-2.5 rounded flex flex-col gap-2 relative transition-all duration-200 ${
+                                  draggedNode && draggedNode.eventId === ev.id && draggedNode.index === nodeIdx
+                                    ? 'opacity-40 border-dashed border-indigo-500 scale-95'
+                                    : dragOverNodeIndex === nodeIdx
+                                    ? 'border-indigo-400 bg-slate-800/80 scale-[1.01]'
+                                    : 'border-slate-700'
+                                }`}
+                              >
                                 <button
                                   onClick={() => removeNode(ev.id, nodeIdx)}
                                   className="absolute top-1.5 right-1.5 text-slate-500 hover:text-red-400 transition-colors animate-in fade-in duration-200"
@@ -2551,7 +2612,16 @@ export default function MapEditorPage() {
                                   <Trash2 className="w-3 h-3" />
                                 </button>
 
-                                <div className="flex items-center gap-2 mb-1">
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <div 
+                                    draggable
+                                    onDragStart={(e) => handleNodeDragStart(e, ev.id, nodeIdx)}
+                                    onDragEnd={handleNodeDragEnd}
+                                    className="cursor-grab active:cursor-grabbing p-1 hover:bg-slate-800 rounded text-slate-500 hover:text-slate-300 transition-colors shrink-0"
+                                    title="ドラッグして順番を入れ替え"
+                                  >
+                                    <GripVertical className="w-3.5 h-3.5" />
+                                  </div>
                                   <span className="text-[10px] text-slate-400 font-bold">#{(nodeIdx + 1)} ノードタイプ:</span>
                                   <select
                                     value={node.type || 'message'}
