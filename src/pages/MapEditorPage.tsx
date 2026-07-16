@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Box, Gem, Zap, Plus, Map as MapIcon, Save, Settings, Play, Loader2, RefreshCw, Check, AlertCircle, Trash2, MessageSquare, Edit, GripVertical } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { usePopup } from '../components/CustomPopupProvider';
-import { MapData } from '../types/MapData';
+import { MapData, EventBranch } from '../types/MapData';
 import { getAvailableEnemies, getAvailableBosses } from '../data/EnemyAssets';
 import { PhaserGameContainer } from '../components/PhaserGameContainer';
 import { allMaps } from '../data/maps';
@@ -703,11 +703,12 @@ export default function MapEditorPage() {
     branchFlagId: '',
     branchFlagValue: 'true',
     branchFlagIndex: 0,
-    branchEventType: 'custom_event' as 'start_point' | 'teleport' | 'monologue' | 'custom_event',
+    branchEventType: 'custom_event' as 'teleport' | 'monologue' | 'custom_event',
     branchFromMap: '',
     branchTargetMap: '',
     branchText: '',
     branchEventId: '',
+    branches: [] as EventBranch[],
   });
   
   // アイテム配置用の状態（オブジェクト化）
@@ -925,11 +926,12 @@ export default function MapEditorPage() {
     branchFlagId?: string;
     branchFlagValue?: any;
     branchFlagIndex?: number;
-    branchEventType?: 'start_point' | 'teleport' | 'monologue' | 'custom_event';
+    branchEventType?: 'teleport' | 'monologue' | 'custom_event';
     branchFromMap?: string;
     branchTargetMap?: string;
     branchText?: string;
     branchEventId?: string;
+    branches?: EventBranch[];
   } | null>(null);
 
   // アイテム個別編集状態
@@ -1132,7 +1134,28 @@ export default function MapEditorPage() {
            branchTargetMap: ev.branchEventData?.targetMap || '',
            branchText: ev.branchEventData?.text || '',
            branchEventId: ev.branchEventData?.eventId || '',
-         });
+            branches: ev.branches ? ev.branches.map((b) => ({
+              flagId: b.flagId || '',
+              flagValue: b.flagValue !== undefined ? String(b.flagValue) : 'true',
+              flagIndex: b.flagIndex ?? 0,
+              eventType: b.eventType || 'custom_event',
+              eventData: {
+                targetMap: b.eventData?.targetMap || '',
+                text: b.eventData?.text || '',
+                eventId: b.eventData?.eventId || '',
+              }
+            })) : (ev.branchFlagId ? [{
+              flagId: ev.branchFlagId,
+              flagValue: ev.branchFlagValue !== undefined ? String(ev.branchFlagValue) : 'true',
+              flagIndex: ev.branchFlagIndex ?? 0,
+              eventType: ev.branchEventType || 'custom_event',
+              eventData: {
+                targetMap: ev.branchEventData?.targetMap || '',
+                text: ev.branchEventData?.text || '',
+                eventId: ev.branchEventData?.eventId || '',
+              }
+            }] : []),
+          });
       } else {
         let data: any = {};
         if (newEventParams.type === 'start_point') {
@@ -1159,8 +1182,6 @@ export default function MapEditorPage() {
         if (newEventParams.requiredDefeatRate !== null) data.requiredDefeatRate = newEventParams.requiredDefeatRate;
         data.playMode = newEventParams.playMode;
         
-        const hasBranch = !!newEventParams.branchFlagId;
-        
         newEvents.push({ 
           x, 
           y, 
@@ -1170,17 +1191,17 @@ export default function MapEditorPage() {
           requiredFlagId: newEventParams.requiredFlagId || undefined,
           requiredFlagValue: newEventParams.requiredFlagId ? (newEventParams.requiredFlagValue === 'true' ? true : (newEventParams.requiredFlagValue === 'false' ? false : (isNaN(Number(newEventParams.requiredFlagValue)) ? newEventParams.requiredFlagValue : Number(newEventParams.requiredFlagValue)))) : undefined,
           requiredFlagIndex: newEventParams.requiredFlagId ? newEventParams.requiredFlagIndex : undefined,
-          // フラグ分岐用
-          branchFlagId: newEventParams.branchFlagId || undefined,
-          branchFlagValue: hasBranch ? (newEventParams.branchFlagValue === 'true' ? true : (newEventParams.branchFlagValue === 'false' ? false : (isNaN(Number(newEventParams.branchFlagValue)) ? newEventParams.branchFlagValue : Number(newEventParams.branchFlagValue)))) : undefined,
-          branchFlagIndex: hasBranch ? newEventParams.branchFlagIndex : undefined,
-          branchEventType: hasBranch ? newEventParams.branchEventType : undefined,
-          branchEventData: hasBranch ? {
-            fromMap: newEventParams.branchEventType === 'start_point' ? (newEventParams.branchFromMap || null) : undefined,
-            targetMap: newEventParams.branchEventType === 'teleport' ? newEventParams.branchTargetMap : undefined,
-            text: newEventParams.branchEventType === 'monologue' ? newEventParams.branchText : undefined,
-            eventId: (newEventParams.branchEventType === 'custom_event' || newEventParams.branchEventType === 'start_point' || newEventParams.branchEventType === 'teleport') ? newEventParams.branchEventId : undefined,
-          } : undefined,
+          branches: newEventParams.branches && newEventParams.branches.length > 0 ? newEventParams.branches.map(b => ({
+            flagId: b.flagId,
+            flagValue: b.flagValue === 'true' ? true : (b.flagValue === 'false' ? false : (isNaN(Number(b.flagValue)) ? b.flagValue : Number(b.flagValue))),
+            flagIndex: b.flagIndex ?? 0,
+            eventType: b.eventType,
+            eventData: {
+              targetMap: b.eventType === 'teleport' ? b.eventData.targetMap : undefined,
+              text: b.eventType === 'monologue' ? b.eventData.text : undefined,
+              eventId: (b.eventType === 'custom_event' || b.eventType === 'teleport') ? b.eventData.eventId : undefined,
+            }
+          })) : undefined
         });
         handleUpdateCurrentMap({ events: newEvents });
       }
@@ -1274,9 +1295,6 @@ export default function MapEditorPage() {
       data.requiredDefeatRate = editingEvent.requiredDefeatRate;
     }
 
-    const hasBranch = !!editingEvent.branchFlagId;
-    const branchFlagValueParsed = hasBranch ? (editingEvent.branchFlagValue === 'true' ? true : (editingEvent.branchFlagValue === 'false' ? false : (isNaN(Number(editingEvent.branchFlagValue)) ? editingEvent.branchFlagValue : Number(editingEvent.branchFlagValue)))) : undefined;
-
     const targetIdx = newEvents.findIndex(e => e.x === editingEvent.x && e.y === editingEvent.y);
     const eventObject = {
       x: editingEvent.x,
@@ -1287,17 +1305,17 @@ export default function MapEditorPage() {
       requiredFlagId: editingEvent.requiredFlagId || undefined,
       requiredFlagValue: editingEvent.requiredFlagId ? (editingEvent.requiredFlagValue === 'true' ? true : (editingEvent.requiredFlagValue === 'false' ? false : (isNaN(Number(editingEvent.requiredFlagValue)) ? editingEvent.requiredFlagValue : Number(editingEvent.requiredFlagValue)))) : undefined,
       requiredFlagIndex: editingEvent.requiredFlagId ? editingEvent.requiredFlagIndex : undefined,
-      // フラグ分岐用
-      branchFlagId: editingEvent.branchFlagId || undefined,
-      branchFlagValue: branchFlagValueParsed,
-      branchFlagIndex: hasBranch ? editingEvent.branchFlagIndex : undefined,
-      branchEventType: hasBranch ? editingEvent.branchEventType : undefined,
-      branchEventData: hasBranch ? {
-        fromMap: editingEvent.branchEventType === 'start_point' ? (editingEvent.branchFromMap || null) : undefined,
-        targetMap: editingEvent.branchEventType === 'teleport' ? editingEvent.branchTargetMap : undefined,
-        text: editingEvent.branchEventType === 'monologue' ? editingEvent.branchText : undefined,
-        eventId: (editingEvent.branchEventType === 'custom_event' || editingEvent.branchEventType === 'start_point' || editingEvent.branchEventType === 'teleport') ? editingEvent.branchEventId : undefined,
-      } : undefined,
+      branches: editingEvent.branches && editingEvent.branches.length > 0 ? editingEvent.branches.map(b => ({
+        flagId: b.flagId,
+        flagValue: b.flagValue === 'true' ? true : (b.flagValue === 'false' ? false : (isNaN(Number(b.flagValue)) ? b.flagValue : Number(b.flagValue))),
+        flagIndex: b.flagIndex ?? 0,
+        eventType: b.eventType,
+        eventData: {
+          targetMap: b.eventType === 'teleport' ? b.eventData.targetMap : undefined,
+          text: b.eventType === 'monologue' ? b.eventData.text : undefined,
+          eventId: (b.eventType === 'custom_event' || b.eventType === 'teleport') ? b.eventData.eventId : undefined,
+        }
+      })) : undefined
     };
 
     if (targetIdx >= 0) {
@@ -2568,6 +2586,181 @@ export default function MapEditorPage() {
                         title="起動/出現条件フラグ"
                       />
                     </div>
+
+                    <div className="mt-3 border-t border-slate-600 pt-3">
+                      <div className="flex justify-between items-center mb-2">
+                        <h4 className="text-sm font-bold text-slate-300">🔀 追加イベント分岐 (複数追加可)</h4>
+                        <button
+                          onClick={() => {
+                            const currentBranches = newEventParams.branches || [];
+                            setNewEventParams({
+                              ...newEventParams,
+                              branches: [
+                                ...currentBranches,
+                                {
+                                  flagId: '',
+                                  flagValue: 'true',
+                                  flagIndex: 0,
+                                  eventType: 'custom_event',
+                                  eventData: { eventId: '' },
+                                }
+                              ]
+                            });
+                          }}
+                          className="flex items-center gap-1 px-2.5 py-1 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded transition-colors shadow"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          分岐を追加
+                        </button>
+                      </div>
+
+                      <div className="flex flex-col gap-3 max-h-[350px] overflow-y-auto pr-1">
+                        {(!newEventParams.branches || newEventParams.branches.length === 0) && (
+                          <div className="text-xs text-slate-400 italic text-center p-3 bg-slate-800/30 rounded border border-slate-600/30">
+                            追加のイベント分岐条件はありません
+                          </div>
+                        )}
+
+                        {newEventParams.branches?.map((branch, branchIdx) => (
+                          <div 
+                            key={branchIdx} 
+                            className="flex flex-col gap-2 p-3 bg-slate-800/60 rounded-lg border border-slate-600 relative animate-in fade-in duration-200"
+                          >
+                            <button
+                              onClick={() => {
+                                const updatedBranches = newEventParams.branches?.filter((_, idx) => idx !== branchIdx) || [];
+                                setNewEventParams({ ...newEventParams, branches: updatedBranches });
+                              }}
+                              className="absolute top-2 right-2 p-1 text-slate-400 hover:text-red-400 hover:bg-slate-700/50 rounded transition-colors"
+                              title="この分岐を削除"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+
+                            <div className="mr-6">
+                              <FlagConditionEditor
+                                requiredFlagId={branch.flagId}
+                                requiredFlagValue={branch.flagValue}
+                                requiredFlagIndex={branch.flagIndex}
+                                flags={flags}
+                                onChange={(updates) => {
+                                  const updatedBranches = [...(newEventParams.branches || [])];
+                                  updatedBranches[branchIdx] = {
+                                    ...branch,
+                                    flagId: updates.requiredFlagId || '',
+                                    flagValue: updates.requiredFlagValue !== undefined ? updates.requiredFlagValue : 'true',
+                                    flagIndex: updates.requiredFlagIndex ?? 0,
+                                  };
+                                  setNewEventParams({ ...newEventParams, branches: updatedBranches });
+                                }}
+                                title={`分岐条件 ${branchIdx + 1}`}
+                              />
+                            </div>
+
+                            {branch.flagId && (
+                              <div className="flex flex-col gap-2 mt-1 border-t border-slate-700 pt-2">
+                                <div className="flex flex-col gap-1">
+                                  <label className="text-xs text-emerald-400 font-bold uppercase">分岐時イベントタイプ</label>
+                                  <select 
+                                    value={branch.eventType}
+                                    onChange={(e) => {
+                                      const updatedBranches = [...(newEventParams.branches || [])];
+                                      updatedBranches[branchIdx] = {
+                                        ...branch,
+                                        eventType: e.target.value as any,
+                                        eventData: {
+                                          ...branch.eventData,
+                                        }
+                                      };
+                                      setNewEventParams({ ...newEventParams, branches: updatedBranches });
+                                    }}
+                                    className="w-full bg-slate-850 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                                  >
+                                    <option value="custom_event">カスタムイベント (Custom Event)</option>
+                                    <option value="teleport">マップ移動 (Teleport)</option>
+                                    <option value="monologue">モノローグ (Monologue)</option>
+                                  </select>
+                                </div>
+
+                                {(branch.eventType === 'custom_event' || branch.eventType === 'teleport') && (
+                                  <div className="flex flex-col gap-1 mt-1">
+                                    <label className="text-xs text-slate-300 font-bold uppercase">分岐時連動イベント (任意)</label>
+                                    <select 
+                                      value={branch.eventData.eventId || ''}
+                                      onChange={(e) => {
+                                        const updatedBranches = [...(newEventParams.branches || [])];
+                                        updatedBranches[branchIdx] = {
+                                          ...branch,
+                                          eventData: {
+                                            ...branch.eventData,
+                                            eventId: e.target.value,
+                                          }
+                                        };
+                                        setNewEventParams({ ...newEventParams, branches: updatedBranches });
+                                      }}
+                                      className="w-full bg-slate-850 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                                    >
+                                      <option value="">設定なし</option>
+                                      {customEvents.filter(ev => ev.mapId === currentMap.id).map(ev => (
+                                        <option key={ev.id} value={ev.id}>{ev.name}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                )}
+
+                                {branch.eventType === 'teleport' && (
+                                  <div className="flex flex-col gap-1 mt-1">
+                                    <label className="text-xs text-slate-300 font-bold uppercase">分岐時移動先マップ</label>
+                                    <select 
+                                      value={branch.eventData.targetMap || ''}
+                                      onChange={(e) => {
+                                        const updatedBranches = [...(newEventParams.branches || [])];
+                                        updatedBranches[branchIdx] = {
+                                          ...branch,
+                                          eventData: {
+                                            ...branch.eventData,
+                                            targetMap: e.target.value,
+                                          }
+                                        };
+                                        setNewEventParams({ ...newEventParams, branches: updatedBranches });
+                                      }}
+                                      className="w-full bg-slate-850 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                                    >
+                                      <option value="" disabled>選択してください</option>
+                                      {maps.map(m => (
+                                        <option key={m.id} value={m.id}>{m.name}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                )}
+
+                                {branch.eventType === 'monologue' && (
+                                  <div className="flex flex-col gap-1 mt-1">
+                                    <label className="text-xs text-slate-300 font-bold uppercase">分岐時モノローグテキスト</label>
+                                    <textarea 
+                                      value={branch.eventData.text || ''}
+                                      onChange={(e) => {
+                                        const updatedBranches = [...(newEventParams.branches || [])];
+                                        updatedBranches[branchIdx] = {
+                                          ...branch,
+                                          eventData: {
+                                            ...branch.eventData,
+                                            text: e.target.value,
+                                          }
+                                        };
+                                        setNewEventParams({ ...newEventParams, branches: updatedBranches });
+                                      }}
+                                      className="w-full bg-slate-850 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                                      rows={3}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -3410,116 +3603,179 @@ export default function MapEditorPage() {
               </div>
 
               <div className="mt-3 border-t border-slate-600 pt-3">
-                <FlagConditionEditor
-                  requiredFlagId={editingEvent.branchFlagId}
-                  requiredFlagValue={editingEvent.branchFlagValue}
-                  requiredFlagIndex={editingEvent.branchFlagIndex}
-                  flags={flags}
-                  onChange={(updates) => setEditingEvent({
-                    ...editingEvent,
-                    branchFlagId: updates.requiredFlagId,
-                    branchFlagValue: updates.requiredFlagValue,
-                    branchFlagIndex: updates.requiredFlagIndex,
-                  })}
-                  title="🔀 分岐条件フラグ (任意)"
-                />
-              </div>
-
-              {editingEvent.branchFlagId && (
-                <div className="flex flex-col gap-2 p-2.5 bg-slate-800/50 rounded-lg border border-slate-600/50 mt-1 animate-in fade-in duration-200">
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs text-emerald-400 font-bold uppercase">分岐時イベントタイプ</label>
-                    <select 
-                      value={editingEvent.branchEventType || 'custom_event'}
-                      onChange={(e) => setEditingEvent({ 
-                        ...editingEvent, 
-                        branchEventType: e.target.value as any
-                      })}
-                      className="w-full bg-slate-850 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-500"
-                    >
-                      <option value="custom_event">カスタムイベント (Custom Event)</option>
-                      <option value="teleport">マップ移動 (Teleport)</option>
-                      <option value="monologue">モノローグ (Monologue)</option>
-                      <option value="start_point">初期値 (Start Point)</option>
-                    </select>
-                  </div>
-
-                  {(editingEvent.branchEventType === 'custom_event' || editingEvent.branchEventType === 'start_point' || editingEvent.branchEventType === 'teleport') && (
-                    <div className="flex flex-col gap-1 mt-1">
-                      <label className="text-xs text-slate-300 font-bold uppercase">分岐時連動イベント (任意)</label>
-                      <select 
-                        value={editingEvent.branchEventId || ''}
-                        onChange={(e) => setEditingEvent({ ...editingEvent, branchEventId: e.target.value })}
-                        className="w-full bg-slate-850 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-500"
-                      >
-                        <option value="">設定なし</option>
-                        {customEvents.filter(ev => ev.mapId === currentMap.id).map(ev => (
-                          <option key={ev.id} value={ev.id}>{ev.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  {editingEvent.branchEventType === 'start_point' && (() => {
-                    const connectedMaps = maps.filter(m => {
-                      if (m.id === currentMap.id) return false;
-                      const events = m.events || [];
-                      return events.some(e => e.type === 'teleport' && e.data?.targetMap === currentMap.id);
-                    });
-                    const hasConnections = connectedMaps.length > 0;
-                    return (
-                      <div className="flex flex-col gap-1 mt-1">
-                        <label className="text-xs text-slate-300 font-bold uppercase">分岐時元マップ指定</label>
-                        <select 
-                          value={hasConnections ? (editingEvent.branchFromMap || '') : ''}
-                          disabled={!hasConnections}
-                          onChange={(e) => setEditingEvent({ ...editingEvent, branchFromMap: e.target.value })}
-                          className="w-full bg-slate-850 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-500 disabled:opacity-50"
-                        >
-                          {hasConnections ? (
-                            <>
-                              <option value="">設定なし (デフォルト開始位置)</option>
-                              {connectedMaps.map(m => (
-                                <option key={m.id} value={m.id}>{m.name}</option>
-                              ))}
-                            </>
-                          ) : (
-                            <option value="">接続元のマップがありません (無効)</option>
-                          )}
-                        </select>
-                      </div>
-                    );
-                  })()}
-
-                  {editingEvent.branchEventType === 'teleport' && (
-                    <div className="flex flex-col gap-1 mt-1">
-                      <label className="text-xs text-slate-300 font-bold uppercase">分岐時移動先マップ</label>
-                      <select 
-                        value={editingEvent.branchTargetMap || ''}
-                        onChange={(e) => setEditingEvent({ ...editingEvent, branchTargetMap: e.target.value })}
-                        className="w-full bg-slate-850 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-500"
-                      >
-                        <option value="" disabled>選択してください</option>
-                        {maps.map(m => (
-                          <option key={m.id} value={m.id}>{m.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  {editingEvent.branchEventType === 'monologue' && (
-                    <div className="flex flex-col gap-1 mt-1">
-                      <label className="text-xs text-slate-300 font-bold uppercase">分岐時モノローグテキスト</label>
-                      <textarea 
-                        value={editingEvent.branchText || ''}
-                        onChange={(e) => setEditingEvent({ ...editingEvent, branchText: e.target.value })}
-                        className="w-full bg-slate-850 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-500"
-                        rows={3}
-                      />
-                    </div>
-                  )}
+                <div className="flex justify-between items-center mb-2">
+                  <h4 className="text-sm font-bold text-slate-300">🔀 追加イベント分岐 (複数追加可)</h4>
+                  <button
+                    onClick={() => {
+                      const currentBranches = editingEvent.branches || [];
+                      setEditingEvent({
+                        ...editingEvent,
+                        branches: [
+                          ...currentBranches,
+                          {
+                            flagId: '',
+                            flagValue: 'true',
+                            flagIndex: 0,
+                            eventType: 'custom_event',
+                            eventData: { eventId: '' },
+                          }
+                        ]
+                      });
+                    }}
+                    className="flex items-center gap-1 px-2.5 py-1 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded transition-colors shadow"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    分岐を追加
+                  </button>
                 </div>
-              )}
+
+                <div className="flex flex-col gap-3 max-h-[350px] overflow-y-auto pr-1">
+                  {(!editingEvent.branches || editingEvent.branches.length === 0) && (
+                    <div className="text-xs text-slate-400 italic text-center p-3 bg-slate-800/30 rounded border border-slate-600/30">
+                      追加のイベント分岐条件はありません
+                    </div>
+                  )}
+
+                  {editingEvent.branches?.map((branch, branchIdx) => (
+                    <div 
+                      key={branchIdx} 
+                      className="flex flex-col gap-2 p-3 bg-slate-800/60 rounded-lg border border-slate-600 relative animate-in fade-in duration-200"
+                    >
+                      <button
+                        onClick={() => {
+                          const updatedBranches = editingEvent.branches?.filter((_, idx) => idx !== branchIdx) || [];
+                          setEditingEvent({ ...editingEvent, branches: updatedBranches });
+                        }}
+                        className="absolute top-2 right-2 p-1 text-slate-400 hover:text-red-400 hover:bg-slate-700/50 rounded transition-colors"
+                        title="この分岐を削除"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+
+                      <div className="mr-6">
+                        <FlagConditionEditor
+                          requiredFlagId={branch.flagId}
+                          requiredFlagValue={branch.flagValue}
+                          requiredFlagIndex={branch.flagIndex}
+                          flags={flags}
+                          onChange={(updates) => {
+                            const updatedBranches = [...(editingEvent.branches || [])];
+                            updatedBranches[branchIdx] = {
+                              ...branch,
+                              flagId: updates.requiredFlagId || '',
+                              flagValue: updates.requiredFlagValue !== undefined ? updates.requiredFlagValue : 'true',
+                              flagIndex: updates.requiredFlagIndex ?? 0,
+                            };
+                            setEditingEvent({ ...editingEvent, branches: updatedBranches });
+                          }}
+                          title={`分岐条件 ${branchIdx + 1}`}
+                        />
+                      </div>
+
+                      {branch.flagId && (
+                        <div className="flex flex-col gap-2 mt-1 border-t border-slate-700 pt-2">
+                          <div className="flex flex-col gap-1">
+                            <label className="text-xs text-emerald-400 font-bold uppercase">分岐時イベントタイプ</label>
+                            <select 
+                              value={branch.eventType}
+                              onChange={(e) => {
+                                const updatedBranches = [...(editingEvent.branches || [])];
+                                updatedBranches[branchIdx] = {
+                                  ...branch,
+                                  eventType: e.target.value as any,
+                                  eventData: {
+                                    ...branch.eventData,
+                                  }
+                                };
+                                setEditingEvent({ ...editingEvent, branches: updatedBranches });
+                              }}
+                              className="w-full bg-slate-850 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                            >
+                              <option value="custom_event">カスタムイベント (Custom Event)</option>
+                              <option value="teleport">マップ移動 (Teleport)</option>
+                              <option value="monologue">モノローグ (Monologue)</option>
+                            </select>
+                          </div>
+
+                          {(branch.eventType === 'custom_event' || branch.eventType === 'teleport') && (
+                            <div className="flex flex-col gap-1 mt-1">
+                              <label className="text-xs text-slate-300 font-bold uppercase">分岐時連動イベント (任意)</label>
+                              <select 
+                                value={branch.eventData.eventId || ''}
+                                onChange={(e) => {
+                                  const updatedBranches = [...(editingEvent.branches || [])];
+                                  updatedBranches[branchIdx] = {
+                                    ...branch,
+                                    eventData: {
+                                      ...branch.eventData,
+                                      eventId: e.target.value,
+                                    }
+                                  };
+                                  setEditingEvent({ ...editingEvent, branches: updatedBranches });
+                                }}
+                                className="w-full bg-slate-850 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                              >
+                                <option value="">設定なし</option>
+                                {customEvents.filter(ev => ev.mapId === currentMap.id).map(ev => (
+                                  <option key={ev.id} value={ev.id}>{ev.name}</option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+
+                          {branch.eventType === 'teleport' && (
+                            <div className="flex flex-col gap-1 mt-1">
+                              <label className="text-xs text-slate-300 font-bold uppercase">分岐時移動先マップ</label>
+                              <select 
+                                value={branch.eventData.targetMap || ''}
+                                onChange={(e) => {
+                                  const updatedBranches = [...(editingEvent.branches || [])];
+                                  updatedBranches[branchIdx] = {
+                                    ...branch,
+                                    eventData: {
+                                      ...branch.eventData,
+                                      targetMap: e.target.value,
+                                    }
+                                  };
+                                  setEditingEvent({ ...editingEvent, branches: updatedBranches });
+                                }}
+                                className="w-full bg-slate-850 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                              >
+                                <option value="" disabled>選択してください</option>
+                                {maps.map(m => (
+                                  <option key={m.id} value={m.id}>{m.name}</option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+
+                          {branch.eventType === 'monologue' && (
+                            <div className="flex flex-col gap-1 mt-1">
+                              <label className="text-xs text-slate-300 font-bold uppercase">分岐時モノローグテキスト</label>
+                              <textarea 
+                                value={branch.eventData.text || ''}
+                                onChange={(e) => {
+                                  const updatedBranches = [...(editingEvent.branches || [])];
+                                  updatedBranches[branchIdx] = {
+                                    ...branch,
+                                    eventData: {
+                                      ...branch.eventData,
+                                      text: e.target.value,
+                                    }
+                                  };
+                                  setEditingEvent({ ...editingEvent, branches: updatedBranches });
+                                }}
+                                className="w-full bg-slate-850 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                                rows={3}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div className="flex justify-between items-center mt-4 pt-4 border-t border-slate-600 gap-2">

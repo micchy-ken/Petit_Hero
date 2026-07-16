@@ -1,5 +1,17 @@
 import { FlagOperation } from './Flag';
 
+export interface EventBranch {
+  flagId: string;
+  flagValue: any;
+  flagIndex?: number;
+  eventType: 'teleport' | 'monologue' | 'custom_event';
+  eventData: {
+    targetMap?: string;
+    text?: string;
+    eventId?: string;
+  };
+}
+
 export interface MapEvent {
   x: number;
   y: number;
@@ -19,6 +31,7 @@ export interface MapEvent {
     text?: string;
     eventId?: string;
   };
+  branches?: EventBranch[];
 }
 
 

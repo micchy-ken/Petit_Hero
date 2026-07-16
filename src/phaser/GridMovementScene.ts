@@ -87,6 +87,50 @@ export interface ActionLog {
 }
 
 export class GridMovementScene extends Phaser.Scene {
+
+  private executeEventWithBranch(event: any, baseAction: () => void): boolean {
+    // 1. Check multiple branches first (sequential order)
+    if (event.branches && Array.isArray(event.branches)) {
+      for (const branch of event.branches) {
+        if (branch.flagId && checkFlagCondition(this.activeFlags, branch.flagId, branch.flagValue, branch.flagIndex)) {
+          // branch condition met
+          if (branch.eventType === 'custom_event' && branch.eventData?.eventId && this.onCustomEventCallback) {
+            this.markEventPlayed(event);
+            this.onCustomEventCallback(branch.eventData.eventId, () => {});
+            return true;
+          } else if (branch.eventType === 'monologue' && branch.eventData?.text) {
+            this.markEventPlayed(event);
+            this.showMonologue(branch.eventData.text);
+            return true;
+          } else if (branch.eventType === 'teleport' && branch.eventData?.targetMap && this.onTeleport) {
+            this.onTeleport(branch.eventData.targetMap, branch.eventData.eventId || undefined);
+            return true;
+          }
+        }
+      }
+    }
+
+    // 2. Fallback to old single branch field for compatibility
+    if (event.branchFlagId && checkFlagCondition(this.activeFlags, event.branchFlagId, event.branchFlagValue, event.branchFlagIndex)) {
+      // Execute branch action
+      if (event.branchEventType === 'custom_event' && event.branchEventData?.eventId && this.onCustomEventCallback) {
+        this.markEventPlayed(event);
+        this.onCustomEventCallback(event.branchEventData.eventId, () => {});
+        return true;
+      } else if (event.branchEventType === 'monologue' && event.branchEventData?.text) {
+        this.markEventPlayed(event);
+        this.showMonologue(event.branchEventData.text);
+        return true;
+      } else if (event.branchEventType === 'teleport' && event.branchEventData?.targetMap && this.onTeleport) {
+        this.onTeleport(event.branchEventData.targetMap, event.branchEventData.eventId || undefined);
+        return true;
+      }
+    }
+    // If no branch, or branch not met, or branch type not supported, execute base action
+    baseAction();
+    return true; // We always return true to indicate the event was processed
+  }
+
   public static readonly GRID_SIZE = 64;
   public static readonly VIEWPORT_COLS = 7;
   public static readonly VIEWPORT_ROWS = 7;
@@ -259,7 +303,7 @@ export class GridMovementScene extends Phaser.Scene {
   private onLogCallback?: (log: ActionLog) => void;
   public setOnStatsChange?: (expRate: number, searchRate: number, defeatRate: number | null) => void;
   public onTestPlayClear?: () => void;
-  public onTeleport?: (targetMapId: string) => void;
+  public onTeleport?: (targetMapId: string, eventId?: string) => void;
 
   private visitedGrids: Set<string> = new Set();
   private viewedGrids: Set<string> = new Set();
@@ -3154,8 +3198,7 @@ export class GridMovementScene extends Phaser.Scene {
 
   private checkMapEvents() {
     if (!this.mapData || !this.mapData.events) return;
-    const rawEventsHere = this.mapData.events.filter((e: any) => e.x === this.currentGridX && e.y === this.currentGridY);
-    const eventsHere = rawEventsHere.map((e: any) => this.resolveEventBranch(e));
+    const eventsHere = this.mapData.events.filter((e: any) => e.x === this.currentGridX && e.y === this.currentGridY);
     
     // 初期値 (元マップ指定有り) への接触判定による元マップへの帰還
     const startPointEvent = eventsHere.find((e: any) => e.type === 'start_point');
@@ -3377,7 +3420,7 @@ export class GridMovementScene extends Phaser.Scene {
        }
 
        // 解決済みのイベントリストを構築
-       const resolvedEvents = resolvedEvents?.map((e: any) => this.resolveEventBranch(e)) || [];
+       const resolvedEvents = this.mapData.events || [];
 
        // 1. 指定された移行元のマップID(fromMapId)に合致するスタート地点を優先検索
        let startEvent = null;
@@ -3483,9 +3526,8 @@ export class GridMovementScene extends Phaser.Scene {
 
     // Initial check (start_point, custom_event, monologue)
     if (this.mapData && this.mapData.events) {
-      const resolvedEvents = this.mapData.events.map((e: any) => this.resolveEventBranch(e));
-      const customEvent = resolvedEvents.find((e: any) => e.type === 'custom_event' && e.x === this.currentGridX && e.y === this.currentGridY);
-      const startPointEvent = resolvedEvents.find((e: any) => e.type === 'start_point' && e.x === this.currentGridX && e.y === this.currentGridY);
+      const customEvent = this.mapData.events.find((e: any) => e.type === 'custom_event' && e.x === this.currentGridX && e.y === this.currentGridY);
+      const startPointEvent = this.mapData.events.find((e: any) => e.type === 'start_point' && e.x === this.currentGridX && e.y === this.currentGridY);
       
       const activeEvent = customEvent || startPointEvent;
       
@@ -3498,7 +3540,7 @@ export class GridMovementScene extends Phaser.Scene {
         return;
       }
 
-      const monologueEvent = resolvedEvents.find((e: any) => e.type === 'monologue' && e.x === this.currentGridX && e.y === this.currentGridY);
+      const monologueEvent = this.mapData.events.find((e: any) => e.type === 'monologue' && e.x === this.currentGridX && e.y === this.currentGridY);
       if (monologueEvent && this.canPlayEvent(monologueEvent)) {
         this.markEventPlayed(monologueEvent);
         this.showMonologue(monologueEvent.data?.text || '', () => {
@@ -5006,8 +5048,7 @@ export class GridMovementScene extends Phaser.Scene {
       this.teleportPortals = [];
     }
 
-    const resolvedEvents = this.mapData.events.map((e: any) => this.resolveEventBranch(e));
-    const teleportEvents = resolvedEvents.filter((e: any) => {
+    const teleportEvents = this.mapData.events.filter((e: any) => {
       if (e.requiredFlagId && !checkFlagCondition(this.activeFlags, e.requiredFlagId, e.requiredFlagValue, e.requiredFlagIndex)) {
         return false;
       }
