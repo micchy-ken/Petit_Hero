@@ -168,6 +168,28 @@ export class GridMovementScene extends Phaser.Scene {
     }
   }
 
+  private resolveEventBranch(event: any): any {
+    if (event && event.branchFlagId) {
+      const isBranchMet = checkFlagCondition(
+        this.activeFlags,
+        event.branchFlagId,
+        event.branchFlagValue,
+        event.branchFlagIndex
+      );
+      if (isBranchMet) {
+        return {
+          ...event,
+          type: event.branchEventType || event.type,
+          data: {
+            ...event.data,
+            ...(event.branchEventData || {})
+          }
+        };
+      }
+    }
+    return event;
+  }
+
   // モノローグ管理
   private monologueContainer?: Phaser.GameObjects.Container;
   private monologueTextElement?: Phaser.GameObjects.Text;
@@ -3132,7 +3154,8 @@ export class GridMovementScene extends Phaser.Scene {
 
   private checkMapEvents() {
     if (!this.mapData || !this.mapData.events) return;
-    const eventsHere = this.mapData.events.filter((e: any) => e.x === this.currentGridX && e.y === this.currentGridY);
+    const rawEventsHere = this.mapData.events.filter((e: any) => e.x === this.currentGridX && e.y === this.currentGridY);
+    const eventsHere = rawEventsHere.map((e: any) => this.resolveEventBranch(e));
     
     // 初期値 (元マップ指定有り) への接触判定による元マップへの帰還
     const startPointEvent = eventsHere.find((e: any) => e.type === 'start_point');
@@ -3353,18 +3376,21 @@ export class GridMovementScene extends Phaser.Scene {
          this.cameras.main.setBounds(0, 0, this.gridCols * GRID_SIZE, this.gridRows * GRID_SIZE);
        }
 
+       // 解決済みのイベントリストを構築
+       const resolvedEvents = resolvedEvents?.map((e: any) => this.resolveEventBranch(e)) || [];
+
        // 1. 指定された移行元のマップID(fromMapId)に合致するスタート地点を優先検索
        let startEvent = null;
        let returnPortalPos = null;
        if (fromMapId) {
-         startEvent = this.mapData.events?.find(
+         startEvent = resolvedEvents.find(
            (e: any) => e.type === 'start_point' && e.data?.fromMap === fromMapId && checkFlagCondition(this.activeFlags, e.requiredFlagId, e.requiredFlagValue, e.requiredFlagIndex)
          );
        }
 
        // 1.5. 移行元マップへの移動イベント(teleport)の位置を優先
        if (!startEvent && fromMapId) {
-         const teleportEvent = this.mapData.events?.find(
+         const teleportEvent = resolvedEvents?.find(
            (e: any) => e.type === 'teleport' && e.data?.targetMap === fromMapId
          );
          if (teleportEvent) {
@@ -3373,7 +3399,7 @@ export class GridMovementScene extends Phaser.Scene {
        }
        if (false) {
        if (!startEvent && fromMapId) {
-         const teleportEvent = this.mapData.events?.find(
+         const teleportEvent = resolvedEvents?.find(
            (e: any) => e.type === 'teleport' && e.data?.targetMap === fromMapId
          );
          if (teleportEvent) {
@@ -3385,19 +3411,19 @@ export class GridMovementScene extends Phaser.Scene {
 
        // 2. なければ、設定なし(fromMapがnullまたは空文字列)の初期値を探す
        if (!startEvent) {
-         startEvent = this.mapData.events?.find(
+         startEvent = resolvedEvents?.find(
            (e: any) => e.type === 'start_point' && (!e.data || e.data.fromMap === null || e.data.fromMap === '') && checkFlagCondition(this.activeFlags, e.requiredFlagId, e.requiredFlagValue, e.requiredFlagIndex)
          );
        }
 
        // 3. それでもなければ、何かしらの最初の start_point を使用
        if (!startEvent) {
-         startEvent = this.mapData.events?.find((e: any) => e.type === 'start_point' && checkFlagCondition(this.activeFlags, e.requiredFlagId, e.requiredFlagValue, e.requiredFlagIndex));
+         startEvent = resolvedEvents?.find((e: any) => e.type === 'start_point' && checkFlagCondition(this.activeFlags, e.requiredFlagId, e.requiredFlagValue, e.requiredFlagIndex));
        }
 
         /* // returnPortalPos is already calculated above
         if (false) {
-          const teleportEvent = this.mapData.events?.find(
+          const teleportEvent = resolvedEvents?.find(
             (e: any) => e.type === 'teleport' && e.data?.targetMap === fromMapId
           );
           if (teleportEvent) {
@@ -3406,7 +3432,7 @@ export class GridMovementScene extends Phaser.Scene {
           }
         }
         if (false) {
-          const dummy = this.mapData.events?.find(
+          const dummy = resolvedEvents?.find(
             (e: any) => false
           );
           if (teleportEvent) {
@@ -3457,8 +3483,9 @@ export class GridMovementScene extends Phaser.Scene {
 
     // Initial check (start_point, custom_event, monologue)
     if (this.mapData && this.mapData.events) {
-      const customEvent = this.mapData.events.find((e: any) => e.type === 'custom_event' && e.x === this.currentGridX && e.y === this.currentGridY);
-      const startPointEvent = this.mapData.events.find((e: any) => e.type === 'start_point' && e.x === this.currentGridX && e.y === this.currentGridY);
+      const resolvedEvents = this.mapData.events.map((e: any) => this.resolveEventBranch(e));
+      const customEvent = resolvedEvents.find((e: any) => e.type === 'custom_event' && e.x === this.currentGridX && e.y === this.currentGridY);
+      const startPointEvent = resolvedEvents.find((e: any) => e.type === 'start_point' && e.x === this.currentGridX && e.y === this.currentGridY);
       
       const activeEvent = customEvent || startPointEvent;
       
@@ -3471,7 +3498,7 @@ export class GridMovementScene extends Phaser.Scene {
         return;
       }
 
-      const monologueEvent = this.mapData.events.find((e: any) => e.type === 'monologue' && e.x === this.currentGridX && e.y === this.currentGridY);
+      const monologueEvent = resolvedEvents.find((e: any) => e.type === 'monologue' && e.x === this.currentGridX && e.y === this.currentGridY);
       if (monologueEvent && this.canPlayEvent(monologueEvent)) {
         this.markEventPlayed(monologueEvent);
         this.showMonologue(monologueEvent.data?.text || '', () => {
@@ -4979,7 +5006,8 @@ export class GridMovementScene extends Phaser.Scene {
       this.teleportPortals = [];
     }
 
-    const teleportEvents = this.mapData.events.filter((e: any) => {
+    const resolvedEvents = this.mapData.events.map((e: any) => this.resolveEventBranch(e));
+    const teleportEvents = resolvedEvents.filter((e: any) => {
       if (e.requiredFlagId && !checkFlagCondition(this.activeFlags, e.requiredFlagId, e.requiredFlagValue, e.requiredFlagIndex)) {
         return false;
       }

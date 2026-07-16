@@ -699,6 +699,15 @@ export default function MapEditorPage() {
     requiredFlagId: '',
     requiredFlagValue: 'true',
     requiredFlagIndex: 0,
+    // フラグ分岐用
+    branchFlagId: '',
+    branchFlagValue: 'true',
+    branchFlagIndex: 0,
+    branchEventType: 'custom_event' as 'start_point' | 'teleport' | 'monologue' | 'custom_event',
+    branchFromMap: '',
+    branchTargetMap: '',
+    branchText: '',
+    branchEventId: '',
   });
   
   // アイテム配置用の状態（オブジェクト化）
@@ -909,6 +918,18 @@ export default function MapEditorPage() {
     requiredDefeatRate: number | null;
     playMode: 'always' | 'once_per_map' | 'once_global';
     flagOperations?: FlagOperation[];
+    requiredFlagId?: string;
+    requiredFlagValue?: any;
+    requiredFlagIndex?: number;
+    // フラグ分岐用
+    branchFlagId?: string;
+    branchFlagValue?: any;
+    branchFlagIndex?: number;
+    branchEventType?: 'start_point' | 'teleport' | 'monologue' | 'custom_event';
+    branchFromMap?: string;
+    branchTargetMap?: string;
+    branchText?: string;
+    branchEventId?: string;
   } | null>(null);
 
   // アイテム個別編集状態
@@ -1102,6 +1123,15 @@ export default function MapEditorPage() {
            requiredFlagId: ev.requiredFlagId || '',
            requiredFlagValue: ev.requiredFlagValue !== undefined ? String(ev.requiredFlagValue) : 'true',
            requiredFlagIndex: ev.requiredFlagIndex ?? 0,
+           // フラグ分岐用
+           branchFlagId: ev.branchFlagId || '',
+           branchFlagValue: ev.branchFlagValue !== undefined ? String(ev.branchFlagValue) : 'true',
+           branchFlagIndex: ev.branchFlagIndex ?? 0,
+           branchEventType: ev.branchEventType || 'custom_event',
+           branchFromMap: ev.branchEventData?.fromMap || '',
+           branchTargetMap: ev.branchEventData?.targetMap || '',
+           branchText: ev.branchEventData?.text || '',
+           branchEventId: ev.branchEventData?.eventId || '',
          });
       } else {
         let data: any = {};
@@ -1129,6 +1159,8 @@ export default function MapEditorPage() {
         if (newEventParams.requiredDefeatRate !== null) data.requiredDefeatRate = newEventParams.requiredDefeatRate;
         data.playMode = newEventParams.playMode;
         
+        const hasBranch = !!newEventParams.branchFlagId;
+        
         newEvents.push({ 
           x, 
           y, 
@@ -1138,6 +1170,17 @@ export default function MapEditorPage() {
           requiredFlagId: newEventParams.requiredFlagId || undefined,
           requiredFlagValue: newEventParams.requiredFlagId ? (newEventParams.requiredFlagValue === 'true' ? true : (newEventParams.requiredFlagValue === 'false' ? false : (isNaN(Number(newEventParams.requiredFlagValue)) ? newEventParams.requiredFlagValue : Number(newEventParams.requiredFlagValue)))) : undefined,
           requiredFlagIndex: newEventParams.requiredFlagId ? newEventParams.requiredFlagIndex : undefined,
+          // フラグ分岐用
+          branchFlagId: newEventParams.branchFlagId || undefined,
+          branchFlagValue: hasBranch ? (newEventParams.branchFlagValue === 'true' ? true : (newEventParams.branchFlagValue === 'false' ? false : (isNaN(Number(newEventParams.branchFlagValue)) ? newEventParams.branchFlagValue : Number(newEventParams.branchFlagValue)))) : undefined,
+          branchFlagIndex: hasBranch ? newEventParams.branchFlagIndex : undefined,
+          branchEventType: hasBranch ? newEventParams.branchEventType : undefined,
+          branchEventData: hasBranch ? {
+            fromMap: newEventParams.branchEventType === 'start_point' ? (newEventParams.branchFromMap || null) : undefined,
+            targetMap: newEventParams.branchEventType === 'teleport' ? newEventParams.branchTargetMap : undefined,
+            text: newEventParams.branchEventType === 'monologue' ? newEventParams.branchText : undefined,
+            eventId: (newEventParams.branchEventType === 'custom_event' || newEventParams.branchEventType === 'start_point' || newEventParams.branchEventType === 'teleport') ? newEventParams.branchEventId : undefined,
+          } : undefined,
         });
         handleUpdateCurrentMap({ events: newEvents });
       }
@@ -1231,29 +1274,36 @@ export default function MapEditorPage() {
       data.requiredDefeatRate = editingEvent.requiredDefeatRate;
     }
 
+    const hasBranch = !!editingEvent.branchFlagId;
+    const branchFlagValueParsed = hasBranch ? (editingEvent.branchFlagValue === 'true' ? true : (editingEvent.branchFlagValue === 'false' ? false : (isNaN(Number(editingEvent.branchFlagValue)) ? editingEvent.branchFlagValue : Number(editingEvent.branchFlagValue)))) : undefined;
+
     const targetIdx = newEvents.findIndex(e => e.x === editingEvent.x && e.y === editingEvent.y);
+    const eventObject = {
+      x: editingEvent.x,
+      y: editingEvent.y,
+      type: editingEvent.type,
+      data,
+      flagOperations: editingEvent.flagOperations || [],
+      requiredFlagId: editingEvent.requiredFlagId || undefined,
+      requiredFlagValue: editingEvent.requiredFlagId ? (editingEvent.requiredFlagValue === 'true' ? true : (editingEvent.requiredFlagValue === 'false' ? false : (isNaN(Number(editingEvent.requiredFlagValue)) ? editingEvent.requiredFlagValue : Number(editingEvent.requiredFlagValue)))) : undefined,
+      requiredFlagIndex: editingEvent.requiredFlagId ? editingEvent.requiredFlagIndex : undefined,
+      // フラグ分岐用
+      branchFlagId: editingEvent.branchFlagId || undefined,
+      branchFlagValue: branchFlagValueParsed,
+      branchFlagIndex: hasBranch ? editingEvent.branchFlagIndex : undefined,
+      branchEventType: hasBranch ? editingEvent.branchEventType : undefined,
+      branchEventData: hasBranch ? {
+        fromMap: editingEvent.branchEventType === 'start_point' ? (editingEvent.branchFromMap || null) : undefined,
+        targetMap: editingEvent.branchEventType === 'teleport' ? editingEvent.branchTargetMap : undefined,
+        text: editingEvent.branchEventType === 'monologue' ? editingEvent.branchText : undefined,
+        eventId: (editingEvent.branchEventType === 'custom_event' || editingEvent.branchEventType === 'start_point' || editingEvent.branchEventType === 'teleport') ? editingEvent.branchEventId : undefined,
+      } : undefined,
+    };
+
     if (targetIdx >= 0) {
-      newEvents[targetIdx] = {
-        x: editingEvent.x,
-        y: editingEvent.y,
-        type: editingEvent.type,
-        data,
-        flagOperations: editingEvent.flagOperations || [],
-        requiredFlagId: editingEvent.requiredFlagId || undefined,
-        requiredFlagValue: editingEvent.requiredFlagId ? (editingEvent.requiredFlagValue === 'true' ? true : (editingEvent.requiredFlagValue === 'false' ? false : (isNaN(Number(editingEvent.requiredFlagValue)) ? editingEvent.requiredFlagValue : Number(editingEvent.requiredFlagValue)))) : undefined,
-        requiredFlagIndex: editingEvent.requiredFlagId ? editingEvent.requiredFlagIndex : undefined,
-      };
+      newEvents[targetIdx] = eventObject;
     } else {
-      newEvents.push({
-        x: editingEvent.x,
-        y: editingEvent.y,
-        type: editingEvent.type,
-        data,
-        flagOperations: editingEvent.flagOperations || [],
-        requiredFlagId: editingEvent.requiredFlagId || undefined,
-        requiredFlagValue: editingEvent.requiredFlagId ? (editingEvent.requiredFlagValue === 'true' ? true : (editingEvent.requiredFlagValue === 'false' ? false : (isNaN(Number(editingEvent.requiredFlagValue)) ? editingEvent.requiredFlagValue : Number(editingEvent.requiredFlagValue)))) : undefined,
-        requiredFlagIndex: editingEvent.requiredFlagId ? editingEvent.requiredFlagIndex : undefined,
-      });
+      newEvents.push(eventObject);
     }
 
     handleUpdateCurrentMap({ events: newEvents });
@@ -3178,7 +3228,7 @@ export default function MapEditorPage() {
               イベント編集 ({editingEvent.x}, {editingEvent.y})
             </h3>
 
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3 max-h-[60vh] overflow-y-auto pr-1">
               <div className="flex flex-col gap-1">
                 <label className="text-xs text-slate-300 font-bold uppercase">イベントタイプ</label>
                 <select 
@@ -3358,6 +3408,118 @@ export default function MapEditorPage() {
                   title="起動/出現条件フラグ"
                 />
               </div>
+
+              <div className="mt-3 border-t border-slate-600 pt-3">
+                <FlagConditionEditor
+                  requiredFlagId={editingEvent.branchFlagId}
+                  requiredFlagValue={editingEvent.branchFlagValue}
+                  requiredFlagIndex={editingEvent.branchFlagIndex}
+                  flags={flags}
+                  onChange={(updates) => setEditingEvent({
+                    ...editingEvent,
+                    branchFlagId: updates.requiredFlagId,
+                    branchFlagValue: updates.requiredFlagValue,
+                    branchFlagIndex: updates.requiredFlagIndex,
+                  })}
+                  title="🔀 分岐条件フラグ (任意)"
+                />
+              </div>
+
+              {editingEvent.branchFlagId && (
+                <div className="flex flex-col gap-2 p-2.5 bg-slate-800/50 rounded-lg border border-slate-600/50 mt-1 animate-in fade-in duration-200">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-emerald-400 font-bold uppercase">分岐時イベントタイプ</label>
+                    <select 
+                      value={editingEvent.branchEventType || 'custom_event'}
+                      onChange={(e) => setEditingEvent({ 
+                        ...editingEvent, 
+                        branchEventType: e.target.value as any
+                      })}
+                      className="w-full bg-slate-850 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                    >
+                      <option value="custom_event">カスタムイベント (Custom Event)</option>
+                      <option value="teleport">マップ移動 (Teleport)</option>
+                      <option value="monologue">モノローグ (Monologue)</option>
+                      <option value="start_point">初期値 (Start Point)</option>
+                    </select>
+                  </div>
+
+                  {(editingEvent.branchEventType === 'custom_event' || editingEvent.branchEventType === 'start_point' || editingEvent.branchEventType === 'teleport') && (
+                    <div className="flex flex-col gap-1 mt-1">
+                      <label className="text-xs text-slate-300 font-bold uppercase">分岐時連動イベント (任意)</label>
+                      <select 
+                        value={editingEvent.branchEventId || ''}
+                        onChange={(e) => setEditingEvent({ ...editingEvent, branchEventId: e.target.value })}
+                        className="w-full bg-slate-850 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                      >
+                        <option value="">設定なし</option>
+                        {customEvents.filter(ev => ev.mapId === currentMap.id).map(ev => (
+                          <option key={ev.id} value={ev.id}>{ev.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {editingEvent.branchEventType === 'start_point' && (() => {
+                    const connectedMaps = maps.filter(m => {
+                      if (m.id === currentMap.id) return false;
+                      const events = m.events || [];
+                      return events.some(e => e.type === 'teleport' && e.data?.targetMap === currentMap.id);
+                    });
+                    const hasConnections = connectedMaps.length > 0;
+                    return (
+                      <div className="flex flex-col gap-1 mt-1">
+                        <label className="text-xs text-slate-300 font-bold uppercase">分岐時元マップ指定</label>
+                        <select 
+                          value={hasConnections ? (editingEvent.branchFromMap || '') : ''}
+                          disabled={!hasConnections}
+                          onChange={(e) => setEditingEvent({ ...editingEvent, branchFromMap: e.target.value })}
+                          className="w-full bg-slate-850 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-500 disabled:opacity-50"
+                        >
+                          {hasConnections ? (
+                            <>
+                              <option value="">設定なし (デフォルト開始位置)</option>
+                              {connectedMaps.map(m => (
+                                <option key={m.id} value={m.id}>{m.name}</option>
+                              ))}
+                            </>
+                          ) : (
+                            <option value="">接続元のマップがありません (無効)</option>
+                          )}
+                        </select>
+                      </div>
+                    );
+                  })()}
+
+                  {editingEvent.branchEventType === 'teleport' && (
+                    <div className="flex flex-col gap-1 mt-1">
+                      <label className="text-xs text-slate-300 font-bold uppercase">分岐時移動先マップ</label>
+                      <select 
+                        value={editingEvent.branchTargetMap || ''}
+                        onChange={(e) => setEditingEvent({ ...editingEvent, branchTargetMap: e.target.value })}
+                        className="w-full bg-slate-850 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                      >
+                        <option value="" disabled>選択してください</option>
+                        {maps.map(m => (
+                          <option key={m.id} value={m.id}>{m.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {editingEvent.branchEventType === 'monologue' && (
+                    <div className="flex flex-col gap-1 mt-1">
+                      <label className="text-xs text-slate-300 font-bold uppercase">分岐時モノローグテキスト</label>
+                      <textarea 
+                        value={editingEvent.branchText || ''}
+                        onChange={(e) => setEditingEvent({ ...editingEvent, branchText: e.target.value })}
+                        className="w-full bg-slate-850 border border-slate-600 rounded px-3 py-1.5 text-sm text-slate-200 outline-none focus:border-emerald-500"
+                        rows={3}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="flex justify-between items-center mt-4 pt-4 border-t border-slate-600 gap-2">

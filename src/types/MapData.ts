@@ -9,6 +9,16 @@ export interface MapEvent {
   requiredFlagId?: string;
   requiredFlagValue?: any;
   requiredFlagIndex?: number;
+  branchFlagId?: string;
+  branchFlagValue?: any;
+  branchFlagIndex?: number;
+  branchEventType?: 'start_point' | 'teleport' | 'monologue' | 'custom_event';
+  branchEventData?: {
+    fromMap?: string | null;
+    targetMap?: string;
+    text?: string;
+    eventId?: string;
+  };
 }
 
 
